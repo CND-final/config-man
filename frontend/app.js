@@ -1,10 +1,19 @@
+const API_BASE = '/api/v1';
+
 const state = {
+  token: localStorage.getItem('configManToken') || '',
+  user: JSON.parse(localStorage.getItem('configManUser') || 'null'),
   activeView: 'dashboard',
-  activeProjectId: 'customer-portal',
+  activeProjectId: '',
   activeEnvironment: 'prod',
   configSearch: '',
   diffFilter: 'all',
-  revealedKeys: new Set()
+  revealedKeys: new Set(),
+  projects: [],
+  configs: [],
+  requests: [],
+  templates: [],
+  diffItems: []
 };
 
 const navItems = [
@@ -16,230 +25,6 @@ const navItems = [
   { id: 'requests', label: 'Requests', code: 'R' }
 ];
 
-const projects = [
-  {
-    id: 'customer-portal',
-    name: 'customer-portal',
-    owner: 'Platform Team',
-    repoUrl: 'git.example.com/platform/customer-portal',
-    defaultFormat: 'yaml',
-    environments: ['dev', 'staging', 'prod'],
-    health: 'Healthy',
-    lastChanged: '12 min ago',
-    configCount: 42
-  },
-  {
-    id: 'billing-service',
-    name: 'billing-service',
-    owner: 'Finance Squad',
-    repoUrl: 'git.example.com/payment/billing-service',
-    defaultFormat: 'json',
-    environments: ['dev', 'staging', 'prod'],
-    health: 'Review',
-    lastChanged: '48 min ago',
-    configCount: 37
-  },
-  {
-    id: 'retail-menu',
-    name: 'retail-menu',
-    owner: 'Retail Apps',
-    repoUrl: 'git.example.com/store/retail-menu',
-    defaultFormat: 'properties',
-    environments: ['dev', 'qa', 'staging', 'prod'],
-    health: 'Warning',
-    lastChanged: '2 hr ago',
-    configCount: 64
-  }
-];
-
-const configs = [
-  {
-    projectId: 'customer-portal',
-    environment: 'prod',
-    key: 'api.baseUrl',
-    value: 'https://api.example.com',
-    type: 'string',
-    isSensitive: false,
-    status: 'Synced',
-    updated: 'Alice Lin'
-  },
-  {
-    projectId: 'customer-portal',
-    environment: 'prod',
-    key: 'database.url',
-    value: 'postgresql://prod-user:secret@prod-db:5432/app',
-    type: 'string',
-    isSensitive: true,
-    status: 'Protected',
-    updated: 'Ben Wu'
-  },
-  {
-    projectId: 'customer-portal',
-    environment: 'prod',
-    key: 'feature.newCheckoutEnabled',
-    value: 'false',
-    type: 'boolean',
-    isSensitive: false,
-    status: 'Changed',
-    updated: 'Nora Chen'
-  },
-  {
-    projectId: 'customer-portal',
-    environment: 'prod',
-    key: 'log.level',
-    value: 'info',
-    type: 'string',
-    isSensitive: false,
-    status: 'Synced',
-    updated: 'Alice Lin'
-  },
-  {
-    projectId: 'customer-portal',
-    environment: 'staging',
-    key: 'api.baseUrl',
-    value: 'https://staging-api.example.com',
-    type: 'string',
-    isSensitive: false,
-    status: 'Synced',
-    updated: 'Alice Lin'
-  },
-  {
-    projectId: 'customer-portal',
-    environment: 'staging',
-    key: 'database.url',
-    value: 'postgresql://staging-user:secret@staging-db:5432/app',
-    type: 'string',
-    isSensitive: true,
-    status: 'Protected',
-    updated: 'Ben Wu'
-  },
-  {
-    projectId: 'customer-portal',
-    environment: 'staging',
-    key: 'feature.newCheckoutEnabled',
-    value: 'true',
-    type: 'boolean',
-    isSensitive: false,
-    status: 'Changed',
-    updated: 'Nora Chen'
-  },
-  {
-    projectId: 'customer-portal',
-    environment: 'dev',
-    key: 'api.baseUrl',
-    value: 'https://dev-api.example.com',
-    type: 'string',
-    isSensitive: false,
-    status: 'Synced',
-    updated: 'Alice Lin'
-  },
-  {
-    projectId: 'billing-service',
-    environment: 'prod',
-    key: 'payment.gatewayUrl',
-    value: 'https://gateway.example.com',
-    type: 'string',
-    isSensitive: false,
-    status: 'Synced',
-    updated: 'Ivy Kuo'
-  },
-  {
-    projectId: 'billing-service',
-    environment: 'prod',
-    key: 'gateway.token',
-    value: 'sk-live-prod-token',
-    type: 'string',
-    isSensitive: true,
-    status: 'Protected',
-    updated: 'Ivy Kuo'
-  },
-  {
-    projectId: 'retail-menu',
-    environment: 'prod',
-    key: 'menu.cacheTtlSeconds',
-    value: '300',
-    type: 'number',
-    isSensitive: false,
-    status: 'Warning',
-    updated: 'Ray Hsu'
-  }
-];
-
-const templates = [
-  {
-    name: 'Base Application',
-    format: 'yaml',
-    keys: ['app.timezone', 'log.level', 'api.baseUrl', 'database.url'],
-    description: 'Default service settings for standard web applications.'
-  },
-  {
-    name: 'Feature Rollout',
-    format: 'json',
-    keys: ['feature.enabled', 'feature.rolloutPercent', 'feature.owner'],
-    description: 'Feature flag and staged rollout settings.'
-  },
-  {
-    name: 'Menu Service',
-    format: 'properties',
-    keys: ['menu.locale', 'menu.cacheTtlSeconds', 'menu.sourceUrl'],
-    description: 'Shared menu and retail content configuration.'
-  }
-];
-
-let requests = [
-  {
-    id: 'CR-1042',
-    projectName: 'customer-portal',
-    environment: 'prod',
-    requester: 'Nora Chen',
-    status: 'Pending',
-    reason: 'Enable checkout flag after staging validation.'
-  },
-  {
-    id: 'CR-1041',
-    projectName: 'billing-service',
-    environment: 'prod',
-    requester: 'Ivy Kuo',
-    status: 'Pending',
-    reason: 'Rotate gateway token before release window.'
-  },
-  {
-    id: 'CR-1038',
-    projectName: 'retail-menu',
-    environment: 'prod',
-    requester: 'Ray Hsu',
-    status: 'Approved',
-    reason: 'Align menu cache TTL with global template.'
-  }
-];
-
-const diffItems = [
-  {
-    key: 'api.baseUrl',
-    status: 'modified',
-    source: 'https://staging-api.example.com',
-    target: 'https://api.example.com'
-  },
-  {
-    key: 'feature.newCheckoutEnabled',
-    status: 'modified',
-    source: 'true',
-    target: 'false'
-  },
-  {
-    key: 'database.url',
-    status: 'protected',
-    source: '******',
-    target: '******'
-  },
-  {
-    key: 'log.format',
-    status: 'added',
-    source: 'json',
-    target: 'missing'
-  }
-];
-
 function $(selector) {
   return document.querySelector(selector);
 }
@@ -249,7 +34,7 @@ function $all(selector) {
 }
 
 function escapeHtml(value) {
-  return String(value)
+  return String(value ?? '')
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
@@ -258,21 +43,63 @@ function escapeHtml(value) {
 }
 
 function statusClass(status) {
-  const normalized = status.toLowerCase();
+  const normalized = String(status).toLowerCase();
   if (['healthy', 'synced', 'approved', 'valid'].includes(normalized)) {
     return 'success';
   }
   if (['review', 'changed', 'pending', 'warning', 'modified'].includes(normalized)) {
     return 'warning';
   }
-  if (['blocked', 'failed', 'danger'].includes(normalized)) {
+  if (['blocked', 'failed', 'danger', 'rejected'].includes(normalized)) {
     return 'danger';
   }
   return 'neutral';
 }
 
+async function api(path, options = {}) {
+  const url = `${API_BASE}${path}`;
+  let response;
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(state.token ? { Authorization: `Bearer ${state.token}` } : {}),
+        ...(options.headers || {})
+      }
+    });
+  } catch (error) {
+    console.error('Network error while calling API:', url, error);
+    throw new Error(
+      `Cannot reach API ${url}. Check backend is running and configManApiBase is correct.`
+    );
+  }
+
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!response.ok) {
+    throw new Error(data?.message || `API request failed: ${response.status}`);
+  }
+  return data;
+}
+
 function activeProject() {
-  return projects.find((project) => project.id === state.activeProjectId) ?? projects[0];
+  return (
+    state.projects.find((project) => project.id === state.activeProjectId) ||
+    state.projects[0]
+  );
+}
+
+function showToast(message) {
+  const toast = $('#toast');
+  toast.textContent = message;
+  toast.classList.add('show');
+  window.setTimeout(() => toast.classList.remove('show'), 2200);
+}
+
+function setAuthenticated(authenticated) {
+  $('#loginScreen').classList.toggle('hidden', authenticated);
+  $('#appShell').classList.toggle('hidden', !authenticated);
 }
 
 function switchView(viewId) {
@@ -281,13 +108,117 @@ function switchView(viewId) {
     view.classList.toggle('active', view.dataset.view === viewId);
   });
   renderNav();
+  if (viewId === 'diff') {
+    loadDiff().catch((error) => showToast(error.message));
+  }
 }
 
-function showToast(message) {
-  const toast = $('#toast');
-  toast.textContent = message;
-  toast.classList.add('show');
-  window.setTimeout(() => toast.classList.remove('show'), 1800);
+function initials(name) {
+  return String(name)
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+function normalizeProject(project) {
+  return {
+    ...project,
+    owner: project.ownerName,
+    environments: project.environments.map((environment) =>
+      typeof environment === 'string' ? environment : environment.name
+    ),
+    health: project.configCount > 0 ? 'Healthy' : 'Review',
+    lastChanged: 'live API',
+    configCount: project.configCount ?? 0
+  };
+}
+
+async function loadInitialData() {
+  const [projects, template, requests] = await Promise.all([
+    api('/projects'),
+    api('/templates/base'),
+    api('/review-requests')
+  ]);
+
+  state.projects = projects.map(normalizeProject);
+  state.templates = [
+    {
+      name: template.name,
+      format: 'base',
+      description: 'Required baseline keys from the backend template.',
+      keys: template.entries.map((entry) => entry.key)
+    }
+  ];
+  state.requests = requests;
+
+  if (!state.activeProjectId && state.projects[0]) {
+    state.activeProjectId = state.projects[0].id;
+  }
+
+  const project = activeProject();
+  if (project && !project.environments.includes(state.activeEnvironment)) {
+    state.activeEnvironment = project.environments[0];
+  }
+
+  await loadConfigs();
+  await loadDiff();
+  renderAll();
+}
+
+async function loadConfigs(revealSensitive = false) {
+  const project = activeProject();
+  if (!project) {
+    state.configs = [];
+    return;
+  }
+
+  const data = await api(
+    `/projects/${project.id}/configs?env=${encodeURIComponent(
+      state.activeEnvironment
+    )}${revealSensitive ? '&revealSensitive=true' : ''}`
+  );
+  state.configs = data.entries.map((entry) => ({
+    ...entry,
+    type: entry.valueType,
+    status: entry.isSensitive ? 'Protected' : 'Synced',
+    updated: entry.updatedBy
+  }));
+}
+
+async function loadDiff() {
+  const project = activeProject();
+  if (!project || !project.environments.includes('staging') || !project.environments.includes('prod')) {
+    state.diffItems = [];
+    renderDiff();
+    return;
+  }
+
+  const [staging, prod] = await Promise.all([
+    api(`/projects/${project.id}/configs?env=staging`),
+    api(`/projects/${project.id}/configs?env=prod`)
+  ]);
+  const stagingMap = new Map(staging.entries.map((entry) => [entry.key, entry]));
+  const prodMap = new Map(prod.entries.map((entry) => [entry.key, entry]));
+  const keys = [...new Set([...stagingMap.keys(), ...prodMap.keys()])].sort();
+
+  state.diffItems = keys
+    .map((key) => {
+      const source = stagingMap.get(key);
+      const target = prodMap.get(key);
+      const status = !target ? 'added' : !source ? 'removed' : source.value !== target.value ? 'modified' : 'synced';
+      return {
+        key,
+        status: source?.isSensitive || target?.isSensitive ? 'protected' : status,
+        source: source?.value ?? 'missing',
+        target: target?.value ?? 'missing'
+      };
+    })
+    .filter((item) => item.status !== 'synced');
+
+  renderDiff();
 }
 
 function renderNav() {
@@ -303,12 +234,23 @@ function renderNav() {
     .join('');
 }
 
+function renderUser() {
+  $('#userInitials').textContent = initials(state.user?.name || '--');
+  $('#userName').textContent = `${state.user?.name || 'Not signed in'} · ${state.user?.role || ''}`;
+}
+
 function renderStats() {
-  const pendingCount = requests.filter((request) => request.status === 'Pending').length;
-  const sensitiveCount = configs.filter((config) => config.isSensitive).length;
+  const pendingCount = state.requests.filter(
+    (request) => request.status === 'pending'
+  ).length;
+  const sensitiveCount = state.configs.filter((config) => config.isSensitive).length;
   const stats = [
-    { label: 'Projects', value: projects.length, change: '+1 this week' },
-    { label: 'Config Keys', value: configs.length, change: 'Across 4 environments' },
+    { label: 'Projects', value: state.projects.length, change: 'Live from API' },
+    {
+      label: 'Active Keys',
+      value: state.configs.length,
+      change: state.activeEnvironment
+    },
     { label: 'Pending Reviews', value: pendingCount, change: 'Prod guarded' },
     { label: 'Sensitive Keys', value: sensitiveCount, change: 'Masked by default' }
   ];
@@ -328,7 +270,7 @@ function renderStats() {
 
 function renderDashboard() {
   renderStats();
-  $('#dashboardProjects').innerHTML = projects
+  $('#dashboardProjects').innerHTML = state.projects
     .slice(0, 3)
     .map(
       (project) => `
@@ -347,59 +289,60 @@ function renderDashboard() {
     )
     .join('');
 
-  $('#dashboardRequests').innerHTML = requests
-    .filter((request) => request.status === 'Pending')
-    .map(
-      (request) => `
-        <article class="project-row">
-          <div>
-            <h3>${escapeHtml(request.id)}</h3>
-            <p class="project-meta">
-              <span>${escapeHtml(request.projectName)}</span>
-              <span>${escapeHtml(request.requester)}</span>
-            </p>
-          </div>
-          <span class="status-pill warning">${request.status}</span>
-        </article>
-      `
-    )
-    .join('');
+  $('#dashboardRequests').innerHTML =
+    state.requests
+      .filter((request) => request.status === 'pending')
+      .slice(0, 4)
+      .map(
+        (request) => `
+          <article class="project-row">
+            <div>
+              <h3>${escapeHtml(request.id.slice(0, 8))}</h3>
+              <p class="project-meta">
+                <span>${escapeHtml(request.projectName)}</span>
+                <span>${escapeHtml(request.requester)}</span>
+              </p>
+            </div>
+            <span class="status-pill warning">pending</span>
+          </article>
+        `
+      )
+      .join('') || '<p class="project-meta">No pending review requests.</p>';
 }
 
 function renderProjects() {
-  $('#projectsGrid').innerHTML = projects
-    .map(
-      (project) => `
-        <article class="project-card">
-          <div class="card-top">
-            <div class="card-title">
-              <h3>${escapeHtml(project.name)}</h3>
-              <p>${escapeHtml(project.repoUrl)}</p>
+  $('#projectsGrid').innerHTML =
+    state.projects
+      .map(
+        (project) => `
+          <article class="project-card">
+            <div class="card-top">
+              <div class="card-title">
+                <h3>${escapeHtml(project.name)}</h3>
+                <p>${escapeHtml(project.repoUrl || 'No repository URL')}</p>
+              </div>
+              <span class="status-pill ${statusClass(project.health)}">${project.health}</span>
             </div>
-            <span class="status-pill ${statusClass(project.health)}">${project.health}</span>
-          </div>
-          <div>
             <p class="project-meta">
               <span>${escapeHtml(project.owner)}</span>
               <span>${project.configCount} config keys</span>
               <span>${escapeHtml(project.defaultFormat)}</span>
             </p>
-          </div>
-          <div class="environment-strip">
-            ${project.environments.map((environment) => `<span>${environment}</span>`).join('')}
-          </div>
-          <div class="card-actions">
-            <button class="secondary-action" type="button" data-open-config="${project.id}">Open Config</button>
-            <button class="ghost-action" type="button" data-open-diff="${project.id}">Compare</button>
-          </div>
-        </article>
-      `
-    )
-    .join('');
+            <div class="environment-strip">
+              ${project.environments.map((environment) => `<span>${environment}</span>`).join('')}
+            </div>
+            <div class="card-actions">
+              <button class="secondary-action" type="button" data-open-config="${project.id}">Open Config</button>
+              <button class="ghost-action" type="button" data-open-diff="${project.id}">Compare</button>
+            </div>
+          </article>
+        `
+      )
+      .join('') || '<p>No projects yet. Create one from the backend API.</p>';
 }
 
 function renderTemplates() {
-  $('#templatesGrid').innerHTML = templates
+  $('#templatesGrid').innerHTML = state.templates
     .map(
       (template) => `
         <article class="template-card">
@@ -422,7 +365,6 @@ function renderTemplates() {
               )
               .join('')}
           </div>
-          <button class="secondary-action" type="button" data-template="${escapeHtml(template.name)}">Apply</button>
         </article>
       `
     )
@@ -430,7 +372,7 @@ function renderTemplates() {
 }
 
 function renderConfigProjectList() {
-  $('#configProjectList').innerHTML = projects
+  $('#configProjectList').innerHTML = state.projects
     .map(
       (project) => `
         <button class="compact-item ${project.id === state.activeProjectId ? 'active' : ''}" type="button" data-select-project="${project.id}">
@@ -450,6 +392,10 @@ function renderConfigProjectList() {
 
 function renderEnvironmentTabs() {
   const project = activeProject();
+  if (!project) {
+    $('#environmentTabs').innerHTML = '';
+    return;
+  }
   if (!project.environments.includes(state.activeEnvironment)) {
     state.activeEnvironment = project.environments[0];
   }
@@ -467,24 +413,18 @@ function renderEnvironmentTabs() {
 
 function renderConfigRows() {
   const project = activeProject();
-  $('#configTitle').textContent = project.name;
+  $('#configTitle').textContent = project?.name || 'Project Config';
   renderConfigProjectList();
   renderEnvironmentTabs();
 
   const search = state.configSearch.trim().toLowerCase();
-  const rows = configs
-    .filter(
-      (config) =>
-        config.projectId === state.activeProjectId &&
-        config.environment === state.activeEnvironment
-    )
-    .filter((config) => {
-      if (!search) return true;
-      return (
-        config.key.toLowerCase().includes(search) ||
-        config.value.toLowerCase().includes(search)
-      );
-    });
+  const rows = state.configs.filter((config) => {
+    if (!search) return true;
+    return (
+      config.key.toLowerCase().includes(search) ||
+      String(config.value).toLowerCase().includes(search)
+    );
+  });
 
   $('#configRows').innerHTML =
     rows
@@ -500,23 +440,26 @@ function renderConfigRows() {
             <td class="value-cell">${escapeHtml(visibleValue)}</td>
             <td>${escapeHtml(config.type)}</td>
             <td><span class="status-pill ${statusClass(config.status)}">${escapeHtml(config.status)}</span></td>
+            <td>${escapeHtml(config.updated)}</td>
             <td>
-              <span>${escapeHtml(config.updated)}</span>
-              ${
-                config.isSensitive
-                  ? `<div class="row-actions"><button class="tiny-button" type="button" data-reveal="${escapeHtml(revealKey)}">${state.revealedKeys.has(revealKey) ? 'Hide' : 'Reveal'}</button></div>`
-                  : ''
-              }
+              <div class="row-actions">
+                ${
+                  config.isSensitive
+                    ? `<button class="tiny-button" type="button" data-reveal="${escapeHtml(revealKey)}">${state.revealedKeys.has(revealKey) ? 'Hide' : 'Reveal'}</button>`
+                    : ''
+                }
+                <button class="tiny-button" type="button" data-edit-config="${escapeHtml(config.id)}">Edit</button>
+              </div>
             </td>
           </tr>
         `;
       })
       .join('') ||
-    `<tr><td colspan="5" class="value-cell">No config keys match this view.</td></tr>`;
+    `<tr><td colspan="6" class="value-cell">No config keys match this view.</td></tr>`;
 }
 
 function renderDiffFilters() {
-  const filters = ['all', 'modified', 'added', 'protected'];
+  const filters = ['all', 'modified', 'added', 'removed', 'protected'];
   $('#diffFilters').innerHTML = filters
     .map(
       (filter) => `
@@ -532,65 +475,70 @@ function renderDiff() {
   renderDiffFilters();
   const items =
     state.diffFilter === 'all'
-      ? diffItems
-      : diffItems.filter((item) => item.status === state.diffFilter);
+      ? state.diffItems
+      : state.diffItems.filter((item) => item.status === state.diffFilter);
 
-  $('#validationBadge').textContent = 'Valid';
-  $('#diffList').innerHTML = items
-    .map(
-      (item) => `
-        <article class="diff-item">
-          <div class="diff-label">
-            <span class="status-pill ${statusClass(item.status)}">${item.status}</span>
-            <h3>${escapeHtml(item.key)}</h3>
-          </div>
-          <div class="diff-value">
-            <strong>staging</strong>
-            <code>${escapeHtml(item.source)}</code>
-          </div>
-          <div class="diff-value">
-            <strong>prod</strong>
-            <code>${escapeHtml(item.target)}</code>
-          </div>
-        </article>
-      `
-    )
-    .join('');
+  $('#validationBadge').textContent = state.diffItems.length ? 'Review' : 'Valid';
+  $('#validationBadge').className = `status-pill ${state.diffItems.length ? 'warning' : 'success'}`;
+  $('#diffList').innerHTML =
+    items
+      .map(
+        (item) => `
+          <article class="diff-item">
+            <div class="diff-label">
+              <span class="status-pill ${statusClass(item.status)}">${item.status}</span>
+              <h3>${escapeHtml(item.key)}</h3>
+            </div>
+            <div class="diff-value">
+              <strong>staging</strong>
+              <code>${escapeHtml(item.source)}</code>
+            </div>
+            <div class="diff-value">
+              <strong>prod</strong>
+              <code>${escapeHtml(item.target)}</code>
+            </div>
+          </article>
+        `
+      )
+      .join('') || '<p class="project-meta">No environment differences.</p>';
 }
 
 function renderRequests() {
   $('#notificationCount').textContent = String(
-    requests.filter((request) => request.status === 'Pending').length
+    state.requests.filter((request) => request.status === 'pending').length
   );
-  $('#requestList').innerHTML = requests
-    .map(
-      (request) => `
-        <article class="request-item">
-          <div>
-            <div class="project-meta">
-              <span>${escapeHtml(request.id)}</span>
-              <span>${escapeHtml(request.projectName)}</span>
-              <span>${escapeHtml(request.environment)}</span>
+  $('#requestList').innerHTML =
+    state.requests
+      .map(
+        (request) => `
+          <article class="request-item">
+            <div>
+              <div class="project-meta">
+                <span>${escapeHtml(request.id.slice(0, 8))}</span>
+                <span>${escapeHtml(request.projectName)}</span>
+                <span>${escapeHtml(request.environment)}</span>
+                ${request.configKey ? `<span>${escapeHtml(request.configKey)}</span>` : ''}
+              </div>
+              <h3>${escapeHtml(request.reason)}</h3>
+              <p>${escapeHtml(request.requester)}</p>
             </div>
-            <h3>${escapeHtml(request.reason)}</h3>
-            <p>${escapeHtml(request.requester)}</p>
-          </div>
-          <div class="request-actions">
-            <span class="status-pill ${statusClass(request.status)}">${escapeHtml(request.status)}</span>
-            ${
-              request.status === 'Pending'
-                ? `<button class="secondary-action" type="button" data-approve="${escapeHtml(request.id)}">Approve</button>
-                   <button class="ghost-action" type="button" data-reject="${escapeHtml(request.id)}">Reject</button>`
-                : ''
-            }
-          </div>
-        </article>
-      `
-    )
-    .join('');
+            <div class="request-actions">
+              <span class="status-pill ${statusClass(request.status)}">${escapeHtml(request.status)}</span>
+              ${
+                request.status === 'pending' && ['system_admin', 'reviewer'].includes(state.user?.role)
+                  ? `<button class="secondary-action" type="button" data-approve="${escapeHtml(request.id)}">Approve</button>
+                     <button class="ghost-action" type="button" data-reject="${escapeHtml(request.id)}">Reject</button>`
+                  : ''
+              }
+            </div>
+          </article>
+        `
+      )
+      .join('') || '<p class="project-meta">No review requests yet.</p>';
 }
 
 function renderAll() {
+  renderUser();
   renderNav();
   renderDashboard();
   renderProjects();
@@ -600,76 +548,231 @@ function renderAll() {
   renderRequests();
 }
 
-document.addEventListener('click', (event) => {
+async function editConfig(configId) {
+  const config = state.configs.find((entry) => entry.id === configId);
+  if (!config) return;
+
+  if (isProdSensitiveEdit(config)) {
+    const hasReview = await hasReviewRequest(config);
+    if (!hasReview) {
+      const confirmed = window.confirm(
+        '此為敏感環境，是否已建立一筆 Review Request？'
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+  }
+
+  const nextValue = window.prompt(`Update ${config.key}`, config.value);
+  if (nextValue === null || nextValue === config.value) {
+    return;
+  }
+
+  await api(`/projects/${config.projectId}/configs/${config.id}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      value: nextValue,
+      changeReason: 'updated from frontend prototype'
+    })
+  });
+
+  await loadConfigs();
+  await loadDiff();
+  renderAll();
+  showToast(`${config.key} updated`);
+}
+
+function isProdSensitiveEdit(config) {
+  return (
+    config.environment === 'prod' &&
+    (config.isSensitive || /(database|db).*(password|url)|password|secret|token/i.test(config.key))
+  );
+}
+
+async function hasReviewRequest(config) {
+  const requests = await api(
+    `/projects/${config.projectId}/review-requests?env=prod&key=${encodeURIComponent(
+      config.key
+    )}&status=pending`
+  );
+  return requests.length > 0;
+}
+
+async function importConfigFile() {
+  const file = $('#configFile').files[0];
+  const project = activeProject();
+  if (!file || !project) {
+    showToast('Choose a config file first');
+    return;
+  }
+
+  const format = $('#configFormat').value;
+  const content = await file.text();
+  const result = await api(`/projects/${project.id}/configs/import`, {
+    method: 'POST',
+    body: JSON.stringify({
+      environment: state.activeEnvironment,
+      format,
+      content,
+      changeReason: `import ${file.name}`
+    })
+  });
+
+  await loadConfigs();
+  await loadDiff();
+  renderAll();
+  showToast(
+    `Imported ${result.imported}: ${result.created} created, ${result.updated} updated`
+  );
+}
+
+async function createReviewRequest() {
+  const project = activeProject();
+  if (!project) return;
+  const configKey = window.prompt('Config key for review request', 'database.url');
+  if (configKey === null) return;
+  const reason = window.prompt(
+    'Reason',
+    `Review ${state.activeEnvironment} change for ${project.name}`
+  );
+  if (!reason) return;
+
+  await api('/review-requests', {
+    method: 'POST',
+    body: JSON.stringify({
+      projectId: project.id,
+      environment: state.activeEnvironment,
+      configKey,
+      reason
+    })
+  });
+
+  state.requests = await api('/review-requests');
+  renderDashboard();
+  renderRequests();
+  showToast('Review request created');
+}
+
+async function handleReviewDecision(id, action) {
+  await api(`/review-requests/${id}/${action}`, {
+    method: 'PUT',
+    body: JSON.stringify({ comment: `${action} from frontend` })
+  });
+  state.requests = await api('/review-requests');
+  renderDashboard();
+  renderRequests();
+  showToast(`Review request ${action}d`);
+}
+
+document.addEventListener('click', async (event) => {
   const target = event.target.closest('button');
   if (!target) return;
 
-  const jump = target.dataset.jump;
-  if (jump) {
-    switchView(jump);
-    return;
-  }
-
-  const viewTarget = target.dataset.viewTarget;
-  if (viewTarget) {
-    switchView(viewTarget);
-    return;
-  }
-
-  const projectId = target.dataset.openConfig ?? target.dataset.selectProject;
-  if (projectId) {
-    state.activeProjectId = projectId;
-    switchView('config');
-    renderConfigRows();
-    return;
-  }
-
-  if (target.dataset.openDiff) {
-    state.activeProjectId = target.dataset.openDiff;
-    switchView('diff');
-    return;
-  }
-
-  if (target.dataset.env) {
-    state.activeEnvironment = target.dataset.env;
-    renderConfigRows();
-    return;
-  }
-
-  if (target.dataset.reveal) {
-    const key = target.dataset.reveal;
-    if (state.revealedKeys.has(key)) {
-      state.revealedKeys.delete(key);
-    } else {
-      state.revealedKeys.add(key);
+  try {
+    const jump = target.dataset.jump;
+    if (jump) {
+      switchView(jump);
+      return;
     }
-    renderConfigRows();
-    return;
-  }
 
-  if (target.dataset.diffFilter) {
-    state.diffFilter = target.dataset.diffFilter;
-    renderDiff();
-    return;
-  }
+    const viewTarget = target.dataset.viewTarget;
+    if (viewTarget) {
+      switchView(viewTarget);
+      return;
+    }
 
-  if (target.dataset.approve || target.dataset.reject) {
-    const id = target.dataset.approve ?? target.dataset.reject;
-    requests = requests.map((request) =>
-      request.id === id
-        ? { ...request, status: target.dataset.approve ? 'Approved' : 'Rejected' }
-        : request
-    );
-    renderDashboard();
-    renderRequests();
-    showToast(`${id} ${target.dataset.approve ? 'approved' : 'rejected'}`);
-    return;
-  }
+    const projectId = target.dataset.openConfig ?? target.dataset.selectProject;
+    if (projectId) {
+      state.activeProjectId = projectId;
+      const project = activeProject();
+      state.activeEnvironment = project.environments.includes('prod')
+        ? 'prod'
+        : project.environments[0];
+      await loadConfigs();
+      switchView('config');
+      renderAll();
+      return;
+    }
 
-  if (target.dataset.template) {
-    showToast(`${target.dataset.template} template queued`);
-    return;
+    if (target.dataset.openDiff) {
+      state.activeProjectId = target.dataset.openDiff;
+      switchView('diff');
+      return;
+    }
+
+    if (target.dataset.env) {
+      state.activeEnvironment = target.dataset.env;
+      await loadConfigs();
+      renderAll();
+      return;
+    }
+
+    if (target.dataset.reveal) {
+      const key = target.dataset.reveal;
+      if (state.revealedKeys.has(key)) {
+        state.revealedKeys.delete(key);
+        await loadConfigs();
+      } else {
+        state.revealedKeys.add(key);
+        await loadConfigs(true);
+      }
+      renderConfigRows();
+      return;
+    }
+
+    if (target.dataset.editConfig) {
+      await editConfig(target.dataset.editConfig);
+      return;
+    }
+
+    if (target.dataset.diffFilter) {
+      state.diffFilter = target.dataset.diffFilter;
+      renderDiff();
+      return;
+    }
+
+    if (target.dataset.approve) {
+      await handleReviewDecision(target.dataset.approve, 'approve');
+      return;
+    }
+
+    if (target.dataset.reject) {
+      await handleReviewDecision(target.dataset.reject, 'reject');
+    }
+  } catch (error) {
+    showToast(error.message);
   }
+});
+
+$('#loginForm').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  try {
+    const data = await api('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: $('#loginEmail').value,
+        password: $('#loginPassword').value
+      })
+    });
+    state.token = data.token;
+    state.user = data.user;
+    localStorage.setItem('configManToken', state.token);
+    localStorage.setItem('configManUser', JSON.stringify(state.user));
+    setAuthenticated(true);
+    await loadInitialData();
+    showToast(`Signed in as ${state.user.name}`);
+  } catch (error) {
+    showToast(error.message);
+  }
+});
+
+$('#logoutButton').addEventListener('click', () => {
+  localStorage.removeItem('configManToken');
+  localStorage.removeItem('configManUser');
+  state.token = '';
+  state.user = null;
+  setAuthenticated(false);
 });
 
 $('#configSearch').addEventListener('input', (event) => {
@@ -677,45 +780,38 @@ $('#configSearch').addEventListener('input', (event) => {
   renderConfigRows();
 });
 
-$('#globalSearch').addEventListener('input', (event) => {
-  const value = event.target.value.trim().toLowerCase();
-  if (!value) return;
-  const matchedProject = projects.find((project) =>
-    [project.name, project.owner, project.repoUrl].some((field) =>
-      field.toLowerCase().includes(value)
-    )
-  );
-  if (matchedProject) {
-    state.activeProjectId = matchedProject.id;
-    renderConfigRows();
-  }
+$('#configFile').addEventListener('change', (event) => {
+  const name = event.target.files[0]?.name || '';
+  const ext = name.split('.').pop()?.toLowerCase();
+  if (ext === 'json') $('#configFormat').value = 'json';
+  if (ext === 'yaml' || ext === 'yml') $('#configFormat').value = 'yaml';
+  if (ext === 'properties') $('#configFormat').value = 'properties';
 });
 
-$('#mockRegisterProject').addEventListener('click', () => {
-  showToast('Project registration draft created');
+$('#importConfig').addEventListener('click', () => {
+  importConfigFile().catch((error) => showToast(error.message));
 });
 
 $('#submitReview').addEventListener('click', () => {
-  const project = activeProject();
-  const requestId = `CR-${1043 + requests.length}`;
-  requests = [
-    {
-      id: requestId,
-      projectName: project.name,
-      environment: state.activeEnvironment,
-      requester: 'Alice Lin',
-      status: 'Pending',
-      reason: `Review ${state.activeEnvironment} changes for ${project.name}.`
-    },
-    ...requests
-  ];
-  renderDashboard();
-  renderRequests();
-  showToast(`${requestId} submitted`);
+  createReviewRequest().catch((error) => showToast(error.message));
 });
 
 $('#exportReport').addEventListener('click', () => {
   showToast('Validation report exported');
 });
 
-renderAll();
+$('#mockRegisterProject').addEventListener('click', () => {
+  showToast('Project registration now uses POST /api/v1/projects');
+});
+
+if (state.token && state.user) {
+  $('#apiBaseLabel').textContent = API_BASE;
+  setAuthenticated(true);
+  loadInitialData().catch((error) => {
+    showToast(error.message);
+    setAuthenticated(false);
+  });
+} else {
+  $('#apiBaseLabel').textContent = API_BASE;
+  setAuthenticated(false);
+}

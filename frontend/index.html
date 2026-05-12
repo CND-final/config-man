@@ -7,7 +7,43 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="shell">
+    <section id="loginScreen" class="login-screen">
+      <form id="loginForm" class="login-card">
+        <span class="brand-mark">cm</span>
+        <p class="eyebrow">config-man</p>
+        <h1>Sign in to manage configuration</h1>
+        <label>
+          <span>Email</span>
+          <input
+            id="loginEmail"
+            type="email"
+            value="admin@config-man.local"
+            autocomplete="username"
+            required
+          />
+        </label>
+        <label>
+          <span>Password</span>
+          <input
+            id="loginPassword"
+            type="password"
+            value="password"
+            autocomplete="current-password"
+            required
+          />
+        </label>
+        <button class="primary-action" type="submit">Sign In</button>
+        <p class="login-hint">
+          API: <code id="apiBaseLabel">loading</code>
+        </p>
+        <p class="login-hint">
+          Demo users: admin, project-admin, developer, reviewer, viewer
+          @config-man.local. Password: password.
+        </p>
+      </form>
+    </section>
+
+    <div id="appShell" class="shell hidden">
       <header class="topbar">
         <div class="brand">
           <span class="brand-mark">cm</span>
@@ -22,9 +58,9 @@
             <span aria-hidden="true">N</span>
             <strong id="notificationCount">3</strong>
           </button>
-          <button class="user-chip" type="button">
-            <span>AL</span>
-            <span>Alice Lin</span>
+          <button id="logoutButton" class="user-chip" type="button">
+            <span id="userInitials">--</span>
+            <span id="userName">Not signed in</span>
           </button>
         </div>
       </header>
@@ -118,6 +154,17 @@
                   <input id="configSearch" type="search" placeholder="Key or value" />
                 </label>
               </div>
+              <div class="import-toolbar">
+                <input id="configFile" type="file" accept=".json,.yaml,.yml,.properties" />
+                <select id="configFormat">
+                  <option value="yaml">yaml</option>
+                  <option value="json">json</option>
+                  <option value="properties">properties</option>
+                </select>
+                <button id="importConfig" class="secondary-action" type="button">
+                  Import Config
+                </button>
+              </div>
               <div class="table-wrap">
                 <table>
                   <thead>
@@ -127,6 +174,7 @@
                       <th>Type</th>
                       <th>Status</th>
                       <th>Updated</th>
+                      <th>Action</th>
                     </tr>
                   </thead>
                   <tbody id="configRows"></tbody>
@@ -173,6 +221,6 @@
     </div>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
   </body>
 </html>

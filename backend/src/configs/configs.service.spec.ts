@@ -6,6 +6,15 @@ describe('ConfigsService', () => {
   const projectsService = {
     ensureEnvironmentExists: jest.fn()
   };
+  const authService = {
+    requireConfigWrite: jest.fn()
+  };
+  const user = {
+    id: 'alice',
+    email: 'admin@config-man.local',
+    name: 'Alice Lin',
+    role: 'system_admin' as const
+  };
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -30,9 +39,13 @@ describe('ConfigsService', () => {
         ])
       }
     } as any;
-    const service = new ConfigsService(prisma, projectsService as any);
+    const service = new ConfigsService(
+      prisma,
+      projectsService as any,
+      authService as any
+    );
 
-    const result = await service.listConfigs('project-1', 'prod');
+    const result = await service.listConfigs(user, 'project-1', 'prod');
 
     expect(result.entries[0].value).toBe('******');
   });
@@ -49,7 +62,11 @@ describe('ConfigsService', () => {
     const prisma = {
       $transaction: jest.fn().mockRejectedValue(prismaError)
     } as any;
-    const service = new ConfigsService(prisma, projectsService as any);
+    const service = new ConfigsService(
+      prisma,
+      projectsService as any,
+      authService as any
+    );
 
     await expect(
       service.createConfig(
@@ -59,7 +76,7 @@ describe('ConfigsService', () => {
           key: 'api.baseUrl',
           value: 'https://dev-api.example.com'
         },
-        'alice'
+        user
       )
     ).rejects.toBeInstanceOf(ConflictException);
   });
@@ -89,13 +106,17 @@ describe('ConfigsService', () => {
     const prisma = {
       $transaction: jest.fn((callback) => callback(tx))
     } as any;
-    const service = new ConfigsService(prisma, projectsService as any);
+    const service = new ConfigsService(
+      prisma,
+      projectsService as any,
+      authService as any
+    );
 
     await service.updateConfig(
       'project-1',
       'config-1',
       { value: 'debug', changeReason: 'raise log level for debugging' },
-      'bob'
+      { ...user, name: 'Bob Wu' }
     );
 
     expect(tx.configVersion.create).toHaveBeenCalledWith({
@@ -103,7 +124,7 @@ describe('ConfigsService', () => {
         configId: 'config-1',
         oldValue: 'info',
         newValue: 'debug',
-        changedBy: 'bob',
+        changedBy: 'Bob Wu',
         changeReason: 'raise log level for debugging'
       }
     });

@@ -14,6 +14,12 @@ enum ConfigValueType {
   json
 }
 
+enum ChangeRequestStatus {
+  pending
+  approved
+  rejected
+}
+
 model Project {
   id            String               @id @default(uuid())
   name          String               @unique
@@ -27,8 +33,29 @@ model Project {
   environments  ProjectEnvironment[]
   configEntries ConfigEntry[]
   auditLogs     AuditLog[]
+  changeRequests ChangeRequest[]
 
   @@map("projects")
+}
+
+model ChangeRequest {
+  id          String              @id @default(uuid())
+  projectId   String
+  environment String
+  configKey   String?
+  requester   String
+  reviewer    String?
+  status      ChangeRequestStatus @default(pending)
+  reason      String
+  comment     String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  project     Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, environment, status])
+  @@index([configKey])
+  @@map("change_requests")
 }
 
 model ProjectEnvironment {

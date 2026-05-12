@@ -11,18 +11,22 @@ config-man/
 └── architecture_design.md
 ```
 
-## Frontend Prototype
+## Frontend
 
-The first frontend is a no-build static prototype with mock data.
+Recommended development setup: run Vite on `5173` and let it proxy `/api` to the NestJS backend on `3000`.
+
+```bash
+cd backend
+npm run dev
+```
 
 ```bash
 cd frontend
-python3 -m http.server 5173
+npm install
+npm run dev
 ```
 
-Open `http://localhost:5173`.
-
-You can also open `frontend/index.html` directly in a browser.
+Open `http://localhost:5173` locally, or `http://<remote-host>:5173` remotely.
 
 ## Backend API
 
@@ -38,8 +42,30 @@ npm run dev
 
 API base path: `http://localhost:3000/api/v1`
 
+## Demo Login
+
+All demo accounts use password `password`.
+
+| Email | Role |
+|-------|------|
+| `admin@config-man.local` | System Admin |
+| `project-admin@config-man.local` | Project Admin |
+| `developer@config-man.local` | Developer |
+| `reviewer@config-man.local` | Reviewer |
+| `viewer@config-man.local` | Viewer |
+
+## Config Import
+
+From the Config Editor, choose a file and import it into the selected environment.
+
+Supported formats:
+
+- `.json`
+- `.yaml` / `.yml`
+- `.properties`
+
 ## Notes
 
-- `frontend/` currently uses mock data for demo clarity.
-- `backend/` already exposes the phase 1 project and config APIs.
+- `frontend/` calls `http://localhost:3000/api/v1` by default.
+- `backend/` exposes login, project, config, import, validation, and review request APIs.
 - `cicd-lab/` is a separate assignment project and is not used by config-man.

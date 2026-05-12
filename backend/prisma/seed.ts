@@ -1,4 +1,8 @@
-import { PrismaClient, ConfigValueType } from '@prisma/client';
+import {
+  ChangeRequestStatus,
+  ConfigValueType,
+  PrismaClient
+} from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -93,6 +97,22 @@ async function main() {
       resourceId: project.id,
       projectId: project.id,
       metadata: { projectName: project.name }
+    }
+  });
+
+  await prisma.changeRequest.upsert({
+    where: { id: 'seed-prod-database-review' },
+    update: {},
+    create: {
+      id: 'seed-prod-database-review',
+      projectId: project.id,
+      environment: 'prod',
+      configKey: 'database.url',
+      requester: 'Nora Chen',
+      reviewer: 'Rachel Kao',
+      status: ChangeRequestStatus.approved,
+      reason: 'Rotate production database credential before release',
+      comment: 'Approved for demo seed data'
     }
   });
 }
