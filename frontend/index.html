@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>config-man</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark">cm</span>
+          <span>config-man</span>
+        </div>
+        <label class="global-search">
+          <span>Search</span>
+          <input id="globalSearch" type="search" placeholder="Project, key, owner" />
+        </label>
+        <div class="topbar-actions">
+          <button class="icon-button" type="button" aria-label="Notifications">
+            <span aria-hidden="true">N</span>
+            <strong id="notificationCount">3</strong>
+          </button>
+          <button class="user-chip" type="button">
+            <span>AL</span>
+            <span>Alice Lin</span>
+          </button>
+        </div>
+      </header>
+
+      <aside class="sidebar" aria-label="Primary navigation">
+        <nav id="navList"></nav>
+      </aside>
+
+      <main class="workspace">
+        <section id="dashboardView" class="view active" data-view="dashboard">
+          <div class="page-header">
+            <div>
+              <p class="eyebrow">Dashboard</p>
+              <h1>Configuration Control Center</h1>
+            </div>
+            <button class="primary-action" type="button" data-jump="projects">
+              New Project
+            </button>
+          </div>
+          <div id="statsGrid" class="stats-grid"></div>
+          <div class="dashboard-grid">
+            <section class="panel wide-panel">
+              <div class="panel-header">
+                <h2>Projects</h2>
+                <button class="text-button" type="button" data-jump="projects">
+                  View all
+                </button>
+              </div>
+              <div id="dashboardProjects" class="project-stack"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-header">
+                <h2>Pending Reviews</h2>
+                <button class="text-button" type="button" data-jump="requests">
+                  Open
+                </button>
+              </div>
+              <div id="dashboardRequests" class="review-stack"></div>
+            </section>
+          </div>
+        </section>
+
+        <section id="projectsView" class="view" data-view="projects">
+          <div class="page-header">
+            <div>
+              <p class="eyebrow">Projects</p>
+              <h1>Project Registry</h1>
+            </div>
+            <button id="mockRegisterProject" class="primary-action" type="button">
+              Register Project
+            </button>
+          </div>
+          <div id="projectsGrid" class="projects-grid"></div>
+        </section>
+
+        <section id="templatesView" class="view" data-view="templates">
+          <div class="page-header">
+            <div>
+              <p class="eyebrow">Templates</p>
+              <h1>Template Library</h1>
+            </div>
+            <button class="primary-action" type="button" data-jump="config">
+              Apply Template
+            </button>
+          </div>
+          <div id="templatesGrid" class="templates-grid"></div>
+        </section>
+
+        <section id="configView" class="view" data-view="config">
+          <div class="page-header">
+            <div>
+              <p class="eyebrow">Config Editor</p>
+              <h1 id="configTitle">Project Config</h1>
+            </div>
+            <button id="submitReview" class="primary-action" type="button">
+              Submit Review
+            </button>
+          </div>
+          <section class="editor-layout">
+            <aside class="panel project-rail">
+              <div class="panel-header">
+                <h2>Projects</h2>
+              </div>
+              <div id="configProjectList" class="compact-list"></div>
+            </aside>
+            <section class="panel editor-panel">
+              <div class="editor-toolbar">
+                <div id="environmentTabs" class="segmented-control"></div>
+                <label class="local-search">
+                  <span>Filter</span>
+                  <input id="configSearch" type="search" placeholder="Key or value" />
+                </label>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Key</th>
+                      <th>Value</th>
+                      <th>Type</th>
+                      <th>Status</th>
+                      <th>Updated</th>
+                    </tr>
+                  </thead>
+                  <tbody id="configRows"></tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+        </section>
+
+        <section id="diffView" class="view" data-view="diff">
+          <div class="page-header">
+            <div>
+              <p class="eyebrow">Diff & Validation</p>
+              <h1>Staging to Production</h1>
+            </div>
+            <button id="exportReport" class="primary-action" type="button">
+              Export Report
+            </button>
+          </div>
+          <section class="panel">
+            <div class="editor-toolbar">
+              <div id="diffFilters" class="segmented-control"></div>
+              <span id="validationBadge" class="status-pill success">Valid</span>
+            </div>
+            <div id="diffList" class="diff-list"></div>
+          </section>
+        </section>
+
+        <section id="requestsView" class="view" data-view="requests">
+          <div class="page-header">
+            <div>
+              <p class="eyebrow">Change Requests</p>
+              <h1>Production Review Queue</h1>
+            </div>
+            <button class="primary-action" type="button" data-jump="diff">
+              Review Diff
+            </button>
+          </div>
+          <section class="panel">
+            <div id="requestList" class="request-list"></div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
