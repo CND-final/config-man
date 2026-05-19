@@ -6,19 +6,21 @@ Phase 1 MVP for multi-project configuration management.
 
 ```text
 config-man/
-├── backend/   NestJS + Prisma + PostgreSQL API
-├── frontend/  Apple-inspired static admin prototype
+├── backend/   Go API using cmd/internal/pkg layout
+├── frontend/  Apple-inspired Vite admin UI
 └── architecture_design.md
 ```
 
-## Frontend
+## Recommended Run
 
-Recommended development setup: run Vite on `5173` and let it proxy `/api` to the NestJS backend on `3000`.
+Start the Go backend on `3000`:
 
 ```bash
 cd backend
-npm run dev
+go run ./cmd
 ```
+
+Start the frontend on `5173`:
 
 ```bash
 cd frontend
@@ -28,19 +30,14 @@ npm run dev
 
 Open `http://localhost:5173` locally, or `http://<remote-host>:5173` remotely.
 
-## Backend API
+The frontend calls relative paths such as `/api/v1/auth/login`; Vite proxies `/api` to `http://127.0.0.1:3000`.
+
+## Backend Test
 
 ```bash
 cd backend
-cp .env.example .env
-npm install
-docker compose up -d
-npm run prisma:migrate -- --name init
-npm run prisma:seed
-npm run dev
+go test ./...
 ```
-
-API base path: `http://localhost:3000/api/v1`
 
 ## Demo Login
 
@@ -66,6 +63,6 @@ Supported formats:
 
 ## Notes
 
-- `frontend/` calls `http://localhost:3000/api/v1` by default.
-- `backend/` exposes login, project, config, import, validation, and review request APIs.
+- The Go backend currently uses an in-memory seeded store so the first rewrite is easy to run and demo.
+- The API keeps the existing `/api/v1` contract used by the frontend.
 - `cicd-lab/` is a separate assignment project and is not used by config-man.

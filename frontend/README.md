@@ -1,15 +1,15 @@
 # config-man frontend
 
 Apple-inspired admin UI for phase 1. The frontend calls relative API paths
-such as `/api/v1/auth/login`; Vite proxies `/api` to NestJS on port `3000`.
+such as `/api/v1/auth/login`; Vite proxies `/api` to the Go backend on port `3000`.
 
 ## Recommended Run
 
-Start the NestJS backend first:
+Start the Go backend first:
 
 ```bash
 cd ../backend
-npm run dev
+go run ./cmd
 ```
 
 Then start the Vite frontend:

@@ -3,18 +3,18 @@ services:
     image: postgres:16-alpine
     container_name: config-man-postgres
     environment:
+      POSTGRES_DB: config_man
       POSTGRES_USER: config_man
       POSTGRES_PASSWORD: config_man
-      POSTGRES_DB: config_man
     ports:
       - "5432:5432"
     volumes:
-      - config_man_pgdata:/var/lib/postgresql/data
+      - config_man_postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U config_man -d config_man"]
       interval: 5s
-      timeout: 3s
+      timeout: 5s
       retries: 10
 
 volumes:
-  config_man_pgdata:
+  config_man_postgres:
