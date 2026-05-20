@@ -103,7 +103,9 @@ Implemented phase 1 APIs:
 - `GET /api/v1/health`
 - `POST /api/v1/auth/login`
 - `GET /api/v1/auth/me`
+- `GET /api/v1/templates`
 - `GET /api/v1/templates/base`
+- `POST /api/v1/templates`
 - `GET /api/v1/projects`
 - `POST /api/v1/projects`
 - `GET /api/v1/projects/:projectId`
@@ -180,6 +182,10 @@ Errors use project-wide model types in `backend/model/error.go`:
 HTTP mapping is in `backend/internal/response/error.go`.
 
 This keeps processor from depending directly on HTTP status codes.
+
+### Infrastructure Templates
+
+Template catalog now includes shared infrastructure templates plus per-user custom templates. `spring-boot-base-template` is a YAML Spring Boot skeleton with `${...}` variables. `POST /templates` stores custom templates in `custom_templates` with `owner_user_id`; `GET /templates` appends only the authenticated user's custom templates, so other users cannot see or reference them. `POST /projects` accepts optional `templateId` and validates that it is either shared or owned by the actor. The frontend Templates page can create personal templates, apply any visible body template, render a variable form, preview the rendered YAML, and then feed it into the existing Extract Config -> Apply Import flow.
 
 ### Config Import
 
@@ -319,20 +325,23 @@ Do not hardcode `localhost:3000` in frontend fetch calls, especially for remote 
 
 The frontend is an Apple-inspired admin UI and includes:
 
-- Login screen
+- Login screen with the config-man SVG logo from `frontend/public/config-man-logo.svg`; the old API/demo-user helper text is intentionally hidden
 - Dashboard
 - Projects
-- Project registration modal backed by `POST /api/v1/projects`
-- Templates
+- Project registration modal backed by `POST /api/v1/projects`, including optional visible-template reference
+- Templates with infrastructure skeleton support, personal template creation, and variable extraction
 - Config Editor, entered through clickable project cards instead of sidebar navigation
 - Config header shows the current environment snapshot version
 - GitHub-style history icon sits in the Config page top-right action area and opens the environment-level config history modal backed by `GET /config-history?env=...`
 - Rollback previous full-config snapshot backed by `POST /config-history/rollback`
 - Change Requests
 - Config import from JSON/YAML/properties via a top-right Import Config modal, then Extract Config preview, then Apply Import
-- Config export to the project default format (`json`, `yaml`, or `properties`)
+- Config export via an Export Config modal that lets the user choose `json`, `yaml`, or `properties`, then checks reveal-sensitive permission before downloading unmasked values
 - Sensitive value handling in the UI
 - Warning/confirmation behavior for sensitive Prod database password changes
+- Working global search across dashboard/project/template/request/config surfaces
+- Inline config key/value editing with a hover pencil icon and no Action column
+- Bottom-right Submit Review dock shown only after local config changes
 
 ### Frontend Refactor Notes
 
@@ -344,10 +353,11 @@ The frontend was refactored from one large `app.js` into small ES modules under 
 - `render.js` renders DOM from state and should avoid API calls.
 - `actions.js` coordinates workflows such as create project, edit config, import/export config, review decisions, config snapshot history, and rollback.
 - `events.js` binds DOM events and bootstraps the app.
+- Modal open/close workflows in `actions.js` call modal render helpers directly, so keep `renderTemplateModal`, `renderExportModal`, and `renderReviewModal` imported when touching those flows.
 
 The app still intentionally uses vanilla JavaScript and Vite. Do not add a frontend framework unless the user asks for that direction.
 
-Config table columns are intentionally minimal: Key, Value, Updated, Action. The frontend no longer shows `valueType`, synthetic config status, project health badges, or staging/prod diff UI. The sidebar intentionally omits Config; users enter the editor by clicking a project card, which has a small hover scale effect without adding a hover/click shadow. File selection for imports is hidden behind the Config page Import Config action, not shown directly above the config table. History rows are intentionally compact and GitHub-like: changed-by name, version, and time stay on one line.
+Config table columns are intentionally minimal: Key, Value, Updated. The frontend no longer shows `valueType`, synthetic config status, project health badges, or staging/prod diff UI. The sidebar intentionally omits Config; users enter the editor by clicking a project card, which has a small hover scale effect without adding a hover/click shadow. File selection for imports is hidden behind the Config page Import Config action, not shown directly above the config table. History rows are intentionally compact and GitHub-like: changed-by name, version, and time stay on one line. Config key/value edits are inline: hover a cell to reveal a pencil icon, edit in place, and save on Enter or blur. Inline edit should stay visually stable: the table uses fixed column widths, the input inherits the cell font, and entering/canceling edit replaces only the affected config row instead of redrawing the whole table body. Submit Review is hidden until inline changes exist, then appears as a bottom-right floating pill. Pressing it opens a review modal that lists key/value changes before creating the review request. Import Apply is treated like manual edits and contributes to the same pending review state. Export uses `revealSensitive=true`; roles that cannot reveal sensitive values cannot export masked config.
 
 ### Frontend Build
 

@@ -134,7 +134,7 @@ func (p *Processor) UpdateConfig(ctx appctx.RequestContext, projectID, configID 
 	}
 	logger.Config.Info("update config requested", fields...)
 
-	if req.Value == nil && req.ValueType == nil && req.IsSensitive == nil {
+	if req.Key == nil && req.Value == nil && req.ValueType == nil && req.IsSensitive == nil {
 		logger.Config.Warn("update config invalid", append(fields, "reason", "empty_update")...)
 		return model.ConfigEntry{}, model.InvalidInput("No config fields provided for update")
 	}
@@ -151,6 +151,20 @@ func (p *Processor) UpdateConfig(ctx appctx.RequestContext, projectID, configID 
 	}
 
 	oldValue := entry.Value
+	if req.Key != nil {
+		nextKey := strings.TrimSpace(*req.Key)
+		if nextKey == "" {
+			logger.Config.Warn("update config invalid", append(fields, "reason", "empty_key")...)
+			return model.ConfigEntry{}, model.InvalidInput("key is required")
+		}
+		if nextKey != entry.Key {
+			if existing, exists := p.store.FindConfigByKey(projectID, entry.Environment, nextKey); exists && existing.ID != entry.ID {
+				logger.Config.Warn("update config conflict", append(fields, "next_key", nextKey)...)
+				return model.ConfigEntry{}, model.Conflict(fmt.Sprintf("Config key %q already exists in %q", nextKey, entry.Environment))
+			}
+			entry.Key = nextKey
+		}
+	}
 	if req.Value != nil {
 		entry.Value = *req.Value
 	}
@@ -181,6 +195,7 @@ func (p *Processor) UpdateConfig(ctx appctx.RequestContext, projectID, configID 
 	}
 
 	logger.Config.Info("config updated", append(fields,
+		"key_updated", req.Key != nil,
 		"value_updated", req.Value != nil,
 		"value_type_updated", req.ValueType != nil,
 		"sensitive_updated", req.IsSensitive != nil,

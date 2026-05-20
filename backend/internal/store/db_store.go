@@ -54,6 +54,19 @@ func (s *Store) initSchema(ctx context.Context) error {
 			repo_url TEXT NOT NULL DEFAULT '',
 			owner_name TEXT NOT NULL,
 			default_format TEXT NOT NULL DEFAULT 'yaml',
+			template_id TEXT NOT NULL DEFAULT '',
+			created_at TIMESTAMPTZ NOT NULL,
+			updated_at TIMESTAMPTZ NOT NULL
+		)`,
+		`ALTER TABLE projects ADD COLUMN IF NOT EXISTS template_id TEXT NOT NULL DEFAULT ''`,
+		`CREATE TABLE IF NOT EXISTS custom_templates (
+			id TEXT PRIMARY KEY,
+			owner_user_id TEXT NOT NULL,
+			name TEXT NOT NULL,
+			description TEXT NOT NULL DEFAULT '',
+			format TEXT NOT NULL,
+			body TEXT NOT NULL,
+			variables JSONB NOT NULL DEFAULT '[]'::jsonb,
 			created_at TIMESTAMPTZ NOT NULL,
 			updated_at TIMESTAMPTZ NOT NULL
 		)`,
@@ -136,6 +149,9 @@ func (s *Store) loadSnapshot(ctx context.Context) error {
 	if err := s.loadProjectEnvironments(ctx); err != nil {
 		return err
 	}
+	if err := s.loadCustomTemplates(ctx); err != nil {
+		return err
+	}
 	if err := s.loadConfigEntries(ctx); err != nil {
 		return err
 	}
@@ -152,7 +168,7 @@ func (s *Store) loadSnapshot(ctx context.Context) error {
 }
 
 func (s *Store) loadProjects(ctx context.Context) error {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, description, repo_url, owner_name, default_format, created_at, updated_at FROM projects`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, description, repo_url, owner_name, default_format, template_id, created_at, updated_at FROM projects`)
 	if err != nil {
 		return err
 	}
@@ -160,10 +176,31 @@ func (s *Store) loadProjects(ctx context.Context) error {
 
 	for rows.Next() {
 		project := &model.Project{}
-		if err := rows.Scan(&project.ID, &project.Name, &project.Description, &project.RepoURL, &project.OwnerName, &project.DefaultFormat, &project.CreatedAt, &project.UpdatedAt); err != nil {
+		if err := rows.Scan(&project.ID, &project.Name, &project.Description, &project.RepoURL, &project.OwnerName, &project.DefaultFormat, &project.TemplateID, &project.CreatedAt, &project.UpdatedAt); err != nil {
 			return err
 		}
 		s.projects[project.ID] = project
+	}
+	return rows.Err()
+}
+
+func (s *Store) loadCustomTemplates(ctx context.Context) error {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, owner_user_id, name, description, format, body, variables, created_at, updated_at FROM custom_templates`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		template := &model.Template{IsCustom: true}
+		var variablesBytes []byte
+		if err := rows.Scan(&template.ID, &template.OwnerUserID, &template.Name, &template.Description, &template.Format, &template.Body, &variablesBytes, &template.CreatedAt, &template.UpdatedAt); err != nil {
+			return err
+		}
+		if len(variablesBytes) > 0 {
+			_ = json.Unmarshal(variablesBytes, &template.Variables)
+		}
+		s.templates[template.ID] = template
 	}
 	return rows.Err()
 }
@@ -305,6 +342,7 @@ func (s *Store) persistSnapshotLocked(ctx context.Context) error {
 		`DELETE FROM config_entries`,
 		`DELETE FROM project_environments`,
 		`DELETE FROM projects`,
+		`DELETE FROM custom_templates`,
 	}
 	for _, statement := range statements {
 		if _, err := tx.ExecContext(ctx, statement); err != nil {
@@ -313,13 +351,23 @@ func (s *Store) persistSnapshotLocked(ctx context.Context) error {
 	}
 
 	for _, project := range s.projects {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO projects (id, name, description, repo_url, owner_name, default_format, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, project.ID, project.Name, project.Description, project.RepoURL, project.OwnerName, project.DefaultFormat, project.CreatedAt, project.UpdatedAt); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO projects (id, name, description, repo_url, owner_name, default_format, template_id, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, project.ID, project.Name, project.Description, project.RepoURL, project.OwnerName, project.DefaultFormat, project.TemplateID, project.CreatedAt, project.UpdatedAt); err != nil {
 			return err
 		}
 		for _, env := range project.Environments {
 			if _, err := tx.ExecContext(ctx, `INSERT INTO project_environments (id, project_id, name, sort_order) VALUES ($1,$2,$3,$4)`, env.ID, project.ID, env.Name, env.SortOrder); err != nil {
 				return err
 			}
+		}
+	}
+
+	for _, template := range s.templates {
+		variables, err := json.Marshal(template.Variables)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO custom_templates (id, owner_user_id, name, description, format, body, variables, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, template.ID, template.OwnerUserID, template.Name, template.Description, template.Format, template.Body, variables, template.CreatedAt, template.UpdatedAt); err != nil {
+			return err
 		}
 	}
 

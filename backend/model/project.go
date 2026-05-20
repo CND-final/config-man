@@ -15,6 +15,7 @@ type Project struct {
 	RepoURL       string               `json:"repoUrl,omitempty"`
 	OwnerName     string               `json:"ownerName"`
 	DefaultFormat string               `json:"defaultFormat"`
+	TemplateID    string               `json:"templateId,omitempty"`
 	Environments  []ProjectEnvironment `json:"environments"`
 	ConfigCount   int                  `json:"configCount"`
 	CreatedAt     time.Time            `json:"createdAt"`

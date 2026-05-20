@@ -98,7 +98,9 @@ All demo users use password `password`.
 - `GET /api/v1/health`
 - `POST /api/v1/auth/login`
 - `GET /api/v1/auth/me`
+- `GET /api/v1/templates`
 - `GET /api/v1/templates/base`
+- `POST /api/v1/templates`
 - `GET /api/v1/projects`
 - `POST /api/v1/projects`
 - `GET /api/v1/projects/:projectId`
@@ -113,6 +115,11 @@ All demo users use password `password`.
 - `POST /api/v1/review-requests`
 - `PUT /api/v1/review-requests/:requestId/approve`
 - `PUT /api/v1/review-requests/:requestId/reject`
+
+
+## Infrastructure Templates
+
+`GET /api/v1/templates` returns the shared infrastructure catalog plus the authenticated user's personal templates. The MVP includes `spring-boot-base-template`, a YAML skeleton with variables such as `${APP_PORT}`, `${DB_HOST}`, `${DB_NAME}`, `${DB_USER}`, `${DB_SECRET}`, and `${REDIS_HOST}`. `POST /api/v1/templates` creates a personal template in the DB under the current user ID, so other users cannot see or reference it. Project creation accepts an optional `templateId` and validates that the template is either shared or owned by the actor. The frontend renders template variables as a form, then extracts the rendered config through the normal config import preview flow.
 
 ## Config Import
 

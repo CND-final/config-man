@@ -91,6 +91,102 @@ func TestCreateProjectCreatesDefaultEnvironments(t *testing.T) {
 	}
 }
 
+func TestListTemplatesIncludesSpringBootVariables(t *testing.T) {
+	handler := newTestHandler()
+	res := request(t, handler, http.MethodGet, "/api/v1/templates", "alice", nil)
+	if res.Code != http.StatusOK {
+		t.Fatalf("list templates status = %d body=%s", res.Code, res.Body.String())
+	}
+	templates := decodeBody[[]model.Template](t, res)
+	for _, template := range templates {
+		if template.ID == "spring-boot-base-template" {
+			if template.Format != "yaml" || len(template.Variables) == 0 {
+				t.Fatalf("unexpected spring template: %#v", template)
+			}
+			if !templateHasVariable(template, "DB_SECRET") {
+				t.Fatalf("DB_SECRET variable missing: %#v", template.Variables)
+			}
+			return
+		}
+	}
+	t.Fatalf("spring boot template missing: %#v", templates)
+}
+
+func TestCreateTemplateIsPrivateToActor(t *testing.T) {
+	handler := newTestHandler()
+	res := request(t, handler, http.MethodPost, "/api/v1/templates", "alice", map[string]any{
+		"name":        "Alice Spring Template",
+		"description": "private template",
+		"format":      "yaml",
+		"body":        "server:\n  port: ${APP_PORT}\n",
+	})
+	if res.Code != http.StatusCreated {
+		t.Fatalf("create template status = %d body=%s", res.Code, res.Body.String())
+	}
+	created := decodeBody[model.Template](t, res)
+	if !created.IsCustom || created.OwnerUserID != "alice" || !templateHasVariable(created, "APP_PORT") {
+		t.Fatalf("unexpected custom template: %#v", created)
+	}
+
+	res = request(t, handler, http.MethodGet, "/api/v1/templates", "alice", nil)
+	if res.Code != http.StatusOK {
+		t.Fatalf("list alice templates status = %d body=%s", res.Code, res.Body.String())
+	}
+	aliceTemplates := decodeBody[[]model.Template](t, res)
+	if !templateListHasID(aliceTemplates, created.ID) {
+		t.Fatalf("alice cannot see own template: %#v", aliceTemplates)
+	}
+
+	res = request(t, handler, http.MethodGet, "/api/v1/templates", "paul", nil)
+	if res.Code != http.StatusOK {
+		t.Fatalf("list paul templates status = %d body=%s", res.Code, res.Body.String())
+	}
+	paulTemplates := decodeBody[[]model.Template](t, res)
+	if templateListHasID(paulTemplates, created.ID) {
+		t.Fatalf("paul should not see alice template: %#v", paulTemplates)
+	}
+
+	res = request(t, handler, http.MethodPost, "/api/v1/projects", "alice", map[string]any{
+		"name":       "templated-service",
+		"ownerName":  "Platform Team",
+		"templateId": created.ID,
+	})
+	if res.Code != http.StatusCreated {
+		t.Fatalf("create project with own template status = %d body=%s", res.Code, res.Body.String())
+	}
+	project := decodeBody[model.Project](t, res)
+	if project.TemplateID != created.ID {
+		t.Fatalf("template id = %q want %q", project.TemplateID, created.ID)
+	}
+
+	res = request(t, handler, http.MethodPost, "/api/v1/projects", "paul", map[string]any{
+		"name":       "forbidden-template-service",
+		"ownerName":  "Platform Team",
+		"templateId": created.ID,
+	})
+	if res.Code != http.StatusNotFound {
+		t.Fatalf("create project with another user template status = %d body=%s", res.Code, res.Body.String())
+	}
+}
+
+func templateHasVariable(template model.Template, name string) bool {
+	for _, variable := range template.Variables {
+		if variable.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func templateListHasID(templates []model.Template, id string) bool {
+	for _, template := range templates {
+		if template.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
 func TestSensitiveConfigIsMaskedByDefault(t *testing.T) {
 	handler := newTestHandler()
 	res := request(t, handler, http.MethodGet, "/api/v1/projects/customer-portal/configs?env=prod", "alice", nil)
@@ -203,6 +299,41 @@ func TestConfigHistorySnapshotsAndRollback(t *testing.T) {
 func snapshotHasValue(snapshot model.ConfigSnapshot, key, value string) bool {
 	for _, entry := range snapshot.Entries {
 		if entry.Key == key && entry.Value == value {
+			return true
+		}
+	}
+	return false
+}
+
+func TestUpdateConfigKey(t *testing.T) {
+	handler := newTestHandler()
+	res := request(t, handler, http.MethodPut, "/api/v1/projects/customer-portal/configs/cfg-staging-log-level", "alice", map[string]any{
+		"key":          "logging.level",
+		"changeReason": "rename key",
+	})
+	if res.Code != http.StatusOK {
+		t.Fatalf("update key status = %d body=%s", res.Code, res.Body.String())
+	}
+	entry := decodeBody[model.ConfigEntry](t, res)
+	if entry.Key != "logging.level" {
+		t.Fatalf("updated key = %q", entry.Key)
+	}
+
+	res = request(t, handler, http.MethodGet, "/api/v1/projects/customer-portal/configs?env=staging", "alice", nil)
+	if res.Code != http.StatusOK {
+		t.Fatalf("list configs status = %d body=%s", res.Code, res.Body.String())
+	}
+	configs := decodeBody[struct {
+		Entries []model.ConfigEntry `json:"entries"`
+	}](t, res)
+	if !configEntriesHaveKey(configs.Entries, "logging.level") || configEntriesHaveKey(configs.Entries, "log.level") {
+		t.Fatalf("unexpected keys after rename: %#v", configs.Entries)
+	}
+}
+
+func configEntriesHaveKey(entries []model.ConfigEntry, key string) bool {
+	for _, entry := range entries {
+		if entry.Key == key {
 			return true
 		}
 	}

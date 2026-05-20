@@ -11,7 +11,15 @@ type CreateProjectRequest struct {
 	RepoURL       string   `json:"repoUrl"`
 	OwnerName     string   `json:"ownerName"`
 	DefaultFormat string   `json:"defaultFormat"`
+	TemplateID    string   `json:"templateId"`
 	Environments  []string `json:"environments"`
+}
+
+type CreateTemplateRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Format      string `json:"format"`
+	Body        string `json:"body"`
 }
 
 type CreateConfigRequest struct {
@@ -24,6 +32,7 @@ type CreateConfigRequest struct {
 }
 
 type UpdateConfigRequest struct {
+	Key          *string `json:"key"`
 	Value        *string `json:"value"`
 	ValueType    *string `json:"valueType"`
 	IsSensitive  *bool   `json:"isSensitive"`

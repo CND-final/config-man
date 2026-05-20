@@ -4,12 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>config-man</title>
+    <link rel="icon" type="image/svg+xml" href="/config-man-logo.svg" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <section id="loginScreen" class="login-screen">
       <form id="loginForm" class="login-card">
-        <span class="brand-mark">cm</span>
+        <img class="brand-logo login-logo" src="/config-man-logo.svg" alt="" />
         <p class="eyebrow">config-man</p>
         <h1>Sign in to manage configuration</h1>
         <label>
@@ -33,20 +34,13 @@
           />
         </label>
         <button class="primary-action" type="submit">Sign In</button>
-        <p class="login-hint">
-          API: <code id="apiBaseLabel">loading</code>
-        </p>
-        <p class="login-hint">
-          Demo users: admin, project-admin, developer, reviewer, viewer
-          @config-man.local. Password: password.
-        </p>
       </form>
     </section>
 
     <div id="appShell" class="shell hidden">
       <header class="topbar">
         <div class="brand">
-          <span class="brand-mark">cm</span>
+          <img class="brand-logo" src="/config-man-logo.svg" alt="" />
           <span>config-man</span>
         </div>
         <label class="global-search">
@@ -122,8 +116,8 @@
               <p class="eyebrow">Templates</p>
               <h1>Template Library</h1>
             </div>
-            <button class="primary-action" type="button" data-jump="projects">
-              Open Projects
+            <button id="openTemplateCreate" class="primary-action" type="button">
+              New Template
             </button>
           </div>
           <div id="templatesGrid" class="templates-grid"></div>
@@ -142,9 +136,6 @@
               </button>
               <button id="exportConfig" class="secondary-action" type="button">
                 Export Config
-              </button>
-              <button id="submitReview" class="primary-action" type="button">
-                Submit Review
               </button>
               <button id="openConfigHistory" class="icon-button history-button" type="button" aria-label="Open config history" title="Config history">
                 <span class="history-icon" aria-hidden="true"></span>
@@ -173,7 +164,6 @@
                       <th>Key</th>
                       <th>Value</th>
                       <th>Updated</th>
-                      <th>Action</th>
                     </tr>
                   </thead>
                   <tbody id="configRows"></tbody>
@@ -195,6 +185,132 @@
           </section>
         </section>
       </main>
+    </div>
+
+
+    <div id="reviewDock" class="review-dock hidden" aria-live="polite">
+      <button id="submitReview" class="review-submit" type="button">
+        <span>Submit Review</span>
+        <strong id="reviewChangeCount">0 changes</strong>
+      </button>
+    </div>
+
+
+
+
+    <div id="templateCreateModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="templateCreateTitle">
+      <form id="templateCreateForm" class="modal-panel template-create-panel">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Personal Template</p>
+            <h2 id="templateCreateTitle">New Template</h2>
+          </div>
+          <button class="icon-button" type="button" aria-label="Close template form" data-close-modal="template-create">
+            <span aria-hidden="true">X</span>
+          </button>
+        </div>
+        <div class="form-grid">
+          <label>
+            <span>Name</span>
+            <input id="templateName" type="text" autocomplete="off" required minlength="2" />
+          </label>
+          <label>
+            <span>Format</span>
+            <select id="templateFormat">
+              <option value="yaml">yaml</option>
+              <option value="json">json</option>
+              <option value="properties">properties</option>
+            </select>
+          </label>
+          <label class="form-wide">
+            <span>Description</span>
+            <input id="templateDescription" type="text" autocomplete="off" />
+          </label>
+          <label class="form-wide">
+            <span>Template Body</span>
+            <textarea id="templateBody" class="template-body-input" rows="12" required placeholder="server:
+  port: ${APP_PORT}"></textarea>
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button class="secondary-action" type="button" data-close-modal="template-create">Cancel</button>
+          <button class="primary-action" type="submit">Create Template</button>
+        </div>
+      </form>
+    </div>
+
+
+    <div id="templateModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="templateModalTitle">
+      <section class="modal-panel template-apply-panel">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Apply Template</p>
+            <h2 id="templateModalTitle">Template Variables</h2>
+            <p id="templateModalMeta" class="project-meta"></p>
+          </div>
+          <button class="icon-button" type="button" aria-label="Close template variables" data-close-modal="template">
+            <span aria-hidden="true">X</span>
+          </button>
+        </div>
+        <div id="templateVariableList" class="template-variable-list"></div>
+        <pre id="templateRenderedPreview" class="template-rendered-preview"></pre>
+        <div class="modal-actions">
+          <button id="confirmApplyTemplate" class="primary-action" type="button">Extract Config</button>
+          <button class="secondary-action" type="button" data-close-modal="template">Cancel</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="exportModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="exportModalTitle">
+      <section class="modal-panel export-panel">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Export Config</p>
+            <h2 id="exportModalTitle">Choose Export Format</h2>
+            <p id="exportModalMeta" class="project-meta"></p>
+          </div>
+          <button class="icon-button" type="button" aria-label="Close export config" data-close-modal="export">
+            <span aria-hidden="true">X</span>
+          </button>
+        </div>
+        <label class="modal-field">
+          <span>Format</span>
+          <select id="exportFormat">
+            <option value="yaml">yaml</option>
+            <option value="json">json</option>
+            <option value="properties">properties</option>
+          </select>
+        </label>
+        <p class="modal-note">Export checks reveal-sensitive permission and downloads unmasked config values only when allowed.</p>
+        <div class="modal-actions">
+          <button id="confirmExportConfig" class="primary-action" type="button">Export Config</button>
+          <button class="secondary-action" type="button" data-close-modal="export">Cancel</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="reviewModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="reviewModalTitle">
+      <section class="modal-panel review-panel">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Submit Review</p>
+            <h2 id="reviewModalTitle">Review Config Changes</h2>
+            <p id="reviewModalMeta" class="project-meta"></p>
+          </div>
+          <button class="icon-button" type="button" aria-label="Close review changes" data-close-modal="review">
+            <span aria-hidden="true">X</span>
+          </button>
+        </div>
+        <div id="reviewChangeList" class="review-change-list"></div>
+        <label class="review-reason-field">
+          <span>Reason</span>
+          <textarea id="reviewReason" rows="3"></textarea>
+        </label>
+        <div class="modal-actions">
+          <button id="confirmSubmitReview" class="primary-action" type="button">Submit Review</button>
+          <button class="secondary-action" type="button" data-close-modal="review">Cancel</button>
+        </div>
+      </section>
     </div>
 
     <div id="projectModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="projectModalTitle">
@@ -228,6 +344,10 @@
               <option value="json">json</option>
               <option value="properties">properties</option>
             </select>
+          </label>
+          <label class="form-wide">
+            <span>Template</span>
+            <select id="projectTemplate"></select>
           </label>
           <label class="form-wide">
             <span>Environments</span>

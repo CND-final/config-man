@@ -7,6 +7,65 @@ import {
   statusClass
 } from './utils.js';
 
+function searchTerm() {
+  return state.globalSearch.trim().toLowerCase();
+}
+
+function includesSearch(values, term = searchTerm()) {
+  if (!term) return true;
+  return values.some((value) => String(value ?? '').toLowerCase().includes(term));
+}
+
+function filteredProjects() {
+  const term = searchTerm();
+  return state.projects.filter((project) =>
+    includesSearch([
+      project.name,
+      project.owner,
+      project.repoUrl,
+      project.defaultFormat,
+      projectTemplateName(project.templateId),
+      ...project.environments
+    ], term)
+  );
+}
+
+function filteredTemplates() {
+  const term = searchTerm();
+  return state.templates.filter((template) =>
+    includesSearch([
+      template.name,
+      template.description,
+      template.format,
+      template.isCustom ? 'personal' : 'shared',
+      ...template.keys
+    ], term)
+  );
+}
+
+function filteredRequests() {
+  const term = searchTerm();
+  return state.requests.filter((request) =>
+    includesSearch([
+      request.id,
+      request.projectName,
+      request.requester,
+      request.environment,
+      request.configKey,
+      request.reason,
+      request.status
+    ], term)
+  );
+}
+
+function matchesConfigSearch(config) {
+  const local = state.configSearch.trim().toLowerCase();
+  const global = searchTerm();
+  const values = [config.key, config.value, config.environment, config.updatedBy, config.valueType];
+  return includesSearch(values, local) && includesSearch(values, global);
+}
+
+
 export function renderNav() {
   $('#navList').innerHTML = navItems
     .map(
@@ -56,8 +115,8 @@ export function renderStats() {
 
 export function renderDashboard() {
   renderStats();
-  $('#dashboardProjects').innerHTML = state.projects
-    .slice(0, 3)
+  const dashboardProjects = filteredProjects().slice(0, 3);
+  $('#dashboardProjects').innerHTML = dashboardProjects
     .map(
       (project) => `
         <article class="project-row">
@@ -72,10 +131,10 @@ export function renderDashboard() {
         </article>
       `
     )
-    .join('');
+    .join('') || '<p class="project-meta">No matching projects.</p>';
 
   $('#dashboardRequests').innerHTML =
-    state.requests
+    filteredRequests()
       .filter((request) => request.status === 'pending')
       .slice(0, 4)
       .map(
@@ -97,7 +156,7 @@ export function renderDashboard() {
 
 export function renderProjects() {
   $('#projectsGrid').innerHTML =
-    state.projects
+    filteredProjects()
       .map(
         (project) => `
           <button class="project-card project-card-button" type="button" data-open-config="${project.id}">
@@ -111,6 +170,7 @@ export function renderProjects() {
               <span>${escapeHtml(project.owner)}</span>
               <span>${project.configCount} config keys</span>
               <span>${escapeHtml(project.defaultFormat)}</span>
+              ${projectTemplateName(project.templateId) ? `<span>${escapeHtml(projectTemplateName(project.templateId))}</span>` : ''}
             </p>
             <div class="environment-strip">
               ${project.environments.map((environment) => `<span>${environment}</span>`).join('')}
@@ -118,41 +178,60 @@ export function renderProjects() {
           </button>
         `
       )
-      .join('') || '<p>No projects yet. Create one from the backend API.</p>';
+      .join('') || '<p>No matching projects.</p>';
 }
 
 export function renderTemplates() {
-  $('#templatesGrid').innerHTML = state.templates
+  $('#templatesGrid').innerHTML = filteredTemplates()
     .map(
       (template) => `
         <article class="template-card">
           <div class="card-top">
             <div class="card-title">
               <h3>${escapeHtml(template.name)}</h3>
-              <p>${escapeHtml(template.description)}</p>
+              <p>${escapeHtml(template.description || 'Reusable configuration template')}</p>
             </div>
-            <span class="format-pill">${escapeHtml(template.format)}</span>
+            <div class="template-badges">
+              <span class="format-pill">${escapeHtml(template.format)}</span>
+              <span class="status-pill neutral">${template.isCustom ? 'personal' : 'shared'}</span>
+            </div>
           </div>
           <div class="template-list">
-            ${template.keys
-              .map(
-                (key) => `
-                  <div class="template-key">
-                    <span>${escapeHtml(key)}</span>
-                    <span class="status-pill neutral">base</span>
-                  </div>
-                `
-              )
-              .join('')}
+            ${renderTemplateKeys(template)}
           </div>
+          ${template.body ? `<button class="secondary-action" type="button" data-apply-template="${escapeHtml(template.id)}">Apply Template</button>` : ''}
         </article>
+      `
+    )
+    .join('') || '<p class="project-meta">No matching templates.</p>';
+  renderTemplateModal();
+  renderTemplateCreateModal();
+}
+
+function renderTemplateKeys(template) {
+  const values = template.variables?.length
+    ? template.variables.map((variable) => variable.name)
+    : template.keys;
+  return values
+    .map(
+      (key) => `
+        <div class="template-key">
+          <span>${escapeHtml(key)}</span>
+          <span class="status-pill neutral">${template.variables?.length ? 'variable' : 'base'}</span>
+        </div>
       `
     )
     .join('');
 }
 
+function projectTemplateName(templateId) {
+  if (!templateId) return '';
+  return state.templates.find((template) => template.id === templateId)?.name || '';
+}
+
+
 export function renderConfigProjectList() {
-  $('#configProjectList').innerHTML = state.projects
+  $('#configProjectList').innerHTML = filteredProjects()
     .map(
       (project) => `
         <button class="compact-item ${project.id === state.activeProjectId ? 'active' : ''}" type="button" data-select-project="${project.id}">
@@ -167,7 +246,7 @@ export function renderConfigProjectList() {
         </button>
       `
     )
-    .join('');
+    .join('') || '<p class="project-meta">No matching projects.</p>';
 }
 
 export function renderEnvironmentTabs() {
@@ -191,50 +270,111 @@ export function renderEnvironmentTabs() {
     .join('');
 }
 
-export function renderConfigRows() {
-  const project = activeProject();
-  $('#configTitle').textContent = project?.name || 'Project Config';
-  renderConfigVersionLabel();
-  renderConfigProjectList();
-  renderEnvironmentTabs();
+export function renderProjectTemplateOptions() {
+  const select = $('#projectTemplate');
+  if (!select) return;
+  const projectTemplates = state.templates.filter((template) => template.body);
+  select.innerHTML = `
+    <option value="">No template</option>
+    ${projectTemplates
+      .map((template) => `
+        <option value="${escapeHtml(template.id)}">${escapeHtml(template.name)}${template.isCustom ? ' · personal' : ''}</option>
+      `)
+      .join('')}
+  `;
+}
 
-  const search = state.configSearch.trim().toLowerCase();
-  const rows = state.configs.filter((config) => {
-    if (!search) return true;
-    return (
-      config.key.toLowerCase().includes(search) ||
-      String(config.value).toLowerCase().includes(search)
-    );
-  });
+export function renderConfigRows(renderShell = true) {
+  const project = activeProject();
+  if (renderShell) {
+    $('#configTitle').textContent = project?.name || 'Project Config';
+    renderConfigVersionLabel();
+    renderConfigProjectList();
+    renderEnvironmentTabs();
+  }
+
+  const rows = state.configs.filter(matchesConfigSearch);
 
   $('#configRows').innerHTML =
     rows
-      .map((config) => {
-        const revealKey = `${config.projectId}:${config.environment}:${config.key}`;
-        const visibleValue =
-          config.isSensitive && !state.revealedKeys.has(revealKey)
-            ? '******'
-            : config.value;
-        return `
-          <tr>
-            <td class="key-cell">${escapeHtml(config.key)}</td>
-            <td class="value-cell">${escapeHtml(visibleValue)}</td>
-            <td>${escapeHtml(config.updated)}</td>
-            <td>
-              <div class="row-actions">
-                ${
-                  config.isSensitive
-                    ? `<button class="tiny-button" type="button" data-reveal="${escapeHtml(revealKey)}">${state.revealedKeys.has(revealKey) ? 'Hide' : 'Reveal'}</button>`
-                    : ''
-                }
-                <button class="tiny-button" type="button" data-edit-config="${escapeHtml(config.id)}">Edit</button>
-              </div>
-            </td>
-          </tr>
-        `;
-      })
+      .map(renderConfigRowMarkup)
       .join('') ||
-    `<tr><td colspan="4" class="value-cell">No config keys match this view.</td></tr>`;
+    `<tr><td colspan="3" class="value-cell">No config keys match this view.</td></tr>`;
+  renderReviewDock();
+}
+
+export function renderConfigRow(configId) {
+  const config = state.configs.find((entry) => entry.id === configId);
+  const row = Array.from(document.querySelectorAll('[data-config-row]'))
+    .find((element) => element.dataset.configRow === configId);
+
+  if (!config || !row || !matchesConfigSearch(config)) {
+    renderConfigRows(false);
+    return;
+  }
+
+  row.outerHTML = renderConfigRowMarkup(config);
+  renderReviewDock();
+}
+
+function renderConfigRowMarkup(config) {
+  const revealKey = `${config.projectId}:${config.environment}:${config.key}`;
+  const valueIsMasked = config.isSensitive && !state.revealedKeys.has(revealKey);
+  const visibleValue = valueIsMasked ? '******' : config.value;
+  return `
+    <tr data-config-row="${escapeHtml(config.id)}">
+      ${renderEditableConfigCell(config, 'key', config.key, 'key-cell')}
+      ${renderEditableConfigCell(config, 'value', visibleValue, 'value-cell', valueIsMasked, revealKey)}
+      <td>${escapeHtml(config.updated)}</td>
+    </tr>
+  `;
+}
+
+function renderEditableConfigCell(config, field, value, className, valueIsMasked = false, revealKey = '') {
+  const isEditing = state.inlineEdit?.configId === config.id && state.inlineEdit?.field === field;
+  const label = field === 'key' ? 'Edit key' : 'Edit value';
+  const inputType = field === 'value' && config.isSensitive ? 'password' : 'text';
+
+  if (isEditing) {
+    return `
+      <td class="${className} editable-cell editing-cell">
+        <span class="editable-value editing-placeholder">${escapeHtml(state.inlineEdit.value)}</span>
+        <input
+          class="inline-edit-input"
+          type="${inputType}"
+          value="${escapeHtml(state.inlineEdit.value)}"
+          data-inline-input="true"
+          data-config-id="${escapeHtml(config.id)}"
+          data-field="${field}"
+          aria-label="${label}"
+        />
+      </td>
+    `;
+  }
+
+  return `
+    <td class="${className} editable-cell">
+      <span class="editable-value">${escapeHtml(value)}</span>
+      <span class="cell-tools">
+        ${
+          valueIsMasked
+            ? `<button class="cell-text-button" type="button" data-reveal="${escapeHtml(revealKey)}">Reveal</button>`
+            : ''
+        }
+        <button class="cell-edit-button" type="button" data-start-inline-edit="${escapeHtml(config.id)}" data-field="${field}" aria-label="${label}">
+          <span class="pencil-icon" aria-hidden="true"></span>
+        </button>
+      </span>
+    </td>
+  `;
+}
+
+export function renderReviewDock() {
+  const dock = $('#reviewDock');
+  if (!dock) return;
+  const count = state.pendingReviewChanges.length;
+  dock.classList.toggle('hidden', count === 0);
+  $('#reviewChangeCount').textContent = `${count} ${count === 1 ? 'change' : 'changes'}`;
 }
 
 
@@ -243,7 +383,7 @@ export function renderRequests() {
     state.requests.filter((request) => request.status === 'pending').length
   );
   $('#requestList').innerHTML =
-    state.requests
+    filteredRequests()
       .map(
         (request) => `
           <article class="request-item">
@@ -308,7 +448,7 @@ export function renderVersionHistory() {
   $('#versionList').innerHTML = state.configHistory
     .map(
       (snapshot, index) => {
-        const version = snapshot.id ? snapshot.id.slice(0, 12) : 'current';
+        const version = formatSnapshotVersion(snapshot.id);
         return `
           <article class="version-item version-record">
             <div class="version-record-line">
@@ -344,8 +484,118 @@ function renderConfigVersionLabel() {
     return;
   }
 
-  const version = current.id ? current.id.slice(0, 12) : 'current';
+  const version = formatSnapshotVersion(current.id);
   label.textContent = `${state.activeEnvironment} · Version ${version} · ${formatDateTime(current.createdAt)} · ${current.entries.length} keys`;
+}
+
+
+
+
+export function renderTemplateModal() {
+  $('#templateModal').classList.toggle('hidden', !state.templateModalOpen);
+  if (!state.templateModalOpen) return;
+
+  const template = activeTemplate();
+  const project = activeProject();
+  if (!template) return;
+
+  $('#templateModalTitle').textContent = template.name;
+  $('#templateModalMeta').innerHTML = `
+    <span>${escapeHtml(template.format)}</span>
+    <span>${escapeHtml(project?.name || 'No project selected')}</span>
+    <span>${escapeHtml(state.activeEnvironment)}</span>
+  `;
+  $('#templateVariableList').innerHTML = template.variables
+    .map((variable) => `
+      <label class="template-variable-field">
+        <span>${escapeHtml(variable.name)}</span>
+        <input
+          type="${variable.isSensitive ? 'password' : 'text'}"
+          value="${escapeHtml(state.templateValues[variable.name] ?? variable.defaultValue ?? '')}"
+          placeholder="${escapeHtml(variable.description || variable.name)}"
+          data-template-variable="${escapeHtml(variable.name)}"
+          ${variable.required ? 'required' : ''}
+        />
+      </label>
+    `)
+    .join('');
+  $('#templateRenderedPreview').textContent = renderTemplateBody(template);
+}
+
+export function renderTemplateCreateModal() {
+  $('#templateCreateModal').classList.toggle('hidden', !state.templateCreateModalOpen);
+}
+
+function activeTemplate() {
+  return state.templates.find((template) => template.id === state.activeTemplateId);
+}
+
+function renderTemplateBody(template) {
+  return (template?.body || '').replace(/\$\{([A-Z0-9_]+)\}/g, (_, name) => {
+    const value = state.templateValues[name] ?? template.variables.find((variable) => variable.name === name)?.defaultValue ?? '';
+    return value;
+  });
+}
+
+export function renderExportModal() {
+  $('#exportModal').classList.toggle('hidden', !state.exportModalOpen);
+  if (!state.exportModalOpen) return;
+
+  const project = activeProject();
+  $('#exportModalMeta').innerHTML = project
+    ? `<span>${escapeHtml(project.name)}</span><span>${escapeHtml(state.activeEnvironment)}</span>`
+    : '';
+  $('#exportFormat').value = state.exportFormat || project?.defaultFormat || 'yaml';
+}
+
+export function renderReviewModal() {
+  $('#reviewModal').classList.toggle('hidden', !state.reviewModalOpen);
+  if (!state.reviewModalOpen) return;
+
+  const project = activeProject();
+  const count = state.pendingReviewChanges.length;
+  $('#reviewModalTitle').textContent = `Review ${count} ${count === 1 ? 'Change' : 'Changes'}`;
+  $('#reviewModalMeta').innerHTML = project
+    ? `<span>${escapeHtml(project.name)}</span><span>${escapeHtml(state.activeEnvironment)}</span>`
+    : '';
+  $('#reviewReason').value ||= project
+    ? `Review ${state.activeEnvironment} config changes for ${project.name}`
+    : 'Review config changes';
+  $('#reviewChangeList').innerHTML = state.pendingReviewChanges
+    .map(renderReviewChange)
+    .join('') || '<p class="project-meta">No pending changes.</p>';
+}
+
+function renderReviewChange(change) {
+  const current = state.configs.find((config) => config.id === change.configId);
+  const baseline = state.configBaseline.get(change.configId);
+  const beforeKey = baseline?.key || '(new key)';
+  const afterKey = current?.key || change.key;
+  const beforeValue = baseline?.value ?? '';
+  const afterValue = current?.value ?? '';
+  const keyChanged = beforeKey !== afterKey;
+  const valueChanged = beforeValue !== afterValue;
+
+  return `
+    <article class="review-change-item">
+      <div>
+        <strong>${escapeHtml(afterKey)}</strong>
+        <p class="project-meta">
+          <span>${keyChanged ? `key: ${escapeHtml(beforeKey)} -> ${escapeHtml(afterKey)}` : 'key unchanged'}</span>
+          <span>${valueChanged ? 'value changed' : 'value unchanged'}</span>
+        </p>
+      </div>
+      <div class="review-value-pair">
+        <code>${escapeHtml(beforeValue || '(empty)')}</code>
+        <code>${escapeHtml(afterValue || '(empty)')}</code>
+      </div>
+    </article>
+  `;
+}
+
+function formatSnapshotVersion(id) {
+  if (!id) return 'current';
+  return String(id).replace(/^snap-/, '').slice(0, 7);
 }
 
 export function renderImportPreview() {
@@ -401,7 +651,13 @@ export function renderAll() {
   renderDashboard();
   renderProjects();
   renderTemplates();
+  renderProjectTemplateOptions();
+  renderTemplateModal();
+  renderTemplateCreateModal();
   renderConfigRows();
+  renderReviewDock();
+  renderExportModal();
+  renderReviewModal();
   renderRequests();
   renderVersionHistory();
   renderImportPreview();

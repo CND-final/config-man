@@ -3,22 +3,27 @@ import { $, $all, showToast } from './dom.js';
 import {
   loadConfigHistory,
   loadConfigsAndHistory,
-  reloadProjects
+  reloadProjects,
+  reloadTemplates
 } from './data.js';
 import {
   renderAll,
+  renderConfigRow,
   renderConfigRows,
   renderDashboard,
+  renderExportModal,
   renderNav,
   renderImportPreview,
+  renderProjectTemplateOptions,
   renderRequests,
+  renderReviewModal,
+  renderReviewDock,
+  renderTemplateCreateModal,
+  renderTemplateModal,
   renderVersionHistory
 } from './render.js';
 import { activeProject, state } from './state.js';
-import {
-  isProdSensitiveEdit,
-  parseEnvironmentInput
-} from './utils.js';
+import { parseEnvironmentInput } from './utils.js';
 
 export function switchView(viewId) {
   state.activeView = viewId;
@@ -32,10 +37,23 @@ export function setProjectModal(open) {
   state.projectModalOpen = open;
   $('#projectModal').classList.toggle('hidden', !open);
   if (open) {
+    renderProjectTemplateOptions();
     window.setTimeout(() => $('#projectName').focus(), 0);
   } else {
     $('#projectForm').reset();
     $('#projectEnvironments').value = 'dev, staging, prod';
+    $('#projectTemplate').value = '';
+  }
+}
+
+export function setTemplateCreateModal(open) {
+  state.templateCreateModalOpen = open;
+  renderTemplateCreateModal();
+  if (open) {
+    window.setTimeout(() => $('#templateName').focus(), 0);
+  } else {
+    $('#templateCreateForm').reset();
+    $('#templateFormat').value = 'yaml';
   }
 }
 
@@ -45,6 +63,101 @@ export function setHistoryModal(open) {
     state.historyLoading = false;
   }
   renderVersionHistory();
+}
+
+export function setReviewModal(open) {
+  state.reviewModalOpen = open;
+  renderReviewModal();
+  if (open) {
+    window.setTimeout(() => $('#reviewReason').focus(), 0);
+  }
+}
+
+export function setTemplateModal(open, templateId = '') {
+  state.templateModalOpen = open;
+  if (open) {
+    const template = state.templates.find((item) => item.id === templateId);
+    state.activeTemplateId = templateId;
+    state.templateValues = Object.fromEntries(
+      (template?.variables || []).map((variable) => [variable.name, variable.defaultValue || ''])
+    );
+  }
+  renderTemplateModal();
+}
+
+export function updateTemplateValue(name, value) {
+  state.templateValues[name] = value;
+  renderTemplateModal();
+}
+
+export async function createTemplate(event) {
+  event.preventDefault();
+  const created = await api('/templates', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: $('#templateName').value,
+      description: $('#templateDescription').value,
+      format: $('#templateFormat').value,
+      body: $('#templateBody').value
+    })
+  });
+
+  await reloadTemplates();
+  setTemplateCreateModal(false);
+  renderAll();
+  showToast(`${created.name} created`);
+}
+
+export async function applyTemplate() {
+  const template = state.templates.find((item) => item.id === state.activeTemplateId);
+  const project = activeProject();
+  if (!template || !project) {
+    showToast('Choose a template and project first');
+    return;
+  }
+  for (const variable of template.variables || []) {
+    if (variable.required && String(state.templateValues[variable.name] || '').trim() === '') {
+      showToast(`${variable.name} is required`);
+      return;
+    }
+  }
+  const content = renderTemplateContent(template);
+  const result = await api(`/projects/${project.id}/configs/extract`, {
+    method: 'POST',
+    body: JSON.stringify({
+      environment: state.activeEnvironment,
+      format: template.format || 'yaml',
+      content
+    })
+  });
+  state.importPreview = {
+    ...result,
+    fileName: template.name,
+    content,
+    format: template.format || 'yaml',
+    projectId: project.id,
+    environment: state.activeEnvironment
+  };
+  state.templateModalOpen = false;
+  state.importPreviewOpen = true;
+  renderAll();
+  showToast(`Extracted ${result.entryCount} config keys`);
+}
+
+function renderTemplateContent(template) {
+  return (template.body || '').replace(/\$\{([A-Z0-9_]+)\}/g, (_, name) => state.templateValues[name] ?? '');
+}
+
+export function setExportModal(open) {
+  const project = activeProject();
+  state.exportModalOpen = open;
+  if (open) {
+    state.exportFormat = project?.defaultFormat || 'yaml';
+  }
+  renderExportModal();
+  if (open) {
+    window.setTimeout(() => $('#exportFormat').focus(), 0);
+  }
 }
 
 export function setImportModal(open) {
@@ -86,6 +199,7 @@ export async function createProject(event) {
       ownerName: $('#projectOwner').value,
       repoUrl: $('#projectRepo').value,
       defaultFormat: $('#projectFormat').value,
+      templateId: $('#projectTemplate').value,
       environments: parseEnvironmentInput($('#projectEnvironments').value),
       description: $('#projectDescription').value
     })
@@ -133,39 +247,114 @@ export async function rollbackLatestVersion() {
   showToast(`${project.name} ${state.activeEnvironment} config rolled back`);
 }
 
-export async function editConfig(configId) {
+export function startInlineEdit(configId, field) {
   const config = state.configs.find((entry) => entry.id === configId);
   if (!config) return;
 
-  if (isProdSensitiveEdit(config)) {
-    const hasReview = await hasReviewRequest(config);
-    if (!hasReview) {
-      const confirmed = window.confirm(
-        '此為敏感環境，是否已建立一筆 Review Request？'
-      );
-      if (!confirmed) {
-        return;
-      }
+  if (field === 'value' && config.isSensitive) {
+    const revealKey = `${config.projectId}:${config.environment}:${config.key}`;
+    if (!state.revealedKeys.has(revealKey)) {
+      showToast('Reveal this sensitive value before editing it');
+      return;
     }
   }
 
-  const nextValue = window.prompt(`Update ${config.key}`, config.value);
-  if (nextValue === null || nextValue === config.value) {
+  const previousConfigId = state.inlineEdit?.configId;
+  state.inlineEdit = {
+    configId,
+    field,
+    value: field === 'key' ? config.key : config.value
+  };
+  if (previousConfigId && previousConfigId !== configId) {
+    renderConfigRow(previousConfigId);
+  }
+  renderConfigRow(configId);
+  window.setTimeout(() => {
+    const input = document.querySelector(`[data-inline-input][data-config-id="${CSS.escape(configId)}"][data-field="${field}"]`);
+    input?.focus({ preventScroll: true });
+  }, 0);
+}
+
+export function cancelInlineEdit() {
+  const configId = state.inlineEdit?.configId;
+  state.inlineEdit = null;
+  if (configId) {
+    renderConfigRow(configId);
+    return;
+  }
+  renderConfigRows(false);
+}
+
+export async function commitInlineEdit(input) {
+  const edit = state.inlineEdit;
+  if (!edit || state.inlineSaving) return;
+  const config = state.configs.find((entry) => entry.id === edit.configId);
+  if (!config) return;
+
+  const rawValue = input.value;
+  const nextValue = edit.field === 'key' ? rawValue.trim() : rawValue;
+  if (edit.field === 'key' && !nextValue) {
+    showToast('Config key is required');
+    input.focus();
+    return;
+  }
+  if (nextValue === edit.value) {
+    state.inlineEdit = null;
+    renderConfigRow(edit.configId);
     return;
   }
 
-  await api(`/projects/${config.projectId}/configs/${config.id}`, {
-    method: 'PUT',
-    body: JSON.stringify({
-      value: nextValue,
-      changeReason: 'updated from frontend prototype'
-    })
-  });
-
-  await loadConfigsAndHistory();
-  renderAll();
-  showToast(`${config.key} updated`);
+  state.inlineSaving = true;
+  try {
+    const body = edit.field === 'key'
+      ? { key: nextValue, changeReason: 'inline key edit from frontend' }
+      : { value: nextValue, changeReason: 'inline value edit from frontend' };
+    const updated = await api(`/projects/${config.projectId}/configs/${config.id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body)
+    });
+    state.inlineEdit = null;
+    await loadConfigsAndHistory();
+    syncPendingReviewChanges();
+    renderAll();
+    showToast(`${updated.key} updated`);
+  } finally {
+    state.inlineSaving = false;
+  }
 }
+
+
+function acceptCurrentConfigsAsBaseline() {
+  state.configBaseline = new Map(
+    state.configs.map((config) => [
+      config.id,
+      {
+        id: config.id,
+        key: config.key,
+        value: config.value,
+        environment: config.environment
+      }
+    ])
+  );
+  state.pendingReviewChanges = [];
+}
+
+function syncPendingReviewChanges() {
+  state.pendingReviewChanges = state.configs
+    .filter((config) => configHasNetChange(config))
+    .map((config) => ({
+      configId: config.id,
+      key: config.key,
+      environment: config.environment
+    }));
+}
+
+function configHasNetChange(config) {
+  const baseline = state.configBaseline.get(config.id);
+  if (!baseline) return true;
+  return baseline.key !== config.key || baseline.value !== config.value;
+}
+
 
 export async function hasReviewRequest(config) {
   const requests = await api(
@@ -230,6 +419,7 @@ export async function applyImportPreview() {
     });
 
     await loadConfigsAndHistory();
+    syncPendingReviewChanges();
     state.importPreviewOpen = false;
     state.importPreview = null;
     showToast(
@@ -241,21 +431,48 @@ export async function applyImportPreview() {
   }
 }
 
-export function exportCurrentConfig() {
+export function openExportConfig() {
+  const project = activeProject();
+  if (!project) {
+    showToast('Choose a project first');
+    return;
+  }
+  setExportModal(true);
+}
+
+export async function exportCurrentConfig() {
   const project = activeProject();
   if (!project) {
     showToast('Choose a project first');
     return;
   }
 
-  const format = project.defaultFormat || 'yaml';
-  const content = serializeConfigs(state.configs, format);
+  const format = $('#exportFormat').value || state.exportFormat || project.defaultFormat || 'yaml';
+  state.exportFormat = format;
+
+  let payload;
+  try {
+    payload = await api(
+      `/projects/${project.id}/configs?env=${encodeURIComponent(state.activeEnvironment)}&revealSensitive=true`
+    );
+  } catch (error) {
+    showToast('Export denied: your role cannot reveal sensitive values');
+    return;
+  }
+
+  const configs = payload.entries.map((entry) => ({
+    ...entry,
+    updated: entry.updatedBy
+  }));
+  const content = serializeConfigs(configs, format);
   const extension = format === 'properties' ? 'properties' : format === 'json' ? 'json' : 'yaml';
   downloadFile(
     `${project.name}-${state.activeEnvironment}.${extension}`,
     content,
     format === 'json' ? 'application/json' : 'text/plain'
   );
+  state.exportModalOpen = false;
+  renderExportModal();
   showToast('Config file exported');
 }
 
@@ -287,29 +504,38 @@ function downloadFile(filename, content, type) {
 }
 
 export async function createReviewRequest() {
+  if (state.pendingReviewChanges.length === 0) {
+    showToast('No config changes to review');
+    return;
+  }
+  setReviewModal(true);
+}
+
+export async function submitReviewChanges() {
   const project = activeProject();
   if (!project) return;
-  const configKey = window.prompt('Config key for review request', 'database.url');
-  if (configKey === null) return;
-  const reason = window.prompt(
-    'Reason',
-    `Review ${state.activeEnvironment} change for ${project.name}`
-  );
-  if (!reason) return;
+  const pending = state.pendingReviewChanges[0];
+  const reason = $('#reviewReason').value.trim();
+  if (!reason) {
+    showToast('Review reason is required');
+    $('#reviewReason').focus();
+    return;
+  }
 
   await api('/review-requests', {
     method: 'POST',
     body: JSON.stringify({
       projectId: project.id,
       environment: state.activeEnvironment,
-      configKey,
+      configKey: pending.key,
       reason
     })
   });
 
   state.requests = await api('/review-requests');
-  renderDashboard();
-  renderRequests();
+  acceptCurrentConfigsAsBaseline();
+  state.reviewModalOpen = false;
+  renderAll();
   showToast('Review request created');
 }
 

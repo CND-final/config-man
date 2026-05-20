@@ -20,6 +20,7 @@ type Store struct {
 	projects     map[string]*model.Project
 	configs      map[string]*model.ConfigEntry
 	reviews      map[string]*model.ReviewRequest
+	templates    map[string]*model.Template
 	versions     []model.ConfigVersion
 	snapshots    []model.ConfigSnapshot
 	audits       []model.AuditLog
@@ -39,6 +40,7 @@ func newStoreBase(db *sql.DB) *Store {
 		projects:     make(map[string]*model.Project),
 		configs:      make(map[string]*model.ConfigEntry),
 		reviews:      make(map[string]*model.ReviewRequest),
+		templates:    make(map[string]*model.Template),
 	}
 	store.seedUsers()
 	return store
@@ -108,6 +110,43 @@ func (s *Store) SaveProject(project model.Project, audit model.AuditLog) error {
 
 	copyProject := cloneProject(project)
 	s.projects[copyProject.ID] = &copyProject
+	s.appendAuditLocked(audit)
+	return s.persistLocked()
+}
+
+func (s *Store) ListTemplates(ownerUserID string) []model.Template {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	templates := make([]model.Template, 0)
+	for _, template := range s.templates {
+		if template.OwnerUserID == ownerUserID {
+			templates = append(templates, cloneTemplate(*template))
+		}
+	}
+	sort.Slice(templates, func(i, j int) bool {
+		return templates[i].CreatedAt.After(templates[j].CreatedAt)
+	})
+	return templates
+}
+
+func (s *Store) FindTemplate(ownerUserID, templateID string) (model.Template, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	template, ok := s.templates[templateID]
+	if !ok || template.OwnerUserID != ownerUserID {
+		return model.Template{}, false
+	}
+	return cloneTemplate(*template), true
+}
+
+func (s *Store) SaveTemplate(template model.Template, audit model.AuditLog) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	copyTemplate := cloneTemplate(template)
+	s.templates[copyTemplate.ID] = &copyTemplate
 	s.appendAuditLocked(audit)
 	return s.persistLocked()
 }
@@ -519,6 +558,12 @@ func (s *Store) appendAuditLocked(audit model.AuditLog) {
 func cloneProject(project model.Project) model.Project {
 	project.Environments = append([]model.ProjectEnvironment(nil), project.Environments...)
 	return project
+}
+
+func cloneTemplate(template model.Template) model.Template {
+	template.Variables = append([]model.TemplateVariable(nil), template.Variables...)
+	template.Entries = append([]model.TemplateEntry(nil), template.Entries...)
+	return template
 }
 
 func cloneVersion(version model.ConfigVersion) model.ConfigVersion {
