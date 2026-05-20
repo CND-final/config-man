@@ -107,6 +107,108 @@ func TestSensitiveConfigIsMaskedByDefault(t *testing.T) {
 	}
 }
 
+func TestConfigVersionHistoryAndRollback(t *testing.T) {
+	handler := newTestHandler()
+	nextValue := "warn"
+	res := request(t, handler, http.MethodPut, "/api/v1/projects/customer-portal/configs/cfg-staging-log-level", "alice", map[string]any{
+		"value":        nextValue,
+		"changeReason": "test update",
+	})
+	if res.Code != http.StatusOK {
+		t.Fatalf("update config status = %d body=%s", res.Code, res.Body.String())
+	}
+
+	res = request(t, handler, http.MethodGet, "/api/v1/projects/customer-portal/configs/cfg-staging-log-level/versions", "alice", nil)
+	if res.Code != http.StatusOK {
+		t.Fatalf("list versions status = %d body=%s", res.Code, res.Body.String())
+	}
+	payload := decodeBody[struct {
+		Versions []model.ConfigVersion `json:"versions"`
+	}](t, res)
+	if len(payload.Versions) < 2 {
+		t.Fatalf("version count = %d", len(payload.Versions))
+	}
+	if payload.Versions[0].OldValue == nil || *payload.Versions[0].OldValue != "info" || payload.Versions[0].NewValue != nextValue {
+		t.Fatalf("unexpected latest version: %#v", payload.Versions[0])
+	}
+
+	res = request(t, handler, http.MethodPost, "/api/v1/projects/customer-portal/configs/cfg-staging-log-level/rollback", "alice", map[string]any{
+		"versionId":    payload.Versions[0].ID,
+		"changeReason": "test rollback",
+	})
+	if res.Code != http.StatusOK {
+		t.Fatalf("rollback status = %d body=%s", res.Code, res.Body.String())
+	}
+	entry := decodeBody[model.ConfigEntry](t, res)
+	if entry.Value != "info" {
+		t.Fatalf("rollback value = %q", entry.Value)
+	}
+}
+
+func TestConfigHistorySnapshotsAndRollback(t *testing.T) {
+	handler := newTestHandler()
+	nextValue := "warn"
+	res := request(t, handler, http.MethodPut, "/api/v1/projects/customer-portal/configs/cfg-staging-log-level", "alice", map[string]any{
+		"value":        nextValue,
+		"changeReason": "snapshot update",
+	})
+	if res.Code != http.StatusOK {
+		t.Fatalf("update config status = %d body=%s", res.Code, res.Body.String())
+	}
+
+	res = request(t, handler, http.MethodGet, "/api/v1/projects/customer-portal/config-history?env=staging", "alice", nil)
+	if res.Code != http.StatusOK {
+		t.Fatalf("list config history status = %d body=%s", res.Code, res.Body.String())
+	}
+	payload := decodeBody[struct {
+		Snapshots []model.ConfigSnapshot `json:"snapshots"`
+	}](t, res)
+	if len(payload.Snapshots) < 2 {
+		t.Fatalf("snapshot count = %d", len(payload.Snapshots))
+	}
+	if !snapshotHasValue(payload.Snapshots[0], "log.level", nextValue) {
+		t.Fatalf("latest snapshot did not include updated log.level: %#v", payload.Snapshots[0])
+	}
+
+	res = request(t, handler, http.MethodPost, "/api/v1/projects/customer-portal/config-history/rollback", "alice", map[string]any{
+		"environment":  "staging",
+		"snapshotId":   payload.Snapshots[1].ID,
+		"changeReason": "snapshot rollback",
+	})
+	if res.Code != http.StatusOK {
+		t.Fatalf("rollback snapshot status = %d body=%s", res.Code, res.Body.String())
+	}
+
+	res = request(t, handler, http.MethodGet, "/api/v1/projects/customer-portal/configs?env=staging", "alice", nil)
+	if res.Code != http.StatusOK {
+		t.Fatalf("list configs status = %d body=%s", res.Code, res.Body.String())
+	}
+	configs := decodeBody[struct {
+		Entries []model.ConfigEntry `json:"entries"`
+	}](t, res)
+	found := false
+	for _, entry := range configs.Entries {
+		if entry.Key == "log.level" {
+			found = true
+			if entry.Value != "info" {
+				t.Fatalf("rollback snapshot value = %q", entry.Value)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("log.level config missing after rollback")
+	}
+}
+
+func snapshotHasValue(snapshot model.ConfigSnapshot, key, value string) bool {
+	for _, entry := range snapshot.Entries {
+		if entry.Key == key && entry.Value == value {
+			return true
+		}
+	}
+	return false
+}
+
 func TestDeveloperCannotModifyProdConfig(t *testing.T) {
 	handler := newTestHandler()
 	value := "https://api2.example.com"

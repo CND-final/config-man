@@ -30,6 +30,17 @@ type UpdateConfigRequest struct {
 	ChangeReason string  `json:"changeReason"`
 }
 
+type RollbackConfigRequest struct {
+	VersionID    string `json:"versionId"`
+	ChangeReason string `json:"changeReason"`
+}
+
+type RollbackConfigSnapshotRequest struct {
+	Environment  string `json:"environment"`
+	SnapshotID   string `json:"snapshotId"`
+	ChangeReason string `json:"changeReason"`
+}
+
 type ImportConfigRequest struct {
 	Environment  string `json:"environment"`
 	Format       string `json:"format"`

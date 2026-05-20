@@ -18,6 +18,18 @@ func (s *Server) getConfigRoutes() Routes {
 			APIFunc: s.handleListConfigs,
 		},
 		{
+			Name:    "ListConfigHistory",
+			Method:  http.MethodGet,
+			Pattern: "/projects/:projectId/config-history",
+			APIFunc: s.handleListConfigHistory,
+		},
+		{
+			Name:    "RollbackConfigHistory",
+			Method:  http.MethodPost,
+			Pattern: "/projects/:projectId/config-history/rollback",
+			APIFunc: s.handleRollbackConfigHistory,
+		},
+		{
 			Name:    "CreateConfig",
 			Method:  http.MethodPost,
 			Pattern: "/projects/:projectId/configs",
@@ -36,6 +48,18 @@ func (s *Server) getConfigRoutes() Routes {
 			APIFunc: s.handleUpdateConfig,
 		},
 		{
+			Name:    "ListConfigVersions",
+			Method:  http.MethodGet,
+			Pattern: "/projects/:projectId/configs/:configId/versions",
+			APIFunc: s.handleListConfigVersions,
+		},
+		{
+			Name:    "RollbackConfig",
+			Method:  http.MethodPost,
+			Pattern: "/projects/:projectId/configs/:configId/rollback",
+			APIFunc: s.handleRollbackConfig,
+		},
+		{
 			Name:    "DeleteConfig",
 			Method:  http.MethodDelete,
 			Pattern: "/projects/:projectId/configs/:configId",
@@ -49,6 +73,35 @@ func (s *Server) handleListConfigs(c *gin.Context) {
 
 	reveal := strings.EqualFold(c.Query("revealSensitive"), "true")
 	payload, appErr := s.processor.ListConfigs(reqCtx, c.Param("projectId"), c.Query("env"), reveal)
+	if appErr != nil {
+		response.WriteError(c, appErr)
+		return
+	}
+	response.WriteJSON(c, http.StatusOK, payload)
+}
+
+func (s *Server) handleListConfigHistory(c *gin.Context) {
+	reqCtx := requestContextFromGin(c)
+
+	reveal := strings.EqualFold(c.Query("revealSensitive"), "true")
+	payload, appErr := s.processor.ListConfigHistory(reqCtx, c.Param("projectId"), c.Query("env"), reveal)
+	if appErr != nil {
+		response.WriteError(c, appErr)
+		return
+	}
+	response.WriteJSON(c, http.StatusOK, payload)
+}
+
+func (s *Server) handleRollbackConfigHistory(c *gin.Context) {
+	reqCtx := requestContextFromGin(c)
+
+	var req model.RollbackConfigSnapshotRequest
+	if err := response.DecodeJSON(c, &req); err != nil {
+		response.WriteError(c, err)
+		return
+	}
+
+	payload, appErr := s.processor.RollbackConfigSnapshot(reqCtx, c.Param("projectId"), req)
 	if appErr != nil {
 		response.WriteError(c, appErr)
 		return
@@ -100,6 +153,35 @@ func (s *Server) handleUpdateConfig(c *gin.Context) {
 	}
 
 	entry, appErr := s.processor.UpdateConfig(reqCtx, c.Param("projectId"), c.Param("configId"), req)
+	if appErr != nil {
+		response.WriteError(c, appErr)
+		return
+	}
+	response.WriteJSON(c, http.StatusOK, entry)
+}
+
+func (s *Server) handleListConfigVersions(c *gin.Context) {
+	reqCtx := requestContextFromGin(c)
+
+	reveal := strings.EqualFold(c.Query("revealSensitive"), "true")
+	payload, appErr := s.processor.ListConfigVersions(reqCtx, c.Param("projectId"), c.Param("configId"), reveal)
+	if appErr != nil {
+		response.WriteError(c, appErr)
+		return
+	}
+	response.WriteJSON(c, http.StatusOK, payload)
+}
+
+func (s *Server) handleRollbackConfig(c *gin.Context) {
+	reqCtx := requestContextFromGin(c)
+
+	var req model.RollbackConfigRequest
+	if err := response.DecodeJSON(c, &req); err != nil {
+		response.WriteError(c, err)
+		return
+	}
+
+	entry, appErr := s.processor.RollbackConfig(reqCtx, c.Param("projectId"), c.Param("configId"), req)
 	if appErr != nil {
 		response.WriteError(c, appErr)
 		return

@@ -21,6 +21,7 @@ type Store struct {
 	configs      map[string]*model.ConfigEntry
 	reviews      map[string]*model.ReviewRequest
 	versions     []model.ConfigVersion
+	snapshots    []model.ConfigSnapshot
 	audits       []model.AuditLog
 }
 
@@ -149,6 +150,22 @@ func (s *Store) FindConfigByKey(projectID, environment, key string) (model.Confi
 	return *entry, true
 }
 
+func (s *Store) ListConfigVersions(configID string) []model.ConfigVersion {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	versions := make([]model.ConfigVersion, 0)
+	for _, version := range s.versions {
+		if version.ConfigID == configID {
+			versions = append(versions, cloneVersion(version))
+		}
+	}
+	sort.Slice(versions, func(i, j int) bool {
+		return versions[i].CreatedAt.After(versions[j].CreatedAt)
+	})
+	return versions
+}
+
 func (s *Store) SaveConfig(entry model.ConfigEntry, version model.ConfigVersion, audit model.AuditLog) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -156,6 +173,7 @@ func (s *Store) SaveConfig(entry model.ConfigEntry, version model.ConfigVersion,
 	copyEntry := entry
 	s.configs[copyEntry.ID] = &copyEntry
 	s.appendVersionLocked(version)
+	s.snapshotLocked(copyEntry.ProjectID, copyEntry.Environment, version.ChangedBy, version.ChangeReason)
 	s.appendAuditLocked(audit)
 	return s.persistLocked()
 }
@@ -171,6 +189,15 @@ func (s *Store) SaveConfigBatch(entries []model.ConfigEntry, versions []model.Co
 	for _, version := range versions {
 		s.appendVersionLocked(version)
 	}
+	if len(entries) > 0 {
+		changedBy := audit.Actor
+		changeReason := audit.Action
+		if len(versions) > 0 {
+			changedBy = versions[0].ChangedBy
+			changeReason = versions[0].ChangeReason
+		}
+		s.snapshotLocked(entries[0].ProjectID, entries[0].Environment, changedBy, changeReason)
+	}
 	s.appendAuditLocked(audit)
 	return s.persistLocked()
 }
@@ -185,8 +212,81 @@ func (s *Store) DeleteConfig(projectID, configID string, audit model.AuditLog) (
 	}
 	deleted := *entry
 	delete(s.configs, configID)
+	s.snapshotLocked(deleted.ProjectID, deleted.Environment, audit.Actor, audit.Action)
 	s.appendAuditLocked(audit)
 	return deleted, true, s.persistLocked()
+}
+
+func (s *Store) ListConfigSnapshots(projectID, environment string) []model.ConfigSnapshot {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	snapshots := make([]model.ConfigSnapshot, 0)
+	for _, snapshot := range s.snapshots {
+		if snapshot.ProjectID == projectID && snapshot.Environment == environment {
+			snapshots = append(snapshots, cloneSnapshot(snapshot))
+		}
+	}
+	sort.Slice(snapshots, func(i, j int) bool {
+		return snapshots[i].CreatedAt.After(snapshots[j].CreatedAt)
+	})
+	return snapshots
+}
+
+func (s *Store) RestoreConfigSnapshot(projectID, environment string, snapshot model.ConfigSnapshot, actor, reason string, audit model.AuditLog) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	currentByKey := make(map[string]*model.ConfigEntry)
+	for _, entry := range s.configs {
+		if entry.ProjectID == projectID && entry.Environment == environment {
+			currentByKey[entry.Key] = entry
+		}
+	}
+
+	now := time.Now().UTC()
+	restoredKeys := make(map[string]bool, len(snapshot.Entries))
+	for _, snapshotEntry := range snapshot.Entries {
+		restoredKeys[snapshotEntry.Key] = true
+		entry := currentByKey[snapshotEntry.Key]
+		if entry == nil {
+			newEntry := model.ConfigEntry{
+				ID:          util.NewID("cfg"),
+				ProjectID:   projectID,
+				Environment: environment,
+				Key:         snapshotEntry.Key,
+				Value:       snapshotEntry.Value,
+				ValueType:   snapshotEntry.ValueType,
+				IsSensitive: snapshotEntry.IsSensitive,
+				UpdatedBy:   actor,
+				CreatedAt:   now,
+				UpdatedAt:   now,
+			}
+			s.configs[newEntry.ID] = &newEntry
+			s.versionLocked(newEntry.ID, nil, newEntry.Value, actor, reason)
+			continue
+		}
+
+		oldValue := entry.Value
+		if entry.Value != snapshotEntry.Value || entry.ValueType != snapshotEntry.ValueType || entry.IsSensitive != snapshotEntry.IsSensitive {
+			entry.Value = snapshotEntry.Value
+			entry.ValueType = snapshotEntry.ValueType
+			entry.IsSensitive = snapshotEntry.IsSensitive
+			entry.UpdatedBy = actor
+			entry.UpdatedAt = now
+			s.versionLocked(entry.ID, &oldValue, entry.Value, actor, reason)
+		}
+	}
+
+	for key, entry := range currentByKey {
+		if !restoredKeys[key] {
+			delete(s.configs, entry.ID)
+		}
+	}
+
+	s.snapshotLocked(projectID, environment, actor, reason)
+	s.appendAuditLocked(audit)
+	return s.persistLocked()
 }
 
 func (s *Store) ListReviewRequests(projectID string, filters model.ReviewFilters) []model.ReviewRequest {
@@ -302,6 +402,9 @@ func (s *Store) seedDemoData() {
 		s.configs[entry.ID] = entry
 		s.versionLocked(entry.ID, nil, entry.Value, "seed-admin", "seed demo config")
 	}
+	for _, env := range project.Environments {
+		s.snapshotLocked(project.ID, env.Name, "seed-admin", "seed demo config")
+	}
 
 	review := &model.ReviewRequest{
 		ID:          "seed-prod-database-review",
@@ -321,6 +424,14 @@ func (s *Store) seedDemoData() {
 	s.auditLocked("seed-admin", "seed_demo_project", "project", project.ID, project.ID, map[string]any{
 		"projectName": project.Name,
 	})
+}
+
+func (s *Store) seedCurrentSnapshots() {
+	for _, project := range s.projects {
+		for _, env := range project.Environments {
+			s.snapshotLocked(project.ID, env.Name, "system", "initialize config history")
+		}
+	}
 }
 
 func (s *Store) configCountLocked(projectID string) int {
@@ -348,6 +459,32 @@ func (s *Store) versionLocked(configID string, oldValue *string, newValue, chang
 		ConfigID:     configID,
 		OldValue:     oldValue,
 		NewValue:     newValue,
+		ChangedBy:    changedBy,
+		ChangeReason: reason,
+		CreatedAt:    time.Now().UTC(),
+	})
+}
+
+func (s *Store) snapshotLocked(projectID, environment, changedBy, reason string) {
+	entries := make([]model.ConfigSnapshotEntry, 0)
+	for _, entry := range s.configs {
+		if entry.ProjectID == projectID && entry.Environment == environment {
+			entries = append(entries, model.ConfigSnapshotEntry{
+				Key:         entry.Key,
+				Value:       entry.Value,
+				ValueType:   entry.ValueType,
+				IsSensitive: entry.IsSensitive,
+			})
+		}
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].Key < entries[j].Key
+	})
+	s.snapshots = append(s.snapshots, model.ConfigSnapshot{
+		ID:           util.NewID("snap"),
+		ProjectID:    projectID,
+		Environment:  environment,
+		Entries:      entries,
 		ChangedBy:    changedBy,
 		ChangeReason: reason,
 		CreatedAt:    time.Now().UTC(),
@@ -382,4 +519,17 @@ func (s *Store) appendAuditLocked(audit model.AuditLog) {
 func cloneProject(project model.Project) model.Project {
 	project.Environments = append([]model.ProjectEnvironment(nil), project.Environments...)
 	return project
+}
+
+func cloneVersion(version model.ConfigVersion) model.ConfigVersion {
+	if version.OldValue != nil {
+		oldValue := *version.OldValue
+		version.OldValue = &oldValue
+	}
+	return version
+}
+
+func cloneSnapshot(snapshot model.ConfigSnapshot) model.ConfigSnapshot {
+	snapshot.Entries = append([]model.ConfigSnapshotEntry(nil), snapshot.Entries...)
+	return snapshot
 }

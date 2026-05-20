@@ -25,6 +25,23 @@ type ConfigVersion struct {
 	CreatedAt    time.Time `json:"createdAt"`
 }
 
+type ConfigSnapshotEntry struct {
+	Key         string `json:"key"`
+	Value       string `json:"value"`
+	ValueType   string `json:"valueType"`
+	IsSensitive bool   `json:"isSensitive"`
+}
+
+type ConfigSnapshot struct {
+	ID           string                `json:"id"`
+	ProjectID    string                `json:"projectId"`
+	Environment  string                `json:"environment"`
+	Entries      []ConfigSnapshotEntry `json:"entries"`
+	ChangedBy    string                `json:"changedBy"`
+	ChangeReason string                `json:"changeReason"`
+	CreatedAt    time.Time             `json:"createdAt"`
+}
+
 type AuditLog struct {
 	ID           string         `json:"id"`
 	Actor        string         `json:"actor"`

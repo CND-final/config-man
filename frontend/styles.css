@@ -40,7 +40,9 @@ body {
 }
 
 button,
-input {
+input,
+select,
+textarea {
   font: inherit;
 }
 
@@ -202,9 +204,15 @@ button {
   box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.12);
 }
 
-.topbar-actions {
+.topbar-actions,
+.page-actions {
   justify-content: flex-end;
   gap: 10px;
+}
+
+.page-actions {
+  display: flex;
+  flex-wrap: wrap;
 }
 
 .icon-button {
@@ -374,6 +382,11 @@ h3 {
 
 .primary-action:hover {
   background: #0066cc;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.54;
 }
 
 .text-button {
@@ -705,7 +718,7 @@ h3 {
 
 table {
   width: 100%;
-  min-width: 760px;
+  min-width: 640px;
   border-collapse: collapse;
 }
 
@@ -798,6 +811,191 @@ td {
 .request-item h3,
 .request-item p {
   margin-bottom: 7px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  padding: 24px;
+  background: rgba(29, 29, 31, 0.28);
+  backdrop-filter: blur(12px);
+}
+
+.modal-panel {
+  width: min(720px, 100%);
+  border: 1px solid rgba(210, 210, 215, 0.82);
+  border-radius: 8px;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--shadow);
+}
+
+.history-panel {
+  width: min(860px, 100%);
+}
+
+.modal-header,
+.modal-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.modal-header {
+  margin-bottom: 18px;
+}
+
+.modal-actions {
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.form-grid label {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.form-grid input,
+.form-grid select,
+.form-grid textarea {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 12px;
+  color: var(--text);
+  background: #fff;
+  outline: none;
+}
+
+.form-grid textarea {
+  min-height: 86px;
+  resize: vertical;
+}
+
+.form-grid input:focus,
+.form-grid select:focus,
+.form-grid textarea:focus {
+  border-color: rgba(0, 113, 227, 0.35);
+  box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.12);
+}
+
+.form-wide {
+  grid-column: 1 / -1;
+}
+
+.history-summary,
+.version-list {
+  display: grid;
+  gap: 10px;
+}
+
+.history-summary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 14px;
+}
+
+.history-previous,
+.version-item {
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  padding: 13px;
+  background: #f8f8fa;
+}
+
+.history-previous span,
+.version-values span {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.history-previous code,
+.version-values code {
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.history-previous.current {
+  background: var(--blue-soft);
+}
+
+.version-head,
+.version-values {
+  display: grid;
+  gap: 10px;
+}
+
+.version-head {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.version-head strong {
+  font-size: 14px;
+}
+
+.version-head span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.version-values {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 10px;
+}
+
+.version-values div,
+.snapshot-entry {
+  min-width: 0;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fff;
+}
+
+.snapshot-entry-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.snapshot-entry {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.42fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.snapshot-entry span {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.snapshot-entry code {
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: 13px;
 }
 
 .toast {
@@ -899,10 +1097,15 @@ td {
   }
 
   .page-header,
+  .page-actions,
   .editor-toolbar,
   .import-toolbar,
   .request-item,
-  .diff-item {
+  .diff-item,
+  .form-grid,
+  .history-summary,
+  .version-values,
+  .snapshot-entry {
     display: grid;
     grid-template-columns: 1fr;
   }
@@ -929,5 +1132,15 @@ td {
   .primary-action {
     width: 100%;
     justify-content: center;
+  }
+
+  .modal-backdrop {
+    align-items: start;
+    padding: 14px;
+  }
+
+  .modal-actions {
+    display: grid;
+    grid-template-columns: 1fr;
   }
 }

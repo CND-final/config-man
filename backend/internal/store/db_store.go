@@ -26,6 +26,11 @@ func NewStoreWithDB(ctx context.Context, db *sql.DB) (*Store, error) {
 		if err := store.persistSnapshotLocked(ctx); err != nil {
 			return nil, err
 		}
+	} else if len(store.snapshots) == 0 {
+		store.seedCurrentSnapshots()
+		if err := store.persistSnapshotLocked(ctx); err != nil {
+			return nil, err
+		}
 	}
 	return store, nil
 }
@@ -81,6 +86,15 @@ func (s *Store) initSchema(ctx context.Context) error {
 			change_reason TEXT NOT NULL,
 			created_at TIMESTAMPTZ NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS config_snapshots (
+			id TEXT PRIMARY KEY,
+			project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+			environment TEXT NOT NULL,
+			entries JSONB NOT NULL DEFAULT '[]'::jsonb,
+			changed_by TEXT NOT NULL,
+			change_reason TEXT NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL
+		)`,
 		`CREATE TABLE IF NOT EXISTS review_requests (
 			id TEXT PRIMARY KEY,
 			project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -126,6 +140,9 @@ func (s *Store) loadSnapshot(ctx context.Context) error {
 		return err
 	}
 	if err := s.loadConfigVersions(ctx); err != nil {
+		return err
+	}
+	if err := s.loadConfigSnapshots(ctx); err != nil {
 		return err
 	}
 	if err := s.loadReviewRequests(ctx); err != nil {
@@ -210,6 +227,27 @@ func (s *Store) loadConfigVersions(ctx context.Context) error {
 	return rows.Err()
 }
 
+func (s *Store) loadConfigSnapshots(ctx context.Context) error {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, project_id, environment, entries, changed_by, change_reason, created_at FROM config_snapshots ORDER BY created_at ASC`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		snapshot := model.ConfigSnapshot{}
+		var entriesBytes []byte
+		if err := rows.Scan(&snapshot.ID, &snapshot.ProjectID, &snapshot.Environment, &entriesBytes, &snapshot.ChangedBy, &snapshot.ChangeReason, &snapshot.CreatedAt); err != nil {
+			return err
+		}
+		if len(entriesBytes) > 0 {
+			_ = json.Unmarshal(entriesBytes, &snapshot.Entries)
+		}
+		s.snapshots = append(s.snapshots, snapshot)
+	}
+	return rows.Err()
+}
+
 func (s *Store) loadReviewRequests(ctx context.Context) error {
 	rows, err := s.db.QueryContext(ctx, `SELECT id, project_id, project_name, environment, config_key, requester, reviewer, status, reason, comment, created_at, updated_at FROM review_requests`)
 	if err != nil {
@@ -262,6 +300,7 @@ func (s *Store) persistSnapshotLocked(ctx context.Context) error {
 	statements := []string{
 		`DELETE FROM audit_logs`,
 		`DELETE FROM review_requests`,
+		`DELETE FROM config_snapshots`,
 		`DELETE FROM config_versions`,
 		`DELETE FROM config_entries`,
 		`DELETE FROM project_environments`,
@@ -292,6 +331,16 @@ func (s *Store) persistSnapshotLocked(ctx context.Context) error {
 
 	for _, version := range s.versions {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO config_versions (id, config_id, old_value, new_value, changed_by, change_reason, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)`, version.ID, version.ConfigID, version.OldValue, version.NewValue, version.ChangedBy, version.ChangeReason, version.CreatedAt); err != nil {
+			return err
+		}
+	}
+
+	for _, snapshot := range s.snapshots {
+		entries, err := json.Marshal(snapshot.Entries)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO config_snapshots (id, project_id, environment, entries, changed_by, change_reason, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)`, snapshot.ID, snapshot.ProjectID, snapshot.Environment, entries, snapshot.ChangedBy, snapshot.ChangeReason, snapshot.CreatedAt); err != nil {
 			return err
 		}
 	}
