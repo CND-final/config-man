@@ -75,6 +75,26 @@ jobs:
       - name: Build cmd targets
         run: go build -o /tmp/config-man ./cmd/...
 
+      - name: Run unit tests
+        run: go test -v -race ./... | tee test-output.txt
+
+      - name: Publish Backend Test Summary
+        if: always() # Ensures this runs even if the tests fail
+        run: |
+          echo "### 🐹 Backend Test Report" >> $GITHUB_STEP_SUMMARY
+          
+          if grep -q "FAIL" test-output.txt; then
+            echo "❌ **Status:** Failed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ **Status:** Passed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "#### Execution Details" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`text" >> $GITHUB_STEP_SUMMARY
+          # Extracts the final pass/fail lines and package states
+          grep -E "ok\s+|FAIL|--- FAIL" test-output.txt || true
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
   # 3. Vite Frontend Job (Only runs if frontend changes)
   frontend-ci:
     name: Frontend CI
@@ -187,3 +207,42 @@ jobs:
               exit 1
               ;;
           esac
+
+      - name: Run frontend tests
+        run: |
+          case "$PKG_MANAGER" in
+            pnpm)
+              pnpm test --if-present | tee test-output.txt
+              ;;
+            yarn)
+              yarn test --if-present | tee test-output.txt
+              ;;
+            npm)
+              npm run test --if-present | tee test-output.txt
+              ;;
+            *)
+              echo "Unknown package manager: $PKG_MANAGER"
+              exit 1
+              ;;
+          esac
+
+      - name: Publish Frontend Test Summary
+        if: always() # Ensures this runs even if tests fail or are missing
+        run: |
+          echo "### 🌐 Frontend Test Report" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -s test-output.txt ]; then
+            if grep -q -i "fail" test-output.txt; then
+              echo "❌ **Status:** Failed" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "✅ **Status:** Passed" >> $GITHUB_STEP_SUMMARY
+            fi
+            
+            echo "#### Test Framework Output" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`text" >> $GITHUB_STEP_SUMMARY
+            # Grabs the last 25 lines (where Vitest/Jest prints summaries)
+            tail -n 25 test-output.txt
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "ℹ️ No tests were executed (test script not present in package.json)." >> $GITHUB_STEP_SUMMARY
+          fi
