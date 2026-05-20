@@ -230,6 +230,39 @@ func TestImportJSONConfig(t *testing.T) {
 	}
 }
 
+func TestExtractConfigDoesNotPersist(t *testing.T) {
+	handler := newTestHandler()
+	res := request(t, handler, http.MethodPost, "/api/v1/projects/customer-portal/configs/extract", "alice", map[string]any{
+		"environment": "dev",
+		"format":      "json",
+		"content":     `{"feature":{"preview":true},"limit":3}`,
+	})
+	if res.Code != http.StatusOK {
+		t.Fatalf("extract status = %d body=%s", res.Code, res.Body.String())
+	}
+	payload := decodeBody[struct {
+		Entries    []model.ConfigSnapshotEntry `json:"entries"`
+		EntryCount int                         `json:"entryCount"`
+		Created    int                         `json:"created"`
+	}](t, res)
+	if payload.EntryCount != 2 || len(payload.Entries) != 2 || payload.Created != 2 {
+		t.Fatalf("unexpected extract payload: %#v", payload)
+	}
+
+	res = request(t, handler, http.MethodGet, "/api/v1/projects/customer-portal/configs?env=dev", "alice", nil)
+	if res.Code != http.StatusOK {
+		t.Fatalf("list configs status = %d body=%s", res.Code, res.Body.String())
+	}
+	configs := decodeBody[struct {
+		Entries []model.ConfigEntry `json:"entries"`
+	}](t, res)
+	for _, entry := range configs.Entries {
+		if entry.Key == "feature.preview" || entry.Key == "limit" {
+			t.Fatalf("extract persisted config unexpectedly: %#v", entry)
+		}
+	}
+}
+
 func TestReviewRequestLifecycle(t *testing.T) {
 	handler := newTestHandler()
 	res := request(t, handler, http.MethodPost, "/api/v1/review-requests", "nora", map[string]any{"projectId": "customer-portal", "environment": "prod", "configKey": "database.url", "reason": "Rotate database credential"})

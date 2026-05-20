@@ -122,8 +122,8 @@
               <p class="eyebrow">Templates</p>
               <h1>Template Library</h1>
             </div>
-            <button class="primary-action" type="button" data-jump="config">
-              Apply Template
+            <button class="primary-action" type="button" data-jump="projects">
+              Open Projects
             </button>
           </div>
           <div id="templatesGrid" class="templates-grid"></div>
@@ -134,16 +134,20 @@
             <div>
               <p class="eyebrow">Config Editor</p>
               <h1 id="configTitle">Project Config</h1>
+              <p id="configVersionLabel" class="project-meta config-version-label"></p>
             </div>
             <div class="page-actions">
-              <button id="openConfigHistory" class="secondary-action" type="button">
-                History
+              <button id="openImportConfig" class="secondary-action" type="button">
+                Import Config
               </button>
               <button id="exportConfig" class="secondary-action" type="button">
                 Export Config
               </button>
               <button id="submitReview" class="primary-action" type="button">
                 Submit Review
+              </button>
+              <button id="openConfigHistory" class="icon-button history-button" type="button" aria-label="Open config history" title="Config history">
+                <span class="history-icon" aria-hidden="true"></span>
               </button>
             </div>
           </div>
@@ -162,17 +166,6 @@
                   <input id="configSearch" type="search" placeholder="Key or value" />
                 </label>
               </div>
-              <div class="import-toolbar">
-                <input id="configFile" type="file" accept=".json,.yaml,.yml,.properties" />
-                <select id="configFormat">
-                  <option value="yaml">yaml</option>
-                  <option value="json">json</option>
-                  <option value="properties">properties</option>
-                </select>
-                <button id="importConfig" class="secondary-action" type="button">
-                  Import Config
-                </button>
-              </div>
               <div class="table-wrap">
                 <table>
                   <thead>
@@ -190,34 +183,12 @@
           </section>
         </section>
 
-        <section id="diffView" class="view" data-view="diff">
-          <div class="page-header">
-            <div>
-              <p class="eyebrow">Diff & Validation</p>
-              <h1>Staging to Production</h1>
-            </div>
-            <button id="exportReport" class="primary-action" type="button">
-              Export Report
-            </button>
-          </div>
-          <section class="panel">
-            <div class="editor-toolbar">
-              <div id="diffFilters" class="segmented-control"></div>
-              <span id="validationBadge" class="status-pill success">Valid</span>
-            </div>
-            <div id="diffList" class="diff-list"></div>
-          </section>
-        </section>
-
         <section id="requestsView" class="view" data-view="requests">
           <div class="page-header">
             <div>
               <p class="eyebrow">Change Requests</p>
               <h1>Production Review Queue</h1>
             </div>
-            <button class="primary-action" type="button" data-jump="diff">
-              Review Diff
-            </button>
           </div>
           <section class="panel">
             <div id="requestList" class="request-list"></div>
@@ -274,6 +245,35 @@
       </form>
     </div>
 
+
+    <div id="importModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="importModalTitle">
+      <section class="modal-panel import-panel">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Import Config</p>
+            <h2 id="importModalTitle">Choose Config File</h2>
+          </div>
+          <button class="icon-button" type="button" aria-label="Close import config" data-close-modal="import">
+            <span aria-hidden="true">X</span>
+          </button>
+        </div>
+        <div class="import-toolbar import-modal-toolbar">
+          <input id="configFile" type="file" accept=".json,.yaml,.yml,.properties" />
+          <select id="configFormat">
+            <option value="yaml">yaml</option>
+            <option value="json">json</option>
+            <option value="properties">properties</option>
+          </select>
+          <button id="importConfig" class="primary-action" type="button">
+            Extract Config
+          </button>
+        </div>
+        <div class="modal-actions">
+          <button class="secondary-action" type="button" data-close-modal="import">Cancel</button>
+        </div>
+      </section>
+    </div>
+
     <div id="historyModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="historyTitle">
       <section class="modal-panel history-panel">
         <div class="modal-header">
@@ -291,6 +291,27 @@
         <div class="modal-actions">
           <button id="rollbackLatest" class="primary-action" type="button">Rollback Previous Config</button>
           <button class="secondary-action" type="button" data-close-modal="history">Close</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="importPreviewModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="importPreviewTitle">
+      <section class="modal-panel history-panel">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Import Preview</p>
+            <h2 id="importPreviewTitle">Extracted Config</h2>
+            <p id="importPreviewMeta" class="project-meta"></p>
+          </div>
+          <button class="icon-button" type="button" aria-label="Close import preview" data-close-modal="import-preview">
+            <span aria-hidden="true">X</span>
+          </button>
+        </div>
+        <div id="importPreviewSummary" class="history-summary import-preview-summary"></div>
+        <div id="importPreviewList" class="version-list import-preview-list"></div>
+        <div class="modal-actions">
+          <button id="applyImportConfig" class="primary-action" type="button">Apply Import</button>
+          <button class="secondary-action" type="button" data-close-modal="import-preview">Cancel</button>
         </div>
       </section>
     </div>

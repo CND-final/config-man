@@ -36,6 +36,12 @@ func (s *Server) getConfigRoutes() Routes {
 			APIFunc: s.handleCreateConfig,
 		},
 		{
+			Name:    "ExtractConfigs",
+			Method:  http.MethodPost,
+			Pattern: "/projects/:projectId/configs/extract",
+			APIFunc: s.handleExtractConfigs,
+		},
+		{
 			Name:    "ImportConfigs",
 			Method:  http.MethodPost,
 			Pattern: "/projects/:projectId/configs/import",
@@ -124,6 +130,23 @@ func (s *Server) handleCreateConfig(c *gin.Context) {
 		return
 	}
 	response.WriteJSON(c, http.StatusCreated, entry)
+}
+
+func (s *Server) handleExtractConfigs(c *gin.Context) {
+	reqCtx := requestContextFromGin(c)
+
+	var req model.ImportConfigRequest
+	if err := response.DecodeJSON(c, &req); err != nil {
+		response.WriteError(c, err)
+		return
+	}
+
+	payload, appErr := s.processor.ExtractConfigs(reqCtx, c.Param("projectId"), req)
+	if appErr != nil {
+		response.WriteError(c, appErr)
+		return
+	}
+	response.WriteJSON(c, http.StatusOK, payload)
 }
 
 func (s *Server) handleImportConfigs(c *gin.Context) {

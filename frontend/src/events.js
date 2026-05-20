@@ -3,20 +3,22 @@ import {
   createReviewRequest,
   editConfig,
   exportCurrentConfig,
-  exportDiffReport,
   handleReviewDecision,
-  importConfigFile,
+  extractConfigFile,
+  applyImportPreview,
   openVersionHistory,
   rollbackLatestVersion,
   setHistoryModal,
+  setImportModal,
+  setImportPreviewModal,
   setProjectModal,
   switchView,
   toggleSensitiveReveal
 } from './actions.js';
 import { api } from './api.js';
-import { loadConfigs, loadInitialData } from './data.js';
+import { loadConfigsAndHistory, loadInitialData } from './data.js';
 import { $, setAuthenticated, showToast } from './dom.js';
-import { renderAll, renderConfigRows, renderDiff } from './render.js';
+import { renderAll, renderConfigRows } from './render.js';
 import { activeProject, API_BASE, state } from './state.js';
 
 export function bindEvents() {
@@ -39,7 +41,7 @@ export function bindEvents() {
   });
 
   $('#importConfig').addEventListener('click', () => {
-    importConfigFile().catch((error) => showToast(error.message));
+    extractConfigFile().catch((error) => showToast(error.message));
   });
 
   $('#submitReview').addEventListener('click', () => {
@@ -48,10 +50,6 @@ export function bindEvents() {
 
   $('#exportConfig').addEventListener('click', () => {
     exportCurrentConfig();
-  });
-
-  $('#exportReport').addEventListener('click', () => {
-    exportDiffReport();
   });
 
   $('#projectForm').addEventListener('submit', (event) => {
@@ -92,13 +90,33 @@ async function handleDocumentClick(event) {
       return;
     }
 
+    if (target.dataset.closeModal === 'import') {
+      setImportModal(false);
+      return;
+    }
+
+    if (target.dataset.closeModal === 'import-preview') {
+      setImportPreviewModal(false);
+      return;
+    }
+
     if (target.id === 'registerProject') {
       setProjectModal(true);
       return;
     }
 
+    if (target.id === 'openImportConfig') {
+      setImportModal(true);
+      return;
+    }
+
     if (target.id === 'rollbackLatest') {
       await rollbackLatestVersion();
+      return;
+    }
+
+    if (target.id === 'applyImportConfig') {
+      await applyImportPreview();
       return;
     }
 
@@ -124,21 +142,15 @@ async function handleDocumentClick(event) {
       state.activeEnvironment = project.environments.includes('prod')
         ? 'prod'
         : project.environments[0];
-      await loadConfigs();
+      await loadConfigsAndHistory();
       switchView('config');
       renderAll();
       return;
     }
 
-    if (target.dataset.openDiff) {
-      state.activeProjectId = target.dataset.openDiff;
-      switchView('diff');
-      return;
-    }
-
     if (target.dataset.env) {
       state.activeEnvironment = target.dataset.env;
-      await loadConfigs();
+      await loadConfigsAndHistory();
       renderAll();
       return;
     }
@@ -155,12 +167,6 @@ async function handleDocumentClick(event) {
 
     if (target.dataset.editConfig) {
       await editConfig(target.dataset.editConfig);
-      return;
-    }
-
-    if (target.dataset.diffFilter) {
-      state.diffFilter = target.dataset.diffFilter;
-      renderDiff();
       return;
     }
 

@@ -69,7 +69,6 @@ export function renderDashboard() {
               <span>${escapeHtml(project.lastChanged)}</span>
             </p>
           </div>
-          <span class="status-pill ${statusClass(project.health)}">${project.health}</span>
         </article>
       `
     )
@@ -101,13 +100,12 @@ export function renderProjects() {
     state.projects
       .map(
         (project) => `
-          <article class="project-card">
+          <button class="project-card project-card-button" type="button" data-open-config="${project.id}">
             <div class="card-top">
               <div class="card-title">
                 <h3>${escapeHtml(project.name)}</h3>
                 <p>${escapeHtml(project.repoUrl || 'No repository URL')}</p>
               </div>
-              <span class="status-pill ${statusClass(project.health)}">${project.health}</span>
             </div>
             <p class="project-meta">
               <span>${escapeHtml(project.owner)}</span>
@@ -117,11 +115,7 @@ export function renderProjects() {
             <div class="environment-strip">
               ${project.environments.map((environment) => `<span>${environment}</span>`).join('')}
             </div>
-            <div class="card-actions">
-              <button class="secondary-action" type="button" data-open-config="${project.id}">Open Config</button>
-              <button class="ghost-action" type="button" data-open-diff="${project.id}">Compare</button>
-            </div>
-          </article>
+          </button>
         `
       )
       .join('') || '<p>No projects yet. Create one from the backend API.</p>';
@@ -200,6 +194,7 @@ export function renderEnvironmentTabs() {
 export function renderConfigRows() {
   const project = activeProject();
   $('#configTitle').textContent = project?.name || 'Project Config';
+  renderConfigVersionLabel();
   renderConfigProjectList();
   renderEnvironmentTabs();
 
@@ -242,50 +237,6 @@ export function renderConfigRows() {
     `<tr><td colspan="4" class="value-cell">No config keys match this view.</td></tr>`;
 }
 
-export function renderDiffFilters() {
-  const filters = ['all', 'modified', 'added', 'removed', 'protected'];
-  $('#diffFilters').innerHTML = filters
-    .map(
-      (filter) => `
-        <button class="${filter === state.diffFilter ? 'active' : ''}" type="button" data-diff-filter="${filter}">
-          ${filter}
-        </button>
-      `
-    )
-    .join('');
-}
-
-export function renderDiff() {
-  renderDiffFilters();
-  const items =
-    state.diffFilter === 'all'
-      ? state.diffItems
-      : state.diffItems.filter((item) => item.status === state.diffFilter);
-
-  $('#validationBadge').textContent = state.diffItems.length ? 'Review' : 'Valid';
-  $('#validationBadge').className = `status-pill ${state.diffItems.length ? 'warning' : 'success'}`;
-  $('#diffList').innerHTML =
-    items
-      .map(
-        (item) => `
-          <article class="diff-item">
-            <div class="diff-label">
-              <span class="status-pill ${statusClass(item.status)}">${item.status}</span>
-              <h3>${escapeHtml(item.key)}</h3>
-            </div>
-            <div class="diff-value">
-              <strong>staging</strong>
-              <code>${escapeHtml(item.source)}</code>
-            </div>
-            <div class="diff-value">
-              <strong>prod</strong>
-              <code>${escapeHtml(item.target)}</code>
-            </div>
-          </article>
-        `
-      )
-      .join('') || '<p class="project-meta">No environment differences.</p>';
-}
 
 export function renderRequests() {
   $('#notificationCount').textContent = String(
@@ -356,34 +307,88 @@ export function renderVersionHistory() {
 
   $('#versionList').innerHTML = state.configHistory
     .map(
-      (snapshot, index) => `
-        <article class="version-item">
-          <div class="version-head">
-            <strong>${index === 0 ? 'Current config' : 'Config snapshot'}</strong>
-            <span>${escapeHtml(formatDateTime(snapshot.createdAt))}</span>
-          </div>
-          <p class="project-meta">
-            <span>${escapeHtml(snapshot.changedBy)}</span>
-            <span>${escapeHtml(snapshot.changeReason)}</span>
-            <span>${snapshot.entries.length} keys</span>
-          </p>
-          <div class="snapshot-entry-list">
-            ${renderSnapshotEntries(snapshot)}
-          </div>
-        </article>
-      `
+      (snapshot, index) => {
+        const version = snapshot.id ? snapshot.id.slice(0, 12) : 'current';
+        return `
+          <article class="version-item version-record">
+            <div class="version-record-line">
+              <strong>${escapeHtml(snapshot.changedBy)}</strong>
+              <span>${index === 0 ? 'current version' : 'version'}</span>
+              <code>${escapeHtml(version)}</code>
+              <span>${escapeHtml(formatDateTime(snapshot.createdAt))}</span>
+            </div>
+            <div class="version-record-meta">
+              <span>${snapshot.entries.length} keys</span>
+              <span>${escapeHtml(snapshot.changeReason)}</span>
+            </div>
+          </article>
+        `;
+      }
     )
     .join('');
 }
 
-function renderSnapshotEntries(snapshot) {
-  return snapshot.entries
+function renderConfigVersionLabel() {
+  const label = $('#configVersionLabel');
+  if (!label) return;
+
+  const project = activeProject();
+  if (!project) {
+    label.textContent = 'No project selected';
+    return;
+  }
+
+  const current = state.configHistory[0];
+  if (!current) {
+    label.textContent = `${state.activeEnvironment} · No saved version yet`;
+    return;
+  }
+
+  const version = current.id ? current.id.slice(0, 12) : 'current';
+  label.textContent = `${state.activeEnvironment} · Version ${version} · ${formatDateTime(current.createdAt)} · ${current.entries.length} keys`;
+}
+
+export function renderImportPreview() {
+  $('#importPreviewModal').classList.toggle('hidden', !state.importPreviewOpen);
+  if (!state.importPreviewOpen) return;
+
+  const preview = state.importPreview;
+  $('#applyImportConfig').disabled = state.importApplying || !preview;
+  if (!preview) {
+    $('#importPreviewTitle').textContent = 'Extracted Config';
+    $('#importPreviewMeta').textContent = '';
+    $('#importPreviewSummary').innerHTML = '<p class="project-meta">No extracted config yet.</p>';
+    $('#importPreviewList').innerHTML = '';
+    return;
+  }
+
+  $('#importPreviewTitle').textContent = `Extracted ${preview.fileName}`;
+  $('#importPreviewMeta').innerHTML = `
+    <span>${escapeHtml(preview.environment)}</span>
+    <span>${escapeHtml(preview.format)}</span>
+    <span>${preview.entryCount} keys</span>
+  `;
+  $('#importPreviewSummary').innerHTML = `
+    <div class="history-previous current">
+      <span>Created</span>
+      <code>${preview.created}</code>
+    </div>
+    <div class="history-previous">
+      <span>Updated</span>
+      <code>${preview.updated}</code>
+    </div>
+    <div class="history-previous">
+      <span>Unchanged</span>
+      <code>${preview.unchanged}</code>
+    </div>
+  `;
+  $('#importPreviewList').innerHTML = preview.entries
     .map(
       (entry) => `
-        <div class="snapshot-entry">
+        <article class="snapshot-entry import-preview-entry">
           <span>${escapeHtml(entry.key)}</span>
           <code>${escapeHtml(entry.value)}</code>
-        </div>
+        </article>
       `
     )
     .join('');
@@ -397,7 +402,7 @@ export function renderAll() {
   renderProjects();
   renderTemplates();
   renderConfigRows();
-  renderDiff();
   renderRequests();
   renderVersionHistory();
+  renderImportPreview();
 }

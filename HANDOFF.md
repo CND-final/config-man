@@ -111,6 +111,7 @@ Implemented phase 1 APIs:
 - `GET /api/v1/projects/:projectId/config-history?env=dev`
 - `POST /api/v1/projects/:projectId/config-history/rollback`
 - `POST /api/v1/projects/:projectId/configs`
+- `POST /api/v1/projects/:projectId/configs/extract`
 - `POST /api/v1/projects/:projectId/configs/import`
 - `PUT /api/v1/projects/:projectId/configs/:configId`
 - `GET /api/v1/projects/:projectId/configs/:configId/versions` (legacy per-entry history; UI now uses config snapshots)
@@ -182,11 +183,14 @@ This keeps processor from depending directly on HTTP status codes.
 
 ### Config Import
 
-Config import endpoint:
+Config import has a parse-only preview endpoint and a write endpoint:
 
 ```text
+POST /api/v1/projects/:projectId/configs/extract
 POST /api/v1/projects/:projectId/configs/import
 ```
+
+The frontend uses `extract` first, shows created/updated/unchanged counts plus parsed key/value rows, and only calls `import` after the user confirms Apply Import.
 
 Supported formats:
 
@@ -320,14 +324,13 @@ The frontend is an Apple-inspired admin UI and includes:
 - Projects
 - Project registration modal backed by `POST /api/v1/projects`
 - Templates
-- Config Editor
-- Environment-level config history modal backed by `GET /config-history?env=...`
+- Config Editor, entered through clickable project cards instead of sidebar navigation
+- Config header shows the current environment snapshot version
+- GitHub-style history icon sits in the Config page top-right action area and opens the environment-level config history modal backed by `GET /config-history?env=...`
 - Rollback previous full-config snapshot backed by `POST /config-history/rollback`
-- Diff & Validation
 - Change Requests
-- Config import from JSON/YAML/properties
+- Config import from JSON/YAML/properties via a top-right Import Config modal, then Extract Config preview, then Apply Import
 - Config export to the project default format (`json`, `yaml`, or `properties`)
-- Diff report export as JSON
 - Sensitive value handling in the UI
 - Warning/confirmation behavior for sensitive Prod database password changes
 
@@ -344,7 +347,7 @@ The frontend was refactored from one large `app.js` into small ES modules under 
 
 The app still intentionally uses vanilla JavaScript and Vite. Do not add a frontend framework unless the user asks for that direction.
 
-Config table columns are intentionally minimal: Key, Value, Updated, Action. The frontend no longer shows `valueType` or synthetic config status in this table.
+Config table columns are intentionally minimal: Key, Value, Updated, Action. The frontend no longer shows `valueType`, synthetic config status, project health badges, or staging/prod diff UI. The sidebar intentionally omits Config; users enter the editor by clicking a project card, which has a small hover scale effect without adding a hover/click shadow. File selection for imports is hidden behind the Config page Import Config action, not shown directly above the config table. History rows are intentionally compact and GitHub-like: changed-by name, version, and time stay on one line.
 
 ### Frontend Build
 
@@ -378,9 +381,10 @@ Recommended next steps:
 3. Add request access logging middleware only if requested; current goal was processor-level trace logs.
 4. Improve DB migrations/schema management if the project moves past phase 1 demo.
 5. Replace demo auth with JWT + RBAC when core workflows stabilize.
-6. Add more API tests around config import formats and review request requirements.
+6. Add more API tests around config import formats and review request requirements. The extract preview endpoint currently has basic non-persistence coverage.
 7. Ensure frontend warnings for sensitive Prod DB password updates align exactly with backend permissions/review request flow.
 8. Consider adding targeted frontend tests if the vanilla JS UI keeps gaining workflow logic.
+9. Reintroduce environment compare/diff only if it becomes a concrete review workflow; it was removed from the MVP UI to keep the product focused.
 
 ## Useful Commands
 

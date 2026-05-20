@@ -2,16 +2,15 @@ import { api } from './api.js';
 import { $, $all, showToast } from './dom.js';
 import {
   loadConfigHistory,
-  loadConfigs,
-  loadDiff,
+  loadConfigsAndHistory,
   reloadProjects
 } from './data.js';
 import {
   renderAll,
   renderConfigRows,
   renderDashboard,
-  renderDiff,
   renderNav,
+  renderImportPreview,
   renderRequests,
   renderVersionHistory
 } from './render.js';
@@ -27,11 +26,6 @@ export function switchView(viewId) {
     view.classList.toggle('active', view.dataset.view === viewId);
   });
   renderNav();
-  if (viewId === 'diff') {
-    loadDiff()
-      .then(renderDiff)
-      .catch((error) => showToast(error.message));
-  }
 }
 
 export function setProjectModal(open) {
@@ -48,14 +42,30 @@ export function setProjectModal(open) {
 export function setHistoryModal(open) {
   state.historyModalOpen = open;
   if (!open) {
-    state.configHistory = [];
     state.historyLoading = false;
   }
   renderVersionHistory();
 }
 
+export function setImportModal(open) {
+  state.importModalOpen = open;
+  $('#importModal').classList.toggle('hidden', !open);
+  if (open) {
+    window.setTimeout(() => $('#configFile').focus(), 0);
+  } else {
+    $('#configFile').value = '';
+  }
+}
+
+export function setImportPreviewModal(open) {
+  state.importPreviewOpen = open;
+  if (!open && !state.importApplying) {
+    state.importPreview = null;
+  }
+  renderImportPreview();
+}
+
 export async function openVersionHistory() {
-  state.configHistory = [];
   state.historyLoading = true;
   state.historyModalOpen = true;
   renderVersionHistory();
@@ -66,7 +76,6 @@ export async function openVersionHistory() {
     renderVersionHistory();
   }
 }
-
 
 export async function createProject(event) {
   event.preventDefault();
@@ -90,8 +99,7 @@ export async function createProject(event) {
       ? 'prod'
       : project.environments[0];
   }
-  await loadConfigs();
-  await loadDiff();
+  await loadConfigsAndHistory();
   setProjectModal(false);
   switchView('projects');
   renderAll();
@@ -120,13 +128,10 @@ export async function rollbackLatestVersion() {
     })
   });
 
-  await loadConfigs();
-  await loadDiff();
-  await loadConfigHistory();
+  await loadConfigsAndHistory();
   renderAll();
   showToast(`${project.name} ${state.activeEnvironment} config rolled back`);
 }
-
 
 export async function editConfig(configId) {
   const config = state.configs.find((entry) => entry.id === configId);
@@ -157,8 +162,7 @@ export async function editConfig(configId) {
     })
   });
 
-  await loadConfigs();
-  await loadDiff();
+  await loadConfigsAndHistory();
   renderAll();
   showToast(`${config.key} updated`);
 }
@@ -172,7 +176,7 @@ export async function hasReviewRequest(config) {
   return requests.length > 0;
 }
 
-export async function importConfigFile() {
+export async function extractConfigFile() {
   const file = $('#configFile').files[0];
   const project = activeProject();
   if (!file || !project) {
@@ -182,23 +186,61 @@ export async function importConfigFile() {
 
   const format = $('#configFormat').value;
   const content = await file.text();
-  const result = await api(`/projects/${project.id}/configs/import`, {
+  const result = await api(`/projects/${project.id}/configs/extract`, {
     method: 'POST',
     body: JSON.stringify({
       environment: state.activeEnvironment,
       format,
-      content,
-      changeReason: `import ${file.name}`
+      content
     })
   });
 
-  await loadConfigs();
-  await loadDiff();
-  renderAll();
-  showToast(
-    `Imported ${result.imported}: ${result.created} created, ${result.updated} updated`
-  );
+  state.importPreview = {
+    ...result,
+    fileName: file.name,
+    content,
+    format,
+    projectId: project.id,
+    environment: state.activeEnvironment
+  };
+  state.importPreviewOpen = true;
+  setImportModal(false);
+  renderImportPreview();
+  showToast(`Extracted ${result.entryCount} config keys`);
 }
+
+export async function applyImportPreview() {
+  const preview = state.importPreview;
+  if (!preview) {
+    showToast('Extract a config file first');
+    return;
+  }
+
+  state.importApplying = true;
+  renderImportPreview();
+  try {
+    const result = await api(`/projects/${preview.projectId}/configs/import`, {
+      method: 'POST',
+      body: JSON.stringify({
+        environment: preview.environment,
+        format: preview.format,
+        content: preview.content,
+        changeReason: `import ${preview.fileName}`
+      })
+    });
+
+    await loadConfigsAndHistory();
+    state.importPreviewOpen = false;
+    state.importPreview = null;
+    showToast(
+      `Imported ${result.imported}: ${result.created} created, ${result.updated} updated`
+    );
+  } finally {
+    state.importApplying = false;
+    renderAll();
+  }
+}
+
 export function exportCurrentConfig() {
   const project = activeProject();
   if (!project) {
@@ -215,29 +257,6 @@ export function exportCurrentConfig() {
     format === 'json' ? 'application/json' : 'text/plain'
   );
   showToast('Config file exported');
-}
-
-export function exportDiffReport() {
-  const project = activeProject();
-  if (!project) {
-    showToast('Choose a project first');
-    return;
-  }
-
-  const report = {
-    projectId: project.id,
-    projectName: project.name,
-    generatedAt: new Date().toISOString(),
-    source: 'staging',
-    target: 'prod',
-    differences: state.diffItems
-  };
-  downloadFile(
-    `${project.name}-staging-prod-diff.json`,
-    `${JSON.stringify(report, null, 2)}\n`,
-    'application/json'
-  );
-  showToast('Diff report exported');
 }
 
 function serializeConfigs(configs, format) {
@@ -266,7 +285,6 @@ function downloadFile(filename, content, type) {
   link.remove();
   URL.revokeObjectURL(url);
 }
-
 
 export async function createReviewRequest() {
   const project = activeProject();
@@ -309,10 +327,10 @@ export async function handleReviewDecision(id, action) {
 export async function toggleSensitiveReveal(revealKey) {
   if (state.revealedKeys.has(revealKey)) {
     state.revealedKeys.delete(revealKey);
-    await loadConfigs();
+    await loadConfigsAndHistory();
   } else {
     state.revealedKeys.add(revealKey);
-    await loadConfigs(true);
+    await loadConfigsAndHistory(true);
   }
   renderConfigRows();
 }

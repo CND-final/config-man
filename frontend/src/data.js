@@ -28,8 +28,7 @@ export async function loadInitialData() {
     state.activeEnvironment = project.environments[0];
   }
 
-  await loadConfigs();
-  await loadDiff();
+  await loadConfigsAndHistory();
 }
 
 export async function reloadProjects() {
@@ -41,6 +40,7 @@ export async function loadConfigs(revealSensitive = false) {
   const project = activeProject();
   if (!project) {
     state.configs = [];
+    state.configHistory = [];
     return;
   }
 
@@ -55,40 +55,8 @@ export async function loadConfigs(revealSensitive = false) {
   }));
 }
 
-export async function loadDiff() {
-  const project = activeProject();
-  if (!project || !project.environments.includes('staging') || !project.environments.includes('prod')) {
-    state.diffItems = [];
-    return;
-  }
-
-  const [staging, prod] = await Promise.all([
-    api(`/projects/${project.id}/configs?env=staging`),
-    api(`/projects/${project.id}/configs?env=prod`)
-  ]);
-  const stagingMap = new Map(staging.entries.map((entry) => [entry.key, entry]));
-  const prodMap = new Map(prod.entries.map((entry) => [entry.key, entry]));
-  const keys = [...new Set([...stagingMap.keys(), ...prodMap.keys()])].sort();
-
-  state.diffItems = keys
-    .map((key) => {
-      const source = stagingMap.get(key);
-      const target = prodMap.get(key);
-      const status = !target
-        ? 'added'
-        : !source
-          ? 'removed'
-          : source.value !== target.value
-            ? 'modified'
-            : 'synced';
-      return {
-        key,
-        status: source?.isSensitive || target?.isSensitive ? 'protected' : status,
-        source: source?.value ?? 'missing',
-        target: target?.value ?? 'missing'
-      };
-    })
-    .filter((item) => item.status !== 'synced');
+export async function loadConfigsAndHistory(revealSensitive = false) {
+  await Promise.all([loadConfigs(revealSensitive), loadConfigHistory()]);
 }
 
 export async function loadConfigHistory() {

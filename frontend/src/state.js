@@ -7,15 +7,17 @@ export const state = {
   activeProjectId: '',
   activeEnvironment: 'prod',
   configSearch: '',
-  diffFilter: 'all',
   revealedKeys: new Set(),
   projects: [],
   configs: [],
   requests: [],
   templates: [],
-  diffItems: [],
   configHistory: [],
   historyLoading: false,
+  importModalOpen: false,
+  importPreview: null,
+  importPreviewOpen: false,
+  importApplying: false,
   projectModalOpen: false,
   historyModalOpen: false
 };
@@ -24,8 +26,6 @@ export const navItems = [
   { id: 'dashboard', label: 'Dashboard', code: 'D' },
   { id: 'projects', label: 'Projects', code: 'P' },
   { id: 'templates', label: 'Templates', code: 'T' },
-  { id: 'config', label: 'Config', code: 'C' },
-  { id: 'diff', label: 'Diff', code: 'F' },
   { id: 'requests', label: 'Requests', code: 'R' }
 ];
 
@@ -43,7 +43,6 @@ export function normalizeProject(project) {
     environments: project.environments.map((environment) =>
       typeof environment === 'string' ? environment : environment.name
     ),
-    health: project.configCount > 0 ? 'Healthy' : 'Review',
     lastChanged: 'live API',
     configCount: project.configCount ?? 0
   };

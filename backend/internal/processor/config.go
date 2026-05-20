@@ -465,6 +465,86 @@ func selectRollbackVersion(versions []model.ConfigVersion, versionID string) (mo
 	return model.ConfigVersion{}, false
 }
 
+func (p *Processor) ExtractConfigs(ctx appctx.RequestContext, projectID string, req model.ImportConfigRequest) (map[string]any, *model.ErrorDetail) {
+	environment := strings.TrimSpace(req.Environment)
+	fields := []any{
+		"operation", "config.extract",
+		logger.FieldUserID, ctx.Actor.ID,
+		logger.FieldActor, ctx.ActorName(),
+		logger.FieldRole, string(ctx.Actor.Role),
+		logger.FieldProjectID, projectID,
+		logger.FieldEnvironment, environment,
+		"format", req.Format,
+	}
+	logger.Config.Info("extract configs requested", fields...)
+
+	if environment == "" {
+		logger.Config.Warn("extract configs invalid", append(fields, "reason", "missing_environment")...)
+		return nil, model.InvalidInput("environment is required")
+	}
+	if !util.CanWriteEnvironment(ctx.Actor, environment) {
+		logger.Config.Warn("extract configs denied", append(fields, "reason", "environment_write_not_allowed")...)
+		return nil, model.Forbidden(fmt.Sprintf("Role %q cannot modify %q config", ctx.Actor.Role, environment))
+	}
+	if !util.IsSupportedConfigFormat(req.Format) {
+		logger.Config.Warn("extract configs invalid", append(fields, "reason", "unsupported_format")...)
+		return nil, model.InvalidInput("format must be json, yaml, or properties")
+	}
+	if err := p.requireEnvironment(projectID, environment); err != nil {
+		logger.Config.Warn("extract configs failed", append(fields, "error_kind", err.Kind, "error", err.Detail)...)
+		return nil, err
+	}
+
+	parsed, parseErr := util.ParseConfigFile(req.Format, req.Content)
+	if parseErr != nil {
+		logger.Config.Warn("extract configs parse failed", append(fields, "error", parseErr)...)
+		return nil, model.InvalidInput(parseErr.Error())
+	}
+	if len(parsed) == 0 {
+		logger.Config.Warn("extract configs invalid", append(fields, "reason", "empty_config_file")...)
+		return nil, model.InvalidInput("No config entries found in file content")
+	}
+
+	entries, created, updated, unchanged := p.previewParsedConfigs(projectID, environment, parsed)
+	payload := map[string]any{
+		"projectId":   projectID,
+		"environment": environment,
+		"format":      req.Format,
+		"entries":     entries,
+		"entryCount":  len(entries),
+		"created":     created,
+		"updated":     updated,
+		"unchanged":   unchanged,
+	}
+	logger.Config.Info("configs extracted", append(fields, "entry_count", len(entries), "created", created, "updated", updated, "unchanged", unchanged)...)
+	return payload, nil
+}
+
+func (p *Processor) previewParsedConfigs(projectID, environment string, parsed []util.ParsedConfigEntry) ([]model.ConfigSnapshotEntry, int, int, int) {
+	entries := make([]model.ConfigSnapshotEntry, 0, len(parsed))
+	created, updated, unchanged := 0, 0, 0
+	for _, parsedEntry := range parsed {
+		isSensitive := util.LooksSensitive(parsedEntry.Key)
+		if existing, ok := p.store.FindConfigByKey(projectID, environment, parsedEntry.Key); ok {
+			isSensitive = existing.IsSensitive || isSensitive
+			if existing.Value == parsedEntry.Value && existing.ValueType == parsedEntry.ValueType {
+				unchanged++
+			} else {
+				updated++
+			}
+		} else {
+			created++
+		}
+		entries = append(entries, model.ConfigSnapshotEntry{
+			Key:         parsedEntry.Key,
+			Value:       parsedEntry.Value,
+			ValueType:   parsedEntry.ValueType,
+			IsSensitive: isSensitive,
+		})
+	}
+	return entries, created, updated, unchanged
+}
+
 func (p *Processor) ImportConfigs(ctx appctx.RequestContext, projectID string, req model.ImportConfigRequest) (map[string]any, *model.ErrorDetail) {
 	environment := strings.TrimSpace(req.Environment)
 	fields := []any{

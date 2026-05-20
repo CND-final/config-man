@@ -9,10 +9,10 @@ export function escapeHtml(value) {
 
 export function statusClass(status) {
   const normalized = String(status).toLowerCase();
-  if (['healthy', 'synced', 'approved', 'valid'].includes(normalized)) {
+  if (['approved'].includes(normalized)) {
     return 'success';
   }
-  if (['review', 'changed', 'pending', 'warning', 'modified'].includes(normalized)) {
+  if (['pending', 'warning'].includes(normalized)) {
     return 'warning';
   }
   if (['blocked', 'failed', 'danger', 'rejected'].includes(normalized)) {
@@ -37,15 +37,6 @@ export function formatDateTime(value) {
     dateStyle: 'medium',
     timeStyle: 'short'
   }).format(new Date(value));
-}
-
-export function displayVersionValue(value) {
-  if (value === null || value === undefined) return 'No previous value';
-  return String(value);
-}
-
-export function hasPreviousValue(version) {
-  return version?.oldValue !== null && version?.oldValue !== undefined;
 }
 
 export function parseEnvironmentInput(value) {
