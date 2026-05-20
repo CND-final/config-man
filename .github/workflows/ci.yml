@@ -170,6 +170,10 @@ jobs:
         run: npx --yes prettier --check .
 
       - name: Run frontend tests
+        # Force Node test runners to output clean, raw text without ANSI color codes
+        env:
+          FORCE_COLOR: 0
+          NO_COLOR: true
         run: |
           case "$PKG_MANAGER" in
             pnpm) pnpm test --if-present 2>&1 | tee test-output.txt ;;
@@ -192,8 +196,8 @@ jobs:
             
             echo "#### Test Framework Output" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`text" >> $GITHUB_STEP_SUMMARY
-            # Fix: Added redirection to capture the tail output onto the summary page
-            tail -n 25 test-output.txt >> $GITHUB_STEP_SUMMARY
+            # Target ONLY the vitest dashboard lines, bypassing background logs/stack traces
+            grep -E "Test Files|Tests|Duration|Snapshots|✓|×" test-output.txt >> $GITHUB_STEP_SUMMARY || true
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           else
             echo "ℹ️ No tests were executed (test script not present in package.json or step was skipped)." >> $GITHUB_STEP_SUMMARY
