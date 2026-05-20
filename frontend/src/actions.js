@@ -37,13 +37,72 @@ export function setProjectModal(open) {
   state.projectModalOpen = open;
   $('#projectModal').classList.toggle('hidden', !open);
   if (open) {
+    restoreProjectDraft();
     renderProjectTemplateOptions();
     window.setTimeout(() => $('#projectName').focus(), 0);
   } else {
     $('#projectForm').reset();
     $('#projectEnvironments').value = 'dev, staging, prod';
-    $('#projectTemplate').value = '';
+    state.projectDraft = null;
+    state.projectTemplateSelection = null;
+    renderProjectTemplateOptions();
   }
+}
+
+export function openProjectTemplatePicker() {
+  state.projectDraft = readProjectDraft();
+  state.projectModalOpen = false;
+  $('#projectModal').classList.add('hidden');
+  state.templatePickerActive = true;
+  switchView('templates');
+  renderAll();
+}
+
+export function cancelProjectTemplatePicker() {
+  state.templatePickerActive = false;
+  state.templateModalOpen = false;
+  switchView('projects');
+  setProjectModal(true);
+  renderAll();
+}
+
+export function clearProjectTemplateSelection() {
+  state.projectTemplateSelection = null;
+  state.activeTemplateId = '';
+  state.templateValues = {};
+  renderProjectTemplateOptions();
+}
+
+export function chooseProjectTemplate(templateId) {
+  const template = state.templates.find((item) => item.id === templateId);
+  if (!template?.body) {
+    showToast('This template cannot be applied to a project');
+    return;
+  }
+  state.templateApplyFormat = state.projectDraft?.defaultFormat || template.format || 'yaml';
+  setTemplateModal(true, templateId);
+}
+
+function readProjectDraft() {
+  return {
+    name: $('#projectName').value,
+    ownerName: $('#projectOwner').value,
+    repoUrl: $('#projectRepo').value,
+    defaultFormat: $('#projectFormat').value,
+    environments: $('#projectEnvironments').value,
+    description: $('#projectDescription').value
+  };
+}
+
+function restoreProjectDraft() {
+  const draft = state.projectDraft;
+  if (!draft) return;
+  $('#projectName').value = draft.name || '';
+  $('#projectOwner').value = draft.ownerName || '';
+  $('#projectRepo').value = draft.repoUrl || '';
+  $('#projectFormat').value = draft.defaultFormat || 'yaml';
+  $('#projectEnvironments').value = draft.environments || 'dev, staging, prod';
+  $('#projectDescription').value = draft.description || '';
 }
 
 export function setTemplateCreateModal(open) {
@@ -81,6 +140,7 @@ export function setTemplateModal(open, templateId = '') {
     state.templateValues = Object.fromEntries(
       (template?.variables || []).map((variable) => [variable.name, variable.defaultValue || ''])
     );
+    state.templateApplyFormat = state.templateApplyFormat || template?.format || 'yaml';
   }
   renderTemplateModal();
 }
@@ -110,6 +170,11 @@ export async function createTemplate(event) {
 
 export async function applyTemplate() {
   const template = state.templates.find((item) => item.id === state.activeTemplateId);
+  if (state.templatePickerActive) {
+    selectTemplateForProject(template);
+    return;
+  }
+
   const project = activeProject();
   if (!template || !project) {
     showToast('Choose a template and project first');
@@ -121,20 +186,26 @@ export async function applyTemplate() {
       return;
     }
   }
+  const sourceFormat = template.format || 'yaml';
+  const outputFormat = $('#templateApplyFormat')?.value || state.templateApplyFormat || sourceFormat;
+  state.templateApplyFormat = outputFormat;
   const content = renderTemplateContent(template);
   const result = await api(`/projects/${project.id}/configs/extract`, {
     method: 'POST',
     body: JSON.stringify({
       environment: state.activeEnvironment,
-      format: template.format || 'yaml',
+      format: sourceFormat,
       content
     })
   });
+  const outputContent = outputFormat === sourceFormat
+    ? content
+    : serializeConfigs(result.entries || [], outputFormat);
   state.importPreview = {
     ...result,
     fileName: template.name,
-    content,
-    format: template.format || 'yaml',
+    content: outputContent,
+    format: outputFormat,
     projectId: project.id,
     environment: state.activeEnvironment
   };
@@ -142,6 +213,36 @@ export async function applyTemplate() {
   state.importPreviewOpen = true;
   renderAll();
   showToast(`Extracted ${result.entryCount} config keys`);
+}
+
+function selectTemplateForProject(template) {
+  if (!template) {
+    showToast('Choose a template first');
+    return;
+  }
+  for (const variable of template.variables || []) {
+    if (variable.required && String(state.templateValues[variable.name] || '').trim() === '') {
+      showToast(`${variable.name} is required`);
+      return;
+    }
+  }
+
+  const outputFormat = $('#templateApplyFormat')?.value || state.templateApplyFormat || template.format || 'yaml';
+  state.templateApplyFormat = outputFormat;
+  state.projectTemplateSelection = {
+    templateId: template.id,
+    templateName: template.name,
+    sourceFormat: template.format || 'yaml',
+    outputFormat,
+    content: renderTemplateContent(template),
+    values: { ...state.templateValues }
+  };
+  state.templatePickerActive = false;
+  state.templateModalOpen = false;
+  switchView('projects');
+  setProjectModal(true);
+  renderAll();
+  showToast(`${template.name} selected`);
 }
 
 function renderTemplateContent(template) {
@@ -192,14 +293,17 @@ export async function openVersionHistory() {
 
 export async function createProject(event) {
   event.preventDefault();
+  const templateSelection = state.projectTemplateSelection;
+  const templateId = templateSelection?.templateId || '';
+  const defaultFormat = $('#projectFormat').value;
   const created = await api('/projects', {
     method: 'POST',
     body: JSON.stringify({
       name: $('#projectName').value,
       ownerName: $('#projectOwner').value,
       repoUrl: $('#projectRepo').value,
-      defaultFormat: $('#projectFormat').value,
-      templateId: $('#projectTemplate').value,
+      defaultFormat,
+      templateId,
       environments: parseEnvironmentInput($('#projectEnvironments').value),
       description: $('#projectDescription').value
     })
@@ -215,6 +319,32 @@ export async function createProject(event) {
   }
   await loadConfigsAndHistory();
   setProjectModal(false);
+  if (templateSelection) {
+    const result = await api(`/projects/${created.id}/configs/extract`, {
+      method: 'POST',
+      body: JSON.stringify({
+        environment: state.activeEnvironment,
+        format: templateSelection.sourceFormat,
+        content: templateSelection.content
+      })
+    });
+    const outputContent = templateSelection.outputFormat === templateSelection.sourceFormat
+      ? templateSelection.content
+      : serializeConfigs(result.entries || [], templateSelection.outputFormat);
+    state.importPreview = {
+      ...result,
+      fileName: templateSelection.templateName,
+      content: outputContent,
+      format: templateSelection.outputFormat,
+      projectId: created.id,
+      environment: state.activeEnvironment
+    };
+    state.importPreviewOpen = true;
+    switchView('config');
+    renderAll();
+    showToast(`${created.name} created. Review extracted template config.`);
+    return;
+  }
   switchView('projects');
   renderAll();
   showToast(`${created.name} created`);

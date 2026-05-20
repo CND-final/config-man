@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"config-man/backend/internal/processor"
@@ -91,25 +92,29 @@ func TestCreateProjectCreatesDefaultEnvironments(t *testing.T) {
 	}
 }
 
-func TestListTemplatesIncludesSpringBootVariables(t *testing.T) {
+func TestListTemplatesIncludesBaseInfrastructureTemplates(t *testing.T) {
 	handler := newTestHandler()
 	res := request(t, handler, http.MethodGet, "/api/v1/templates", "alice", nil)
 	if res.Code != http.StatusOK {
 		t.Fatalf("list templates status = %d body=%s", res.Code, res.Body.String())
 	}
 	templates := decodeBody[[]model.Template](t, res)
-	for _, template := range templates {
-		if template.ID == "spring-boot-base-template" {
-			if template.Format != "yaml" || len(template.Variables) == 0 {
-				t.Fatalf("unexpected spring template: %#v", template)
-			}
-			if !templateHasVariable(template, "DB_SECRET") {
-				t.Fatalf("DB_SECRET variable missing: %#v", template.Variables)
-			}
-			return
-		}
+
+	spring, ok := findTemplateByID(templates, "spring-boot-base-template")
+	if !ok || spring.Format != "yaml" || !templateHasVariable(spring, "DB_SECRET") {
+		t.Fatalf("spring boot template invalid or missing: %#v", templates)
 	}
-	t.Fatalf("spring boot template missing: %#v", templates)
+
+	logging, ok := findTemplateByID(templates, "global-logging-template")
+	if !ok || logging.Format != "yaml" || !templateHasVariable(logging, "LOG_LEVEL_ROOT") || !templateHasVariable(logging, "APP_NAME") {
+		t.Fatalf("global logging template invalid or missing: %#v", templates)
+	}
+	if templateListHasID(templates, "group-base-template") {
+		t.Fatalf("old group base template should not be exposed: %#v", templates)
+	}
+	if !strings.Contains(logging.Body, "max-size: 10MB") || strings.Contains(logging.Body, "#") {
+		t.Fatalf("global logging template body was not updated or still has comments: %q", logging.Body)
+	}
 }
 
 func TestCreateTemplateIsPrivateToActor(t *testing.T) {
@@ -167,6 +172,15 @@ func TestCreateTemplateIsPrivateToActor(t *testing.T) {
 	if res.Code != http.StatusNotFound {
 		t.Fatalf("create project with another user template status = %d body=%s", res.Code, res.Body.String())
 	}
+}
+
+func findTemplateByID(templates []model.Template, id string) (model.Template, bool) {
+	for _, template := range templates {
+		if template.ID == id {
+			return template, true
+		}
+	}
+	return model.Template{}, false
 }
 
 func templateHasVariable(template model.Template, name string) bool {
@@ -409,20 +423,5 @@ func TestReviewRequestLifecycle(t *testing.T) {
 	approved := decodeBody[model.ReviewRequest](t, res)
 	if approved.Status != "approved" || approved.Reviewer != "Rachel Kao" {
 		t.Fatalf("unexpected approved request: %#v", approved)
-	}
-}
-
-func TestValidationDetectsMissingRequiredKeys(t *testing.T) {
-	handler := newTestHandler()
-	res := request(t, handler, http.MethodPost, "/api/v1/projects/customer-portal/validate", "alice", map[string]any{"environment": "prod"})
-	if res.Code != http.StatusOK {
-		t.Fatalf("validate status = %d body=%s", res.Code, res.Body.String())
-	}
-	result := decodeBody[model.ValidationResult](t, res)
-	if result.Valid {
-		t.Fatalf("expected prod validation to fail because app.timezone and log.level are missing")
-	}
-	if len(result.Errors) == 0 {
-		t.Fatalf("expected validation errors")
 	}
 }

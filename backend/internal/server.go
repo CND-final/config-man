@@ -60,7 +60,6 @@ func newRouter(s *Server) *gin.Engine {
 	applyRoutes(protectedGroup, s.getTemplateRoutes())
 	applyRoutes(protectedGroup, s.getProjectRoutes())
 	applyRoutes(protectedGroup, s.getConfigRoutes())
-	applyRoutes(protectedGroup, s.getValidationRoutes())
 	applyRoutes(protectedGroup, s.getReviewRoutes())
 
 	return router

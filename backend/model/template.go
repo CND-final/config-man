@@ -37,49 +37,42 @@ type Template struct {
 }
 
 func BaseTemplate() Template {
+	return GlobalLoggingTemplate()
+}
+
+func GlobalLoggingTemplate() Template {
+	body := `logging:
+  level:
+    root: ${LOG_LEVEL_ROOT}
+    com.company.core: ${LOG_LEVEL_COMPANY}
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - [TraceID: %X{traceId}] - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - [TraceID: %X{traceId}] - %msg%n"
+  file:
+    name: /var/log/apps/${APP_NAME}/application.log
+    max-history: 30
+    max-size: 10MB
+`
+	variables := ExtractTemplateVariables(body)
+	for index := range variables {
+		switch variables[index].Name {
+		case "LOG_LEVEL_ROOT":
+			variables[index].DefaultValue = "INFO"
+			variables[index].Description = "Root log level; use DEBUG for dev and INFO for prod"
+		case "LOG_LEVEL_COMPANY":
+			variables[index].DefaultValue = "INFO"
+			variables[index].Description = "Company core package log level"
+		case "APP_NAME":
+			variables[index].Description = "Application name used in the log file path"
+		}
+	}
 	return Template{
-		ID:          "group-base-template",
-		Name:        "Group Base Template",
-		Description: "Required baseline keys used by validation.",
-		Format:      "base",
-		Entries: []TemplateEntry{
-			{
-				Key:          "app.timezone",
-				DefaultValue: "Asia/Taipei",
-				ValueType:    "string",
-				Required:     true,
-				Description:  "Default application timezone",
-			},
-			{
-				Key:          "log.level",
-				DefaultValue: "info",
-				ValueType:    "string",
-				Required:     true,
-				Description:  "Application logging level",
-			},
-			{
-				Key:          "api.baseUrl",
-				DefaultValue: "https://api.example.com",
-				ValueType:    "string",
-				Required:     true,
-				Description:  "Backend API base URL",
-			},
-			{
-				Key:          "feature.newCheckoutEnabled",
-				DefaultValue: "false",
-				ValueType:    "boolean",
-				Required:     false,
-				Description:  "Feature flag for staged rollout",
-			},
-			{
-				Key:          "database.url",
-				DefaultValue: "",
-				ValueType:    "string",
-				Required:     true,
-				IsSensitive:  true,
-				Description:  "Database connection string",
-			},
-		},
+		ID:          "global-logging-template",
+		Name:        "Global Logging Template",
+		Description: "Enterprise logging baseline with standard console/file patterns and rolling file settings.",
+		Format:      "yaml",
+		Body:        body,
+		Variables:   variables,
 	}
 }
 

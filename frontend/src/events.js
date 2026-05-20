@@ -9,7 +9,11 @@ import {
   extractConfigFile,
   applyImportPreview,
   applyTemplate,
+  cancelProjectTemplatePicker,
+  chooseProjectTemplate,
+  clearProjectTemplateSelection,
   openExportConfig,
+  openProjectTemplatePicker,
   openVersionHistory,
   rollbackLatestVersion,
   setExportModal,
@@ -54,6 +58,13 @@ export function bindEvents() {
     const target = event.target.closest('[data-template-variable]');
     if (!target) return;
     updateTemplateValue(target.dataset.templateVariable, target.value);
+  });
+
+
+  document.addEventListener('change', (event) => {
+    const target = event.target.closest('#templateApplyFormat');
+    if (!target) return;
+    state.templateApplyFormat = target.value;
   });
 
   $('#configFile').addEventListener('change', (event) => {
@@ -152,18 +163,38 @@ async function handleDocumentClick(event) {
       return;
     }
 
+    if (target.id === 'backToProjects') {
+      switchView('projects');
+      renderAll();
+      return;
+    }
+
+    if (target.id === 'chooseProjectTemplate') {
+      openProjectTemplatePicker();
+      return;
+    }
+
+    if (target.id === 'clearProjectTemplate') {
+      clearProjectTemplateSelection();
+      return;
+    }
+
     if (target.id === 'openTemplateCreate') {
+      if (state.templatePickerActive) {
+        cancelProjectTemplatePicker();
+        return;
+      }
       setTemplateCreateModal(true);
+      return;
+    }
+
+    if (target.dataset.pickTemplate) {
+      chooseProjectTemplate(target.dataset.pickTemplate);
       return;
     }
 
     if (target.id === 'openImportConfig') {
       setImportModal(true);
-      return;
-    }
-
-    if (target.dataset.applyTemplate) {
-      setTemplateModal(true, target.dataset.applyTemplate);
       return;
     }
 
@@ -207,9 +238,16 @@ async function handleDocumentClick(event) {
       return;
     }
 
+    if (target.dataset.selectConfigFile) {
+      state.activeConfigFile = target.dataset.selectConfigFile;
+      renderConfigRows();
+      return;
+    }
+
     const projectId = target.dataset.openConfig ?? target.dataset.selectProject;
     if (projectId) {
       state.activeProjectId = projectId;
+      state.activeConfigFile = 'application.yaml';
       const project = activeProject();
       state.activeEnvironment = project.environments.includes('prod')
         ? 'prod'

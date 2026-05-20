@@ -57,11 +57,6 @@ type ImportConfigRequest struct {
 	ChangeReason string `json:"changeReason"`
 }
 
-type ValidateProjectRequest struct {
-	Environment  string            `json:"environment"`
-	DraftEntries []ValidationEntry `json:"draftEntries"`
-}
-
 type CreateReviewRequest struct {
 	ProjectID   string `json:"projectId"`
 	Environment string `json:"environment"`

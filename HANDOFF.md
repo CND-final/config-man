@@ -39,7 +39,6 @@ backend/
 │   ├── api_projects.go
 │   ├── api_reviews.go
 │   ├── api_templates.go
-│   ├── api_validation.go
 │   ├── context/
 │   ├── logger/
 │   ├── middleware.go
@@ -119,7 +118,6 @@ Implemented phase 1 APIs:
 - `GET /api/v1/projects/:projectId/configs/:configId/versions` (legacy per-entry history; UI now uses config snapshots)
 - `POST /api/v1/projects/:projectId/configs/:configId/rollback` (legacy per-entry rollback; UI now uses config snapshots)
 - `DELETE /api/v1/projects/:projectId/configs/:configId`
-- `POST /api/v1/projects/:projectId/validate`
 - `GET /api/v1/review-requests`
 - `GET /api/v1/projects/:projectId/review-requests`
 - `POST /api/v1/review-requests`
@@ -158,7 +156,6 @@ Files:
 - `project.go`: project list/create/get
 - `config.go`: config list/create/update/delete/import plus version history and rollback behavior
 - `review_request.go`: review request list/create/approve/reject
-- `validation.go`: validation workflow
 - `audit.go`: audit/version helper creation
 
 ### Store Layer
@@ -168,7 +165,7 @@ Files:
 Important intent:
 
 - `store` should stay focused on saving/fetching data.
-- Do not put business permission or validation decisions in `store`.
+- Do not put business permission decisions in `store`.
 - Processor should orchestrate calls and enforce behavior.
 
 ### Response And Errors
@@ -185,7 +182,7 @@ This keeps processor from depending directly on HTTP status codes.
 
 ### Infrastructure Templates
 
-Template catalog now includes shared infrastructure templates plus per-user custom templates. `spring-boot-base-template` is a YAML Spring Boot skeleton with `${...}` variables. `POST /templates` stores custom templates in `custom_templates` with `owner_user_id`; `GET /templates` appends only the authenticated user's custom templates, so other users cannot see or reference them. `POST /projects` accepts optional `templateId` and validates that it is either shared or owned by the actor. The frontend Templates page can create personal templates, apply any visible body template, render a variable form, preview the rendered YAML, and then feed it into the existing Extract Config -> Apply Import flow.
+Template catalog now includes shared infrastructure templates plus per-user custom templates. Shared templates are `global-logging-template` and `spring-boot-base-template`; `global-logging-template` is the logging baseline. `POST /templates` stores custom templates in `custom_templates` with `owner_user_id`; `GET /templates` appends only the authenticated user's custom templates, so other users cannot see or reference them. `POST /projects` accepts optional `templateId` and validates that it is either shared or owned by the actor. The frontend Templates page creates and displays templates only; it does not show Apply Template buttons on cards. Template cards keep the `shared`/`personal` visibility tag, but do not show format/type badges such as `yaml` or `base`. Template application starts from the New Project modal's Choose from Template Library button: the project form draft is preserved, the UI switches to Templates, template cards show body previews and become selectable, Cancel returns to Create Project, and Use Template returns to Create Project with the chosen variables/output format saved. Creating the project then opens Extract Config preview for the rendered template.
 
 ### Config Import
 
@@ -251,7 +248,6 @@ Important: a previous `ConfigManLogger` struct and old `MainLog/APILog/DBLog` al
 - `logger.Project`
 - `logger.Config`
 - `logger.Review`
-- `logger.Validation`
 - `logger.Template`
 
 The user has been pushing toward a free5GC-like direct category logger style. Avoid reintroducing a `processor/logging.go` helper or local `log := logger.Project.With(...)` unless the user explicitly changes direction.
@@ -328,9 +324,10 @@ The frontend is an Apple-inspired admin UI and includes:
 - Login screen with the config-man SVG logo from `frontend/public/config-man-logo.svg`; the old API/demo-user helper text is intentionally hidden
 - Dashboard
 - Projects
-- Project registration modal backed by `POST /api/v1/projects`, including optional visible-template reference
-- Templates with infrastructure skeleton support, personal template creation, and variable extraction
-- Config Editor, entered through clickable project cards instead of sidebar navigation
+- Project registration modal backed by `POST /api/v1/projects`, including optional visible-template application
+- Templates with global logging/Spring Boot skeleton support, personal template creation, and variable extraction
+- Sidebar navigation uses SVG image icons from `frontend/public/nav-*.svg` instead of letter codes
+- Config Editor, entered through clickable project cards instead of sidebar navigation; the left rail shows standard config files (`application.yaml`, `redis.yaml`, `security.json`) for the selected project instead of other projects
 - Config header shows the current environment snapshot version
 - GitHub-style history icon sits in the Config page top-right action area and opens the environment-level config history modal backed by `GET /config-history?env=...`
 - Rollback previous full-config snapshot backed by `POST /config-history/rollback`

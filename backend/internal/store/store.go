@@ -375,25 +375,6 @@ func (s *Store) SaveReviewRequest(request model.ReviewRequest, audit model.Audit
 	return s.persistLocked()
 }
 
-func (s *Store) ValidationEntries(projectID string, environments []string) []model.ValidationEntry {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	entries := make([]model.ValidationEntry, 0)
-	for _, entry := range s.configs {
-		if entry.ProjectID == projectID && util.Contains(environments, entry.Environment) {
-			entries = append(entries, model.ValidationEntry{
-				Environment: entry.Environment,
-				Key:         entry.Key,
-				Value:       entry.Value,
-				ValueType:   entry.ValueType,
-				IsSensitive: entry.IsSensitive,
-			})
-		}
-	}
-	return entries
-}
-
 func (s *Store) seedUsers() {
 	users := []model.User{
 		{ID: "alice", Email: "admin@config-man.local", Name: "Alice Lin", Role: model.RoleSystemAdmin},

@@ -1,4 +1,10 @@
 import { $ } from './dom.js';
+import {
+  configFileForEntry,
+  configFilesForEntries,
+  configsForActiveFile,
+  ensureActiveConfigFile
+} from './configFiles.js';
 import { activeProject, navItems, state } from './state.js';
 import {
   escapeHtml,
@@ -61,7 +67,8 @@ function filteredRequests() {
 function matchesConfigSearch(config) {
   const local = state.configSearch.trim().toLowerCase();
   const global = searchTerm();
-  const values = [config.key, config.value, config.environment, config.updatedBy, config.valueType];
+  const file = configFileForEntry(config);
+  const values = [config.key, config.value, config.environment, config.updatedBy, config.valueType, file.name];
   return includesSearch(values, local) && includesSearch(values, global);
 }
 
@@ -71,7 +78,7 @@ export function renderNav() {
     .map(
       (item) => `
         <button class="nav-item ${state.activeView === item.id ? 'active' : ''}" type="button" data-view-target="${item.id}">
-          <span class="nav-code">${item.code}</span>
+          <img class="nav-icon" src="${item.icon}" alt="" aria-hidden="true" />
           <span class="nav-label">${item.label}</span>
         </button>
       `
@@ -182,31 +189,43 @@ export function renderProjects() {
 }
 
 export function renderTemplates() {
+  const action = $('#openTemplateCreate');
+  if (action) {
+    action.textContent = state.templatePickerActive ? 'Cancel' : 'New Template';
+    action.className = state.templatePickerActive ? 'secondary-action' : 'primary-action';
+  }
+
   $('#templatesGrid').innerHTML = filteredTemplates()
-    .map(
-      (template) => `
-        <article class="template-card">
-          <div class="card-top">
-            <div class="card-title">
-              <h3>${escapeHtml(template.name)}</h3>
-              <p>${escapeHtml(template.description || 'Reusable configuration template')}</p>
-            </div>
-            <div class="template-badges">
-              <span class="format-pill">${escapeHtml(template.format)}</span>
-              <span class="status-pill neutral">${template.isCustom ? 'personal' : 'shared'}</span>
-            </div>
-          </div>
-          <div class="template-list">
-            ${renderTemplateKeys(template)}
-          </div>
-          ${template.body ? `<button class="secondary-action" type="button" data-apply-template="${escapeHtml(template.id)}">Apply Template</button>` : ''}
-        </article>
-      `
-    )
+    .map(renderTemplateCard)
     .join('') || '<p class="project-meta">No matching templates.</p>';
   renderTemplateModal();
   renderTemplateCreateModal();
 }
+
+function renderTemplateCard(template) {
+  const canPick = state.templatePickerActive && template.body;
+  const tag = canPick ? 'button' : 'article';
+  const typeAttr = canPick ? ' type="button"' : '';
+  const pickAttr = canPick ? ` data-pick-template="${escapeHtml(template.id)}"` : '';
+  return `
+    <${tag} class="template-card ${canPick ? 'template-card-button' : ''}"${typeAttr}${pickAttr}>
+      <div class="card-top">
+        <div class="card-title">
+          <h3>${escapeHtml(template.name)}</h3>
+          <p>${escapeHtml(template.description || 'Reusable configuration template')}</p>
+        </div>
+        <div class="template-badges">
+          <span class="status-pill neutral">${template.isCustom ? 'personal' : 'shared'}</span>
+        </div>
+      </div>
+      <pre class="template-body-preview">${escapeHtml(template.body || template.entries?.map((entry) => `${entry.key}=${entry.defaultValue}`).join('\n') || '')}</pre>
+      <div class="template-list">
+        ${renderTemplateKeys(template)}
+      </div>
+    </${tag}>
+  `;
+}
+
 
 function renderTemplateKeys(template) {
   const values = template.variables?.length
@@ -217,7 +236,6 @@ function renderTemplateKeys(template) {
       (key) => `
         <div class="template-key">
           <span>${escapeHtml(key)}</span>
-          <span class="status-pill neutral">${template.variables?.length ? 'variable' : 'base'}</span>
         </div>
       `
     )
@@ -230,23 +248,23 @@ function projectTemplateName(templateId) {
 }
 
 
-export function renderConfigProjectList() {
-  $('#configProjectList').innerHTML = filteredProjects()
+export function renderConfigFileList() {
+  ensureActiveConfigFile(state);
+  $('#configProjectList').innerHTML = configFilesForEntries(state.configs)
     .map(
-      (project) => `
-        <button class="compact-item ${project.id === state.activeProjectId ? 'active' : ''}" type="button" data-select-project="${project.id}">
+      (file) => `
+        <button class="compact-item config-file-item ${file.id === state.activeConfigFile ? 'active' : ''}" type="button" data-select-config-file="${escapeHtml(file.id)}">
           <div>
-            <h3>${escapeHtml(project.name)}</h3>
+            <h3>${escapeHtml(file.name)}</h3>
             <p class="project-meta">
-              <span>${escapeHtml(project.owner)}</span>
-              <span>${project.configCount} keys</span>
+              <span>${file.count} ${file.count === 1 ? 'key' : 'keys'}</span>
+              <span>${escapeHtml(file.detail)}</span>
             </p>
           </div>
-          <span class="format-pill">${escapeHtml(project.defaultFormat)}</span>
         </button>
       `
     )
-    .join('') || '<p class="project-meta">No matching projects.</p>';
+    .join('');
 }
 
 export function renderEnvironmentTabs() {
@@ -271,29 +289,30 @@ export function renderEnvironmentTabs() {
 }
 
 export function renderProjectTemplateOptions() {
-  const select = $('#projectTemplate');
-  if (!select) return;
-  const projectTemplates = state.templates.filter((template) => template.body);
-  select.innerHTML = `
-    <option value="">No template</option>
-    ${projectTemplates
-      .map((template) => `
-        <option value="${escapeHtml(template.id)}">${escapeHtml(template.name)}${template.isCustom ? ' · personal' : ''}</option>
-      `)
-      .join('')}
-  `;
+  const summary = $('#projectTemplateSelection');
+  const clearButton = $('#clearProjectTemplate');
+  if (!summary) return;
+
+  const selection = state.projectTemplateSelection;
+  summary.textContent = selection
+    ? `${selection.templateName} · ${selection.outputFormat}`
+    : 'No template selected.';
+  if (clearButton) {
+    clearButton.classList.toggle('hidden', !selection);
+  }
 }
+
 
 export function renderConfigRows(renderShell = true) {
   const project = activeProject();
   if (renderShell) {
     $('#configTitle').textContent = project?.name || 'Project Config';
     renderConfigVersionLabel();
-    renderConfigProjectList();
+    renderConfigFileList();
     renderEnvironmentTabs();
   }
 
-  const rows = state.configs.filter(matchesConfigSearch);
+  const rows = configsForActiveFile(state.configs, state.activeConfigFile).filter(matchesConfigSearch);
 
   $('#configRows').innerHTML =
     rows
@@ -308,7 +327,7 @@ export function renderConfigRow(configId) {
   const row = Array.from(document.querySelectorAll('[data-config-row]'))
     .find((element) => element.dataset.configRow === configId);
 
-  if (!config || !row || !matchesConfigSearch(config)) {
+  if (!config || !row || !configsForActiveFile([config], state.activeConfigFile).length || !matchesConfigSearch(config)) {
     renderConfigRows(false);
     return;
   }
@@ -497,14 +516,18 @@ export function renderTemplateModal() {
 
   const template = activeTemplate();
   const project = activeProject();
+  const targetName = state.templatePickerActive
+    ? (state.projectDraft?.name || 'New Project')
+    : (project?.name || 'No project selected');
   if (!template) return;
 
   $('#templateModalTitle').textContent = template.name;
   $('#templateModalMeta').innerHTML = `
     <span>${escapeHtml(template.format)}</span>
-    <span>${escapeHtml(project?.name || 'No project selected')}</span>
+    <span>${escapeHtml(targetName)}</span>
     <span>${escapeHtml(state.activeEnvironment)}</span>
   `;
+  $('#confirmApplyTemplate').textContent = state.templatePickerActive ? 'Use Template' : 'Extract Config';
   $('#templateVariableList').innerHTML = template.variables
     .map((variable) => `
       <label class="template-variable-field">
@@ -518,7 +541,8 @@ export function renderTemplateModal() {
         />
       </label>
     `)
-    .join('');
+    .join('') || '<p class="project-meta">This template has no variables.</p>';
+  $('#templateApplyFormat').value = state.templateApplyFormat || template.format || 'yaml';
   $('#templateRenderedPreview').textContent = renderTemplateBody(template);
 }
 

@@ -309,7 +309,8 @@ button {
 }
 
 .nav-item {
-  justify-content: space-between;
+  justify-content: flex-start;
+  gap: 12px;
   width: 100%;
   min-height: 42px;
   border: 0;
@@ -327,16 +328,13 @@ button {
   background: rgba(255, 255, 255, 0.82);
 }
 
-.nav-item .nav-code {
+.nav-icon {
   width: 24px;
   height: 24px;
-  display: grid;
-  place-items: center;
+  display: block;
+  flex: 0 0 auto;
   border-radius: 7px;
-  color: var(--muted);
-  background: rgba(29, 29, 31, 0.05);
-  font-size: 11px;
-  font-weight: 800;
+  object-fit: contain;
 }
 
 .nav-label {
@@ -429,6 +427,33 @@ button:disabled {
   padding: 0;
   color: var(--blue);
   background: transparent;
+}
+
+.back-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  border: 0;
+  border-radius: 999px;
+  margin: 0 0 12px;
+  padding: 0 12px 0 10px;
+  color: var(--text);
+  background: #f0f0f3;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.back-action:hover {
+  background: #e8e8ed;
+}
+
+.back-chevron {
+  width: 8px;
+  height: 8px;
+  border-left: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
 }
 
 .panel,
@@ -587,14 +612,12 @@ button:disabled {
   text-align: left;
   transition:
     transform 160ms ease,
-    border-color 160ms ease,
     background 160ms ease;
 }
 
 .project-card-button:hover,
 .project-card-button:focus-visible {
   transform: scale(1.018);
-  border-color: rgba(0, 113, 227, 0.34);
   background: #fff;
   outline: none;
 }
@@ -676,11 +699,43 @@ button:disabled {
   gap: 16px;
 }
 
+.template-card-button {
+  width: 100%;
+  border: 1px solid rgba(210, 210, 215, 0.74);
+  color: inherit;
+  text-align: left;
+  transition:
+    transform 160ms ease,
+    background 160ms ease;
+}
+
+.template-card-button:hover,
+.template-card-button:focus-visible {
+  transform: scale(1.012);
+  background: #fff;
+  outline: none;
+}
+
 .template-badges {
   display: inline-flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.template-body-preview {
+  max-height: 180px;
+  overflow: auto;
+  border-radius: 8px;
+  margin: 0;
+  padding: 12px;
+  color: var(--text);
+  background: #f8f8fa;
+  font-family:
+    "SFMono-Regular", Consolas, "Liberation Mono", ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
 }
 
 .template-list {
@@ -689,10 +744,6 @@ button:disabled {
 }
 
 .template-key {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
   border-radius: 8px;
   padding: 10px;
   background: rgba(245, 245, 247, 0.82);
@@ -722,6 +773,10 @@ button:disabled {
 .compact-item.active {
   outline: 2px solid rgba(0, 113, 227, 0.2);
   background: var(--blue-soft);
+}
+
+.config-file-item {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .editor-toolbar {
@@ -1025,12 +1080,19 @@ td {
   gap: 14px;
 }
 
-.form-grid label {
+.form-grid label,
+.template-picker-field {
   display: grid;
   gap: 8px;
   color: var(--muted);
   font-size: 13px;
   font-weight: 750;
+}
+
+.template-choice-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .form-grid input,
@@ -1411,7 +1473,7 @@ td {
     justify-content: center;
   }
 
-  .nav-item .nav-code {
+  .nav-icon {
     margin: 0;
   }
 

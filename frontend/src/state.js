@@ -6,6 +6,7 @@ export const state = {
   activeView: 'dashboard',
   activeProjectId: '',
   activeEnvironment: 'prod',
+  activeConfigFile: 'application.yaml',
   globalSearch: '',
   configSearch: '',
   inlineEdit: null,
@@ -19,9 +20,13 @@ export const state = {
   requests: [],
   templates: [],
   templateCreateModalOpen: false,
+  templatePickerActive: false,
   templateModalOpen: false,
   activeTemplateId: '',
   templateValues: {},
+  templateApplyFormat: 'yaml',
+  projectDraft: null,
+  projectTemplateSelection: null,
   configHistory: [],
   historyLoading: false,
   reviewModalOpen: false,
@@ -36,10 +41,10 @@ export const state = {
 };
 
 export const navItems = [
-  { id: 'dashboard', label: 'Dashboard', code: 'D' },
-  { id: 'projects', label: 'Projects', code: 'P' },
-  { id: 'templates', label: 'Templates', code: 'T' },
-  { id: 'requests', label: 'Requests', code: 'R' }
+  { id: 'dashboard', label: 'Dashboard', icon: '/nav-dashboard.svg' },
+  { id: 'projects', label: 'Projects', icon: '/nav-projects.svg' },
+  { id: 'templates', label: 'Templates', icon: '/nav-templates.svg' },
+  { id: 'requests', label: 'Requests', icon: '/nav-requests.svg' }
 ];
 
 export function activeProject() {

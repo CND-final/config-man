@@ -126,6 +126,10 @@
         <section id="configView" class="view" data-view="config">
           <div class="page-header">
             <div>
+              <button id="backToProjects" class="back-action" type="button">
+                <span class="back-chevron" aria-hidden="true"></span>
+                All Projects
+              </button>
               <p class="eyebrow">Config Editor</p>
               <h1 id="configTitle">Project Config</h1>
               <p id="configVersionLabel" class="project-meta config-version-label"></p>
@@ -145,7 +149,7 @@
           <section class="editor-layout">
             <aside class="panel project-rail">
               <div class="panel-header">
-                <h2>Projects</h2>
+                <h2>Config Files</h2>
               </div>
               <div id="configProjectList" class="compact-list"></div>
             </aside>
@@ -253,6 +257,14 @@
           </button>
         </div>
         <div id="templateVariableList" class="template-variable-list"></div>
+        <label class="modal-field template-output-field">
+          <span>Output Format</span>
+          <select id="templateApplyFormat">
+            <option value="yaml">yaml</option>
+            <option value="json">json</option>
+            <option value="properties">properties</option>
+          </select>
+        </label>
         <pre id="templateRenderedPreview" class="template-rendered-preview"></pre>
         <div class="modal-actions">
           <button id="confirmApplyTemplate" class="primary-action" type="button">Extract Config</button>
@@ -345,10 +357,14 @@
               <option value="properties">properties</option>
             </select>
           </label>
-          <label class="form-wide">
-            <span>Template</span>
-            <select id="projectTemplate"></select>
-          </label>
+          <div class="form-wide template-picker-field">
+            <span>Apply Template</span>
+            <div class="template-choice-row">
+              <button id="chooseProjectTemplate" class="secondary-action" type="button">Choose from Template Library</button>
+              <button id="clearProjectTemplate" class="ghost-action" type="button">Clear</button>
+            </div>
+            <p id="projectTemplateSelection" class="project-meta">No template selected.</p>
+          </div>
           <label class="form-wide">
             <span>Environments</span>
             <input id="projectEnvironments" type="text" value="dev, staging, prod" autocomplete="off" />
