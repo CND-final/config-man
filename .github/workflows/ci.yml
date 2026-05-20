@@ -1,0 +1,189 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  # 1. Dedicated change detection job to save runner billing minutes
+  detect-changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Filter paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            backend:
+              - "backend/**"
+              - ".github/workflows/ci.yml"
+            frontend:
+              - "frontend/**"
+              - ".github/workflows/ci.yml"
+
+  # 2. Go Backend Job (Only runs if backend changes)
+  backend-ci:
+    name: Backend CI
+    needs: detect-changes
+    if: needs.detect-changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+          cache: true
+          cache-dependency-path: backend/go.sum
+
+      - name: Check gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "gofmt found unformatted files:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run unit tests
+        run: go test -v -race ./...
+
+      - name: Build cmd targets
+        run: go build ./cmd/...
+
+  # 3. Vite Frontend Job (Only runs if frontend changes)
+  frontend-ci:
+    name: Frontend CI
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Detect package manager
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            echo "PKG_MANAGER=pnpm" >> "$GITHUB_ENV"
+            echo "NODE_CACHE=pnpm" >> "$GITHUB_ENV"
+            echo "NODE_CACHE_DEP=frontend/pnpm-lock.yaml" >> "$GITHUB_ENV"
+          elif [ -f yarn.lock ]; then
+            echo "PKG_MANAGER=yarn" >> "$GITHUB_ENV"
+            echo "NODE_CACHE=yarn" >> "$GITHUB_ENV"
+            echo "NODE_CACHE_DEP=frontend/yarn.lock" >> "$GITHUB_ENV"
+          elif [ -f package-lock.json ]; then
+            echo "PKG_MANAGER=npm" >> "$GITHUB_ENV"
+            echo "NODE_CACHE=npm" >> "$GITHUB_ENV"
+            echo "NODE_CACHE_DEP=frontend/package-lock.json" >> "$GITHUB_ENV"
+            echo "NPM_INSTALL_CMD=ci" >> "$GITHUB_ENV"
+          elif [ -f npm-shrinkwrap.json ]; then
+            echo "PKG_MANAGER=npm" >> "$GITHUB_ENV"
+            echo "NODE_CACHE=npm" >> "$GITHUB_ENV"
+            echo "NODE_CACHE_DEP=frontend/npm-shrinkwrap.json" >> "$GITHUB_ENV"
+            echo "NPM_INSTALL_CMD=ci" >> "$GITHUB_ENV"
+          else
+            echo "PKG_MANAGER=npm" >> "$GITHUB_ENV"
+            echo "NODE_CACHE=npm" >> "$GITHUB_ENV"
+            echo "NODE_CACHE_DEP=frontend/package-lock.json" >> "$GITHUB_ENV"
+            echo "NPM_INSTALL_CMD=install" >> "$GITHUB_ENV"
+          fi
+
+      # Fix: Setup the pnpm CLI tool BEFORE setup-node tries to configure its cache
+      - name: Setup pnpm
+        if: env.PKG_MANAGER == 'pnpm'
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: ${{ env.NODE_CACHE }}
+          cache-dependency-path: ${{ env.NODE_CACHE_DEP }}
+
+      - name: Enable Corepack (Yarn Berry/Pnpm fallback)
+        if: env.PKG_MANAGER != 'npm'
+        run: corepack enable
+
+      - name: Install dependencies
+        run: |
+          case "$PKG_MANAGER" in
+            pnpm)
+              pnpm install --frozen-lockfile
+              ;;
+            yarn)
+              yarn install --frozen-lockfile
+              ;;
+            npm)
+              npm "$NPM_INSTALL_CMD"
+              ;;
+            *)
+              echo "Unknown package manager: $PKG_MANAGER"
+              exit 1
+              ;;
+          esac
+
+      - name: Check formatting with Prettier
+        run: npx --yes prettier --check .
+
+      - name: Run frontend tests
+        run: |
+          case "$PKG_MANAGER" in
+            pnpm)
+              pnpm test --if-present
+              ;;
+            yarn)
+              yarn test --if-present
+              ;;
+            npm)
+              npm run test --if-present
+              ;;
+            *)
+              echo "Unknown package manager: $PKG_MANAGER"
+              exit 1
+              ;;
+          esac
+
+      - name: Build production bundle
+        run: |
+          case "$PKG_MANAGER" in
+            pnpm)
+              pnpm run build
+              ;;
+            yarn)
+              yarn build
+              ;;
+            npm)
+              npm run build
+              ;;
+            *)
+              echo "Unknown package manager: $PKG_MANAGER"
+              exit 1
+              ;;
+          esac
