@@ -33,9 +33,7 @@
           />
         </label>
         <button class="primary-action" type="submit">Sign In</button>
-        <p class="login-hint">
-          API: <code id="apiBaseLabel">loading</code>
-        </p>
+        <p class="login-hint">API: <code id="apiBaseLabel">loading</code></p>
         <p class="login-hint">
           Demo users: admin, project-admin, developer, reviewer, viewer
           @config-man.local. Password: password.
@@ -51,7 +49,11 @@
         </div>
         <label class="global-search">
           <span>Search</span>
-          <input id="globalSearch" type="search" placeholder="Project, key, owner" />
+          <input
+            id="globalSearch"
+            type="search"
+            placeholder="Project, key, owner"
+          />
         </label>
         <div class="topbar-actions">
           <button class="icon-button" type="button" aria-label="Notifications">
@@ -109,7 +111,11 @@
               <p class="eyebrow">Projects</p>
               <h1>Project Registry</h1>
             </div>
-            <button id="mockRegisterProject" class="primary-action" type="button">
+            <button
+              id="mockRegisterProject"
+              class="primary-action"
+              type="button"
+            >
               Register Project
             </button>
           </div>
@@ -151,17 +157,29 @@
                 <div id="environmentTabs" class="segmented-control"></div>
                 <label class="local-search">
                   <span>Filter</span>
-                  <input id="configSearch" type="search" placeholder="Key or value" />
+                  <input
+                    id="configSearch"
+                    type="search"
+                    placeholder="Key or value"
+                  />
                 </label>
               </div>
               <div class="import-toolbar">
-                <input id="configFile" type="file" accept=".json,.yaml,.yml,.properties" />
+                <input
+                  id="configFile"
+                  type="file"
+                  accept=".json,.yaml,.yml,.properties"
+                />
                 <select id="configFormat">
                   <option value="yaml">yaml</option>
                   <option value="json">json</option>
                   <option value="properties">properties</option>
                 </select>
-                <button id="importConfig" class="secondary-action" type="button">
+                <button
+                  id="importConfig"
+                  class="secondary-action"
+                  type="button"
+                >
                   Import Config
                 </button>
               </div>
@@ -197,7 +215,9 @@
           <section class="panel">
             <div class="editor-toolbar">
               <div id="diffFilters" class="segmented-control"></div>
-              <span id="validationBadge" class="status-pill success">Valid</span>
+              <span id="validationBadge" class="status-pill success"
+                >Valid</span
+              >
             </div>
             <div id="diffList" class="diff-list"></div>
           </section>
