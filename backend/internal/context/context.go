@@ -23,7 +23,7 @@ func NewConfigManContext(ctx stdctx.Context, cfg config.Config) (*ConfigManConte
 		return nil, fmt.Errorf("DATABASE_URL is required for backend startup")
 	}
 
-	logger.DBLog.Info("DATABASE_URL detected; opening PostgreSQL connection")
+	logger.DB.Info("DATABASE_URL detected; opening PostgreSQL connection")
 	db, err := sql.Open("pgx", cfg.DatabaseURL)
 	if err != nil {
 		return nil, err

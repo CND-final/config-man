@@ -17,7 +17,7 @@ import (
 
 func main() {
 	cfg := config.NewConfig()
-	log := logger.MainLog
+	log := logger.Main
 
 	traceCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -33,8 +33,12 @@ func main() {
 		}
 	}()
 
-	proc := processor.New(runtime.Store)
-	server, err := app.NewServer(proc, logger.APILog, cfg)
+	proc, err := processor.NewProcessor(runtime.Store)
+	if err != nil {
+		log.Error("initialize config-man processor failed", slog.Any("error", err))
+		os.Exit(1)
+	}
+	server, err := app.NewServer(proc, logger.API, cfg)
 	if err != nil {
 		log.Error("initialize config-man server failed", slog.Any("error", err))
 		os.Exit(1)

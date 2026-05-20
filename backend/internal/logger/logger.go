@@ -8,7 +8,7 @@ import (
 
 const (
 	FieldService         = "service"
-	FieldLayer           = "layer"
+	FieldCategory        = "category"
 	FieldProjectID       = "project_id"
 	FieldEnvironment     = "environment"
 	FieldConfigID        = "config_id"
@@ -22,17 +22,18 @@ const (
 const serviceName = "config-man"
 
 var (
-	Log           *slog.Logger
-	MainLog       *slog.Logger
-	APILog        *slog.Logger
-	ProcessorLog  *slog.Logger
-	StoreLog      *slog.Logger
-	DBLog         *slog.Logger
-	AuthLog       *slog.Logger
-	ProjectLog    *slog.Logger
-	ConfigLog     *slog.Logger
-	ReviewLog     *slog.Logger
-	ValidationLog *slog.Logger
+	Log        *slog.Logger
+	Main       *slog.Logger
+	API        *slog.Logger
+	Processor  *slog.Logger
+	Store      *slog.Logger
+	DB         *slog.Logger
+	Auth       *slog.Logger
+	Project    *slog.Logger
+	Config     *slog.Logger
+	Review     *slog.Logger
+	Validation *slog.Logger
+	Template   *slog.Logger
 )
 
 func init() {
@@ -44,25 +45,26 @@ func Init(writer io.Writer) {
 		Level: slog.LevelInfo,
 	}))
 
-	MainLog = layer("main")
-	APILog = layer("api")
-	ProcessorLog = layer("processor")
-	StoreLog = layer("store")
-	DBLog = layer("db")
-	AuthLog = layer("auth")
-	ProjectLog = layer("project")
-	ConfigLog = layer("config")
-	ReviewLog = layer("review")
-	ValidationLog = layer("validation")
+	Main = category("main")
+	API = category("api")
+	Processor = category("processor")
+	Store = category("store")
+	DB = category("db")
+	Auth = category("auth")
+	Project = category("project")
+	Config = category("config")
+	Review = category("review")
+	Validation = category("validation")
+	Template = category("template")
 }
 
 func New() *slog.Logger {
-	return MainLog
+	return Main
 }
 
-func layer(name string) *slog.Logger {
+func category(name string) *slog.Logger {
 	return Log.With(
 		slog.String(FieldService, serviceName),
-		slog.String(FieldLayer, name),
+		slog.String(FieldCategory, name),
 	)
 }

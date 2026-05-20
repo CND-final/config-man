@@ -68,6 +68,10 @@ Environment variables:
 
 `make run` and `make dev` automatically create `.env` from `.env.example` when needed and export the variables for `go run ./cmd`.
 
+## Logging
+
+Processor actions use direct category loggers such as `logger.Project`, `logger.Config`, `logger.Auth`, `logger.Review`, and `logger.Validation`, following the category logger pattern from the referenced logger design. Logs include operation name, actor, role, project ID, environment, config key, config ID, counts, and error kind where relevant. Config values are intentionally not logged.
+
 ## Test
 
 ```bash

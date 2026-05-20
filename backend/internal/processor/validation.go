@@ -5,19 +5,32 @@ import (
 	"sort"
 	"strings"
 
+	"config-man/backend/internal/logger"
 	"config-man/backend/model"
 	"config-man/backend/pkg/util"
 )
 
-func (p *Processor) ValidateProject(_ appctx.RequestContext, projectID string, req model.ValidateProjectRequest) (model.ValidationResult, *model.ErrorDetail) {
+func (p *Processor) ValidateProject(ctx appctx.RequestContext, projectID string, req model.ValidateProjectRequest) (model.ValidationResult, *model.ErrorDetail) {
+	log := logger.Validation.With(
+		"operation", "validation.project",
+		logger.FieldUserID, ctx.Actor.ID,
+		logger.FieldActor, ctx.ActorName(),
+		logger.FieldRole, string(ctx.Actor.Role),
+		logger.FieldProjectID, projectID,
+		logger.FieldEnvironment, strings.TrimSpace(req.Environment),
+	)
+	log.Info("project validation requested", "draft_entry_count", len(req.DraftEntries))
+
 	project, err := p.requireProject(projectID)
 	if err != nil {
+		log.Warn("project validation failed", "error_kind", err.Kind, "error", err.Detail)
 		return model.ValidationResult{}, err
 	}
 
 	targetEnvs := make([]string, 0)
 	if strings.TrimSpace(req.Environment) != "" {
 		if err := p.requireEnvironment(projectID, req.Environment); err != nil {
+			log.Warn("project validation failed", "error_kind", err.Kind, "error", err.Detail)
 			return model.ValidationResult{}, err
 		}
 		targetEnvs = append(targetEnvs, req.Environment)
@@ -42,5 +55,7 @@ func (p *Processor) ValidateProject(_ appctx.RequestContext, projectID string, r
 		}
 	}
 
-	return util.ValidateEntries(projectID, targetEnvs, entries), nil
+	result := util.ValidateEntries(projectID, targetEnvs, entries)
+	log.Info("project validation completed", "environment_count", len(targetEnvs), "entry_count", len(entries), "error_count", len(result.Errors), "warning_count", len(result.Warnings), "is_valid", result.Valid)
+	return result, nil
 }

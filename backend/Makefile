@@ -30,6 +30,9 @@ env: .env
 
 db-up:
 	docker compose up -d
+	@until docker compose exec -T postgres pg_isready -U config_man -d config_man; do \
+		sleep 1; \
+	done
 
 db-down:
 	docker compose down

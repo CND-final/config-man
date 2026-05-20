@@ -6,22 +6,43 @@ import (
 	"strings"
 	"time"
 
+	"config-man/backend/internal/logger"
 	"config-man/backend/model"
 	"config-man/backend/pkg/util"
 )
 
-func (p *Processor) ListProjects(_ appctx.RequestContext) []model.Project {
-	return p.store.ListProjects()
+func (p *Processor) ListProjects(ctx appctx.RequestContext) []model.Project {
+	projects := p.store.ListProjects()
+	logger.Project.Info("projects listed",
+		"operation", "project.list",
+		logger.FieldUserID, ctx.Actor.ID,
+		logger.FieldActor, ctx.ActorName(),
+		logger.FieldRole, string(ctx.Actor.Role),
+		"project_count", len(projects),
+	)
+	return projects
 }
 
 func (p *Processor) CreateProject(ctx appctx.RequestContext, req model.CreateProjectRequest) (model.Project, *model.ErrorDetail) {
+	name := strings.TrimSpace(req.Name)
+	owner := strings.TrimSpace(req.OwnerName)
+	fields := []any{
+		"operation", "project.create",
+		logger.FieldUserID, ctx.Actor.ID,
+		logger.FieldActor, ctx.ActorName(),
+		logger.FieldRole, string(ctx.Actor.Role),
+		"project_name", name,
+		"owner_name", owner,
+	}
+	logger.Project.Info("create project requested", fields...)
+
 	if !util.CanRegisterProject(ctx.Actor) {
+		logger.Project.Warn("create project denied", append(fields, "reason", "role_not_allowed")...)
 		return model.Project{}, model.Forbidden("Only system_admin or project_admin can register projects")
 	}
 
-	name := strings.TrimSpace(req.Name)
-	owner := strings.TrimSpace(req.OwnerName)
 	if len(name) < 2 || len(owner) < 2 {
+		logger.Project.Warn("create project invalid", append(fields, "reason", "missing_name_or_owner")...)
 		return model.Project{}, model.InvalidInput("name and ownerName are required")
 	}
 
@@ -30,9 +51,11 @@ func (p *Processor) CreateProject(ctx appctx.RequestContext, req model.CreatePro
 		format = "yaml"
 	}
 	if !util.IsSupportedConfigFormat(format) {
+		logger.Project.Warn("create project invalid", append(fields, "reason", "unsupported_format", "default_format", format)...)
 		return model.Project{}, model.InvalidInput("defaultFormat must be properties, json, or yaml")
 	}
 	if p.store.ProjectNameExists(name) {
+		logger.Project.Warn("create project conflict", fields...)
 		return model.Project{}, model.Conflict(fmt.Sprintf("Project %q already exists", name))
 	}
 
@@ -61,16 +84,32 @@ func (p *Processor) CreateProject(ctx appctx.RequestContext, req model.CreatePro
 		"name":         project.Name,
 		"environments": envs,
 	})); err != nil {
+		logger.Project.Error("create project persistence failed", append(fields, "error", err)...)
 		return model.Project{}, model.InternalError("database persistence failed: " + err.Error())
 	}
+
+	logger.Project.Info("project created", append(fields,
+		logger.FieldProjectID, project.ID,
+		"environment_count", len(envs),
+		"default_format", project.DefaultFormat,
+	)...)
 	return project, nil
 }
 
-func (p *Processor) GetProject(_ appctx.RequestContext, projectID string) (model.Project, *model.ErrorDetail) {
+func (p *Processor) GetProject(ctx appctx.RequestContext, projectID string) (model.Project, *model.ErrorDetail) {
+	fields := []any{
+		"operation", "project.get",
+		logger.FieldUserID, ctx.Actor.ID,
+		logger.FieldActor, ctx.ActorName(),
+		logger.FieldRole, string(ctx.Actor.Role),
+		logger.FieldProjectID, projectID,
+	}
 	project, err := p.requireProject(projectID)
 	if err != nil {
+		logger.Project.Warn("get project failed", append(fields, "error_kind", err.Kind, "error", err.Detail)...)
 		return model.Project{}, err
 	}
+	logger.Project.Info("project loaded", append(fields, "project_name", project.Name)...)
 	return project, nil
 }
 
