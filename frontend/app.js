@@ -849,3 +849,30 @@ if (state.token && state.user) {
   $("#apiBaseLabel").textContent = API_BASE;
   setAuthenticated(false);
 }
+
+export {
+  API_BASE,
+  state,
+  navItems,
+  escapeHtml,
+  statusClass,
+  api,
+  activeProject,
+  showToast,
+  switchView,
+  initials,
+  normalizeProject,
+  loadConfigs,
+  loadDiff,
+  renderNav,
+  renderUser,
+  renderStats,
+  renderDashboard,
+  renderProjects,
+  renderTemplates,
+  renderConfigRows,
+  renderDiff,
+  renderRequests,
+  renderAll,
+  isProdSensitiveEdit,
+};
