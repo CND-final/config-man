@@ -1,6 +1,7 @@
 package app
 
 import (
+	"config-man/backend/internal/response"
 	"config-man/backend/model"
 	"net/http"
 
@@ -22,15 +23,15 @@ func (s *Server) handleValidateProject(c *gin.Context) {
 	reqCtx := requestContextFromGin(c)
 
 	var req model.ValidateProjectRequest
-	if err := decodeOptionalJSON(c, &req); err != nil {
-		writeError(c, err)
+	if err := response.DecodeOptionalJSON(c, &req); err != nil {
+		response.WriteError(c, err)
 		return
 	}
 
 	result, appErr := s.processor.ValidateProject(reqCtx, c.Param("projectId"), req)
 	if appErr != nil {
-		writeError(c, appErr)
+		response.WriteError(c, appErr)
 		return
 	}
-	writeJSON(c, http.StatusOK, result)
+	response.WriteJSON(c, http.StatusOK, result)
 }

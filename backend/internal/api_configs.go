@@ -1,6 +1,7 @@
 package app
 
 import (
+	"config-man/backend/internal/response"
 	"config-man/backend/model"
 	"net/http"
 	"strings"
@@ -49,61 +50,61 @@ func (s *Server) handleListConfigs(c *gin.Context) {
 	reveal := strings.EqualFold(c.Query("revealSensitive"), "true")
 	payload, appErr := s.processor.ListConfigs(reqCtx, c.Param("projectId"), c.Query("env"), reveal)
 	if appErr != nil {
-		writeError(c, appErr)
+		response.WriteError(c, appErr)
 		return
 	}
-	writeJSON(c, http.StatusOK, payload)
+	response.WriteJSON(c, http.StatusOK, payload)
 }
 
 func (s *Server) handleCreateConfig(c *gin.Context) {
 	reqCtx := requestContextFromGin(c)
 
 	var req model.CreateConfigRequest
-	if err := decodeJSON(c, &req); err != nil {
-		writeError(c, err)
+	if err := response.DecodeJSON(c, &req); err != nil {
+		response.WriteError(c, err)
 		return
 	}
 
 	entry, appErr := s.processor.CreateConfig(reqCtx, c.Param("projectId"), req)
 	if appErr != nil {
-		writeError(c, appErr)
+		response.WriteError(c, appErr)
 		return
 	}
-	writeJSON(c, http.StatusCreated, entry)
+	response.WriteJSON(c, http.StatusCreated, entry)
 }
 
 func (s *Server) handleImportConfigs(c *gin.Context) {
 	reqCtx := requestContextFromGin(c)
 
 	var req model.ImportConfigRequest
-	if err := decodeJSON(c, &req); err != nil {
-		writeError(c, err)
+	if err := response.DecodeJSON(c, &req); err != nil {
+		response.WriteError(c, err)
 		return
 	}
 
 	payload, appErr := s.processor.ImportConfigs(reqCtx, c.Param("projectId"), req)
 	if appErr != nil {
-		writeError(c, appErr)
+		response.WriteError(c, appErr)
 		return
 	}
-	writeJSON(c, http.StatusCreated, payload)
+	response.WriteJSON(c, http.StatusCreated, payload)
 }
 
 func (s *Server) handleUpdateConfig(c *gin.Context) {
 	reqCtx := requestContextFromGin(c)
 
 	var req model.UpdateConfigRequest
-	if err := decodeJSON(c, &req); err != nil {
-		writeError(c, err)
+	if err := response.DecodeJSON(c, &req); err != nil {
+		response.WriteError(c, err)
 		return
 	}
 
 	entry, appErr := s.processor.UpdateConfig(reqCtx, c.Param("projectId"), c.Param("configId"), req)
 	if appErr != nil {
-		writeError(c, appErr)
+		response.WriteError(c, appErr)
 		return
 	}
-	writeJSON(c, http.StatusOK, entry)
+	response.WriteJSON(c, http.StatusOK, entry)
 }
 
 func (s *Server) handleDeleteConfig(c *gin.Context) {
@@ -111,8 +112,8 @@ func (s *Server) handleDeleteConfig(c *gin.Context) {
 
 	payload, appErr := s.processor.DeleteConfig(reqCtx, c.Param("projectId"), c.Param("configId"))
 	if appErr != nil {
-		writeError(c, appErr)
+		response.WriteError(c, appErr)
 		return
 	}
-	writeJSON(c, http.StatusOK, payload)
+	response.WriteJSON(c, http.StatusOK, payload)
 }

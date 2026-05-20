@@ -6,19 +6,18 @@ import (
 	"strings"
 	"time"
 
-	"config-man/backend/internal/apperror"
 	"config-man/backend/model"
 	"config-man/backend/pkg/util"
 )
 
 const maskedValue = "******"
 
-func (p *Processor) ListConfigs(ctx appctx.RequestContext, projectID, environment string, revealSensitive bool) (map[string]any, *apperror.AppError) {
+func (p *Processor) ListConfigs(ctx appctx.RequestContext, projectID, environment string, revealSensitive bool) (map[string]any, *model.ErrorDetail) {
 	if strings.TrimSpace(environment) == "" {
-		return nil, apperror.BadRequest(`Query parameter "env" is required`)
+		return nil, model.InvalidInput(`Query parameter "env" is required`)
 	}
 	if revealSensitive && !util.CanRevealSensitive(ctx.Actor) {
-		return nil, apperror.Forbidden("Role cannot reveal sensitive values")
+		return nil, model.Forbidden("Role cannot reveal sensitive values")
 	}
 	if err := p.requireEnvironment(projectID, environment); err != nil {
 		return nil, err
@@ -40,25 +39,25 @@ func (p *Processor) ListConfigs(ctx appctx.RequestContext, projectID, environmen
 	}, nil
 }
 
-func (p *Processor) CreateConfig(ctx appctx.RequestContext, projectID string, req model.CreateConfigRequest) (model.ConfigEntry, *apperror.AppError) {
+func (p *Processor) CreateConfig(ctx appctx.RequestContext, projectID string, req model.CreateConfigRequest) (model.ConfigEntry, *model.ErrorDetail) {
 	environment := strings.TrimSpace(req.Environment)
 	key := strings.TrimSpace(req.Key)
 	if environment == "" || key == "" {
-		return model.ConfigEntry{}, apperror.BadRequest("environment and key are required")
+		return model.ConfigEntry{}, model.InvalidInput("environment and key are required")
 	}
 	if !util.CanWriteEnvironment(ctx.Actor, environment) {
-		return model.ConfigEntry{}, apperror.Forbidden(fmt.Sprintf("Role %q cannot modify %q config", ctx.Actor.Role, environment))
+		return model.ConfigEntry{}, model.Forbidden(fmt.Sprintf("Role %q cannot modify %q config", ctx.Actor.Role, environment))
 	}
 	if err := p.requireEnvironment(projectID, environment); err != nil {
 		return model.ConfigEntry{}, err
 	}
 	if _, ok := p.store.FindConfigByKey(projectID, environment, key); ok {
-		return model.ConfigEntry{}, apperror.Conflict(fmt.Sprintf("Config key %q already exists in %q", key, environment))
+		return model.ConfigEntry{}, model.Conflict(fmt.Sprintf("Config key %q already exists in %q", key, environment))
 	}
 
 	valueType := util.NormalizeValueType(req.ValueType)
 	if valueType == "" {
-		return model.ConfigEntry{}, apperror.BadRequest("valueType must be string, number, boolean, or json")
+		return model.ConfigEntry{}, model.InvalidInput("valueType must be string, number, boolean, or json")
 	}
 
 	now := time.Now().UTC()
@@ -81,22 +80,22 @@ func (p *Processor) CreateConfig(ctx appctx.RequestContext, projectID string, re
 		"isSensitive": entry.IsSensitive,
 	})
 	if err := p.store.SaveConfig(entry, version, audit); err != nil {
-		return model.ConfigEntry{}, apperror.Internal("database persistence failed: " + err.Error())
+		return model.ConfigEntry{}, model.InternalError("database persistence failed: " + err.Error())
 	}
 	return entry, nil
 }
 
-func (p *Processor) UpdateConfig(ctx appctx.RequestContext, projectID, configID string, req model.UpdateConfigRequest) (model.ConfigEntry, *apperror.AppError) {
+func (p *Processor) UpdateConfig(ctx appctx.RequestContext, projectID, configID string, req model.UpdateConfigRequest) (model.ConfigEntry, *model.ErrorDetail) {
 	if req.Value == nil && req.ValueType == nil && req.IsSensitive == nil {
-		return model.ConfigEntry{}, apperror.BadRequest("No config fields provided for update")
+		return model.ConfigEntry{}, model.InvalidInput("No config fields provided for update")
 	}
 
 	entry, ok := p.store.FindConfig(projectID, configID)
 	if !ok {
-		return model.ConfigEntry{}, apperror.NotFound(fmt.Sprintf("Config %q not found for project %q", configID, projectID))
+		return model.ConfigEntry{}, model.NotFound(fmt.Sprintf("Config %q not found for project %q", configID, projectID))
 	}
 	if !util.CanWriteEnvironment(ctx.Actor, entry.Environment) {
-		return model.ConfigEntry{}, apperror.Forbidden(fmt.Sprintf("Role %q cannot modify %q config", ctx.Actor.Role, entry.Environment))
+		return model.ConfigEntry{}, model.Forbidden(fmt.Sprintf("Role %q cannot modify %q config", ctx.Actor.Role, entry.Environment))
 	}
 
 	oldValue := entry.Value
@@ -106,7 +105,7 @@ func (p *Processor) UpdateConfig(ctx appctx.RequestContext, projectID, configID 
 	if req.ValueType != nil {
 		valueType := util.NormalizeValueType(*req.ValueType)
 		if valueType == "" {
-			return model.ConfigEntry{}, apperror.BadRequest("valueType must be string, number, boolean, or json")
+			return model.ConfigEntry{}, model.InvalidInput("valueType must be string, number, boolean, or json")
 		}
 		entry.ValueType = valueType
 	}
@@ -124,18 +123,18 @@ func (p *Processor) UpdateConfig(ctx appctx.RequestContext, projectID, configID 
 		"isSensitive": entry.IsSensitive,
 	})
 	if err := p.store.SaveConfig(entry, version, audit); err != nil {
-		return model.ConfigEntry{}, apperror.Internal("database persistence failed: " + err.Error())
+		return model.ConfigEntry{}, model.InternalError("database persistence failed: " + err.Error())
 	}
 	return entry, nil
 }
 
-func (p *Processor) DeleteConfig(ctx appctx.RequestContext, projectID, configID string) (map[string]any, *apperror.AppError) {
+func (p *Processor) DeleteConfig(ctx appctx.RequestContext, projectID, configID string) (map[string]any, *model.ErrorDetail) {
 	entry, ok := p.store.FindConfig(projectID, configID)
 	if !ok {
-		return nil, apperror.NotFound(fmt.Sprintf("Config %q not found for project %q", configID, projectID))
+		return nil, model.NotFound(fmt.Sprintf("Config %q not found for project %q", configID, projectID))
 	}
 	if !util.CanWriteEnvironment(ctx.Actor, entry.Environment) {
-		return nil, apperror.Forbidden(fmt.Sprintf("Role %q cannot modify %q config", ctx.Actor.Role, entry.Environment))
+		return nil, model.Forbidden(fmt.Sprintf("Role %q cannot modify %q config", ctx.Actor.Role, entry.Environment))
 	}
 
 	audit := newAudit(ctx.ActorName(), "config.delete", "config_entry", configID, projectID, map[string]any{
@@ -144,24 +143,24 @@ func (p *Processor) DeleteConfig(ctx appctx.RequestContext, projectID, configID 
 	})
 	deleted, ok, err := p.store.DeleteConfig(projectID, configID, audit)
 	if err != nil {
-		return nil, apperror.Internal("database persistence failed: " + err.Error())
+		return nil, model.InternalError("database persistence failed: " + err.Error())
 	}
 	if !ok {
-		return nil, apperror.NotFound(fmt.Sprintf("Config %q not found for project %q", configID, projectID))
+		return nil, model.NotFound(fmt.Sprintf("Config %q not found for project %q", configID, projectID))
 	}
 	return map[string]any{"deleted": true, "config": deleted}, nil
 }
 
-func (p *Processor) ImportConfigs(ctx appctx.RequestContext, projectID string, req model.ImportConfigRequest) (map[string]any, *apperror.AppError) {
+func (p *Processor) ImportConfigs(ctx appctx.RequestContext, projectID string, req model.ImportConfigRequest) (map[string]any, *model.ErrorDetail) {
 	environment := strings.TrimSpace(req.Environment)
 	if environment == "" {
-		return nil, apperror.BadRequest("environment is required")
+		return nil, model.InvalidInput("environment is required")
 	}
 	if !util.CanWriteEnvironment(ctx.Actor, environment) {
-		return nil, apperror.Forbidden(fmt.Sprintf("Role %q cannot modify %q config", ctx.Actor.Role, environment))
+		return nil, model.Forbidden(fmt.Sprintf("Role %q cannot modify %q config", ctx.Actor.Role, environment))
 	}
 	if !util.IsSupportedConfigFormat(req.Format) {
-		return nil, apperror.BadRequest("format must be json, yaml, or properties")
+		return nil, model.InvalidInput("format must be json, yaml, or properties")
 	}
 	if err := p.requireEnvironment(projectID, environment); err != nil {
 		return nil, err
@@ -169,10 +168,10 @@ func (p *Processor) ImportConfigs(ctx appctx.RequestContext, projectID string, r
 
 	parsed, parseErr := util.ParseConfigFile(req.Format, req.Content)
 	if parseErr != nil {
-		return nil, apperror.BadRequest(parseErr.Error())
+		return nil, model.InvalidInput(parseErr.Error())
 	}
 	if len(parsed) == 0 {
-		return nil, apperror.BadRequest("No config entries found in file content")
+		return nil, model.InvalidInput("No config entries found in file content")
 	}
 
 	entries := make([]model.ConfigEntry, 0, len(parsed))
@@ -224,7 +223,7 @@ func (p *Processor) ImportConfigs(ctx appctx.RequestContext, projectID string, r
 		"unchanged":   unchanged,
 	})
 	if err := p.store.SaveConfigBatch(entries, versions, audit); err != nil {
-		return nil, apperror.Internal("database persistence failed: " + err.Error())
+		return nil, model.InternalError("database persistence failed: " + err.Error())
 	}
 
 	return map[string]any{

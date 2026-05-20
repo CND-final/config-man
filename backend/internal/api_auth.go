@@ -1,6 +1,7 @@
 package app
 
 import (
+	"config-man/backend/internal/response"
 	"config-man/backend/model"
 	"net/http"
 
@@ -31,20 +32,20 @@ func (s *Server) getProtectedAuthRoutes() Routes {
 
 func (s *Server) handleLogin(c *gin.Context) {
 	var req model.LoginRequest
-	if err := decodeJSON(c, &req); err != nil {
-		writeError(c, err)
+	if err := response.DecodeJSON(c, &req); err != nil {
+		response.WriteError(c, err)
 		return
 	}
 
 	payload, err := s.processor.Login(req)
 	if err != nil {
-		writeError(c, err)
+		response.WriteError(c, err)
 		return
 	}
-	writeJSON(c, http.StatusOK, payload)
+	response.WriteJSON(c, http.StatusOK, payload)
 }
 
 func (s *Server) handleMe(c *gin.Context) {
 	reqCtx := requestContextFromGin(c)
-	writeJSON(c, http.StatusOK, reqCtx.Actor)
+	response.WriteJSON(c, http.StatusOK, reqCtx.Actor)
 }

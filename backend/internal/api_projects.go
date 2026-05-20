@@ -1,6 +1,7 @@
 package app
 
 import (
+	"config-man/backend/internal/response"
 	"config-man/backend/model"
 	"net/http"
 
@@ -32,32 +33,32 @@ func (s *Server) getProjectRoutes() Routes {
 
 func (s *Server) handleListProjects(c *gin.Context) {
 	reqCtx := requestContextFromGin(c)
-	writeJSON(c, http.StatusOK, s.processor.ListProjects(reqCtx))
+	response.WriteJSON(c, http.StatusOK, s.processor.ListProjects(reqCtx))
 }
 
 func (s *Server) handleCreateProject(c *gin.Context) {
 	reqCtx := requestContextFromGin(c)
 
 	var req model.CreateProjectRequest
-	if err := decodeJSON(c, &req); err != nil {
-		writeError(c, err)
+	if err := response.DecodeJSON(c, &req); err != nil {
+		response.WriteError(c, err)
 		return
 	}
 
 	project, appErr := s.processor.CreateProject(reqCtx, req)
 	if appErr != nil {
-		writeError(c, appErr)
+		response.WriteError(c, appErr)
 		return
 	}
-	writeJSON(c, http.StatusCreated, project)
+	response.WriteJSON(c, http.StatusCreated, project)
 }
 
 func (s *Server) handleGetProject(c *gin.Context) {
 	reqCtx := requestContextFromGin(c)
 	project, appErr := s.processor.GetProject(reqCtx, c.Param("projectId"))
 	if appErr != nil {
-		writeError(c, appErr)
+		response.WriteError(c, appErr)
 		return
 	}
-	writeJSON(c, http.StatusOK, project)
+	response.WriteJSON(c, http.StatusOK, project)
 }

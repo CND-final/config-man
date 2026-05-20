@@ -1,6 +1,7 @@
 package app
 
 import (
+	"config-man/backend/internal/response"
 	"net/http"
 	"strings"
 
@@ -15,7 +16,7 @@ func (s *Server) authMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		reqCtx, err := s.processor.AuthenticateToken(extractToken(c.Request))
 		if err != nil {
-			writeError(c, err)
+			response.WriteError(c, err)
 			c.Abort()
 			return
 		}

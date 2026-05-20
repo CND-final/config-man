@@ -1,6 +1,7 @@
 package app
 
 import (
+	"config-man/backend/internal/response"
 	"config-man/backend/model"
 	"net/http"
 
@@ -46,37 +47,37 @@ func (s *Server) handleListReviewRequests(c *gin.Context) {
 	reqCtx := requestContextFromGin(c)
 	requests, appErr := s.processor.ListReviewRequests(reqCtx, "", reviewFiltersFromContext(c))
 	if appErr != nil {
-		writeError(c, appErr)
+		response.WriteError(c, appErr)
 		return
 	}
-	writeJSON(c, http.StatusOK, requests)
+	response.WriteJSON(c, http.StatusOK, requests)
 }
 
 func (s *Server) handleListProjectReviewRequests(c *gin.Context) {
 	reqCtx := requestContextFromGin(c)
 	requests, appErr := s.processor.ListReviewRequests(reqCtx, c.Param("projectId"), reviewFiltersFromContext(c))
 	if appErr != nil {
-		writeError(c, appErr)
+		response.WriteError(c, appErr)
 		return
 	}
-	writeJSON(c, http.StatusOK, requests)
+	response.WriteJSON(c, http.StatusOK, requests)
 }
 
 func (s *Server) handleCreateReviewRequest(c *gin.Context) {
 	reqCtx := requestContextFromGin(c)
 
 	var req model.CreateReviewRequest
-	if err := decodeJSON(c, &req); err != nil {
-		writeError(c, err)
+	if err := response.DecodeJSON(c, &req); err != nil {
+		response.WriteError(c, err)
 		return
 	}
 
 	request, appErr := s.processor.CreateReviewRequest(reqCtx, req)
 	if appErr != nil {
-		writeError(c, appErr)
+		response.WriteError(c, appErr)
 		return
 	}
-	writeJSON(c, http.StatusCreated, request)
+	response.WriteJSON(c, http.StatusCreated, request)
 }
 
 func (s *Server) handleApproveReviewRequest(c *gin.Context) {
@@ -91,17 +92,17 @@ func (s *Server) handleReviewDecision(c *gin.Context, status string) {
 	reqCtx := requestContextFromGin(c)
 
 	var req model.ReviewDecisionRequest
-	if err := decodeOptionalJSON(c, &req); err != nil {
-		writeError(c, err)
+	if err := response.DecodeOptionalJSON(c, &req); err != nil {
+		response.WriteError(c, err)
 		return
 	}
 
 	request, appErr := s.processor.SetReviewStatus(reqCtx, c.Param("requestId"), status, req.Comment)
 	if appErr != nil {
-		writeError(c, appErr)
+		response.WriteError(c, appErr)
 		return
 	}
-	writeJSON(c, http.StatusOK, request)
+	response.WriteJSON(c, http.StatusOK, request)
 }
 
 func reviewFiltersFromContext(c *gin.Context) model.ReviewFilters {

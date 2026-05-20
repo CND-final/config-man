@@ -1,6 +1,7 @@
 package app
 
 import (
+	"config-man/backend/internal/response"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -19,5 +20,5 @@ func (s *Server) getTemplateRoutes() Routes {
 
 func (s *Server) handleBaseTemplate(c *gin.Context) {
 	reqCtx := requestContextFromGin(c)
-	writeJSON(c, http.StatusOK, s.processor.BaseTemplate(reqCtx))
+	response.WriteJSON(c, http.StatusOK, s.processor.BaseTemplate(reqCtx))
 }

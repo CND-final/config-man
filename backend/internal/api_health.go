@@ -1,6 +1,7 @@
 package app
 
 import (
+	"config-man/backend/internal/response"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -18,5 +19,5 @@ func (s *Server) getHealthRoutes() Routes {
 }
 
 func (s *Server) handleHealth(c *gin.Context) {
-	writeJSON(c, http.StatusOK, gin.H{"status": "ok", "service": "config-man-go"})
+	response.WriteJSON(c, http.StatusOK, gin.H{"status": "ok", "service": "config-man-go"})
 }

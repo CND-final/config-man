@@ -5,12 +5,11 @@ import (
 	"sort"
 	"strings"
 
-	"config-man/backend/internal/apperror"
 	"config-man/backend/model"
 	"config-man/backend/pkg/util"
 )
 
-func (p *Processor) ValidateProject(_ appctx.RequestContext, projectID string, req model.ValidateProjectRequest) (model.ValidationResult, *apperror.AppError) {
+func (p *Processor) ValidateProject(_ appctx.RequestContext, projectID string, req model.ValidateProjectRequest) (model.ValidationResult, *model.ErrorDetail) {
 	project, err := p.requireProject(projectID)
 	if err != nil {
 		return model.ValidationResult{}, err

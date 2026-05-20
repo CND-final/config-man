@@ -8,16 +8,21 @@ Phase 1 Go backend for the multi-project configuration management MVP.
 - PostgreSQL-backed store using `DATABASE_URL`
 - `cmd/`, `internal/`, and `pkg/config` layout inspired by free5GC NF projects
 
-
 ## Structure
 
 ```text
 backend/
 ├── cmd/main.go
 ├── model/
+│   ├── error.go
+│   ├── request.go
+│   ├── project.go
+│   ├── config.go
+│   ├── review.go
+│   ├── template.go
+│   ├── user.go
+│   └── validation.go
 ├── internal/
-│   ├── apperror/
-│   │   └── errors.go
 │   ├── context/
 │   │   ├── context.go
 │   │   └── request_context.go
@@ -32,11 +37,13 @@ backend/
 │   ├── store/
 │   │   ├── store.go
 │   │   └── db_store.go
+│   ├── response/
+│   │   ├── response.go
+│   │   └── error.go
 │   ├── logger/
 │   │   └── logger.go
 │   ├── api_*.go
 │   ├── middleware.go
-│   ├── response.go
 │   ├── routes.go
 │   └── server.go
 └── pkg/
