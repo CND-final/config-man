@@ -49,7 +49,20 @@ func newRouter(s *Server) *gin.Engine {
 	router := gin.New()
 	router.Use(gin.Recovery(), corsMiddleware())
 	s.router = router
-	s.registerRoutes()
+
+	apiGroup := router.Group("/api/v1")
+	applyRoutes(apiGroup, s.getHealthRoutes())
+	applyRoutes(apiGroup, s.getPublicAuthRoutes())
+
+	protectedGroup := apiGroup.Group("")
+	protectedGroup.Use(s.authMiddleware())
+	applyRoutes(protectedGroup, s.getProtectedAuthRoutes())
+	applyRoutes(protectedGroup, s.getTemplateRoutes())
+	applyRoutes(protectedGroup, s.getProjectRoutes())
+	applyRoutes(protectedGroup, s.getConfigRoutes())
+	applyRoutes(protectedGroup, s.getValidationRoutes())
+	applyRoutes(protectedGroup, s.getReviewRoutes())
+
 	return router
 }
 

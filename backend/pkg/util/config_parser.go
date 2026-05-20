@@ -1,23 +1,20 @@
-package processor
+package util
 
 import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 )
 
-type parsedConfigEntry struct {
+type ParsedConfigEntry struct {
 	Key       string
 	Value     string
 	ValueType string
 }
 
-var sensitiveKeyPattern = regexp.MustCompile(`(?i)(password|secret|token|credential|database\.url|db\.url)`)
-
-func parseConfigFile(format, content string) ([]parsedConfigEntry, error) {
+func ParseConfigFile(format, content string) ([]ParsedConfigEntry, error) {
 	switch strings.ToLower(strings.TrimSpace(format)) {
 	case "json":
 		return parseJSONConfig(content)
@@ -30,7 +27,7 @@ func parseConfigFile(format, content string) ([]parsedConfigEntry, error) {
 	}
 }
 
-func parseJSONConfig(content string) ([]parsedConfigEntry, error) {
+func parseJSONConfig(content string) ([]ParsedConfigEntry, error) {
 	decoder := json.NewDecoder(bytes.NewBufferString(content))
 	decoder.UseNumber()
 
@@ -40,9 +37,9 @@ func parseJSONConfig(content string) ([]parsedConfigEntry, error) {
 	}
 
 	flattened := flattenObject(value, "")
-	entries := make([]parsedConfigEntry, 0, len(flattened))
+	entries := make([]ParsedConfigEntry, 0, len(flattened))
 	for _, item := range flattened {
-		entries = append(entries, parsedConfigEntry{
+		entries = append(entries, ParsedConfigEntry{
 			Key:       item.key,
 			Value:     stringifyValue(item.value),
 			ValueType: inferValueType(item.value),
@@ -51,8 +48,8 @@ func parseJSONConfig(content string) ([]parsedConfigEntry, error) {
 	return entries, nil
 }
 
-func parsePropertiesConfig(content string) []parsedConfigEntry {
-	entries := make([]parsedConfigEntry, 0)
+func parsePropertiesConfig(content string) []ParsedConfigEntry {
+	entries := make([]ParsedConfigEntry, 0)
 	for _, rawLine := range strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n") {
 		line := strings.TrimSpace(rawLine)
 		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "!") {
@@ -70,7 +67,7 @@ func parsePropertiesConfig(content string) []parsedConfigEntry {
 		if key == "" {
 			continue
 		}
-		entries = append(entries, parsedConfigEntry{
+		entries = append(entries, ParsedConfigEntry{
 			Key:       key,
 			Value:     value,
 			ValueType: inferValueType(value),
@@ -79,13 +76,13 @@ func parsePropertiesConfig(content string) []parsedConfigEntry {
 	return entries
 }
 
-func parseSimpleYAMLConfig(content string) []parsedConfigEntry {
+func parseSimpleYAMLConfig(content string) []ParsedConfigEntry {
 	type stackItem struct {
 		indent int
 		path   []string
 	}
 
-	entries := make([]parsedConfigEntry, 0)
+	entries := make([]ParsedConfigEntry, 0)
 	stack := []stackItem{{indent: -1, path: nil}}
 
 	for _, rawLine := range strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n") {
@@ -118,7 +115,7 @@ func parseSimpleYAMLConfig(content string) []parsedConfigEntry {
 		}
 
 		value := strings.Trim(rawValue, `'"`)
-		entries = append(entries, parsedConfigEntry{
+		entries = append(entries, ParsedConfigEntry{
 			Key:       strings.Join(path, "."),
 			Value:     value,
 			ValueType: inferValueType(value),
@@ -205,8 +202,4 @@ func inferValueType(value any) string {
 		return "json"
 	}
 	return "string"
-}
-
-func looksSensitive(key string) bool {
-	return sensitiveKeyPattern.MatchString(key)
 }

@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func (s *Server) getAuthRoutes() Routes {
+func (s *Server) getPublicAuthRoutes() Routes {
 	return Routes{
 		{
 			Name:    "Login",
@@ -15,6 +15,11 @@ func (s *Server) getAuthRoutes() Routes {
 			Pattern: "/auth/login",
 			APIFunc: s.handleLogin,
 		},
+	}
+}
+
+func (s *Server) getProtectedAuthRoutes() Routes {
+	return Routes{
 		{
 			Name:    "Me",
 			Method:  http.MethodGet,
@@ -40,10 +45,6 @@ func (s *Server) handleLogin(c *gin.Context) {
 }
 
 func (s *Server) handleMe(c *gin.Context) {
-	user, err := s.processor.RequireUser(c.Request)
-	if err != nil {
-		writeError(c, err)
-		return
-	}
-	writeJSON(c, http.StatusOK, user)
+	reqCtx := requestContextFromGin(c)
+	writeJSON(c, http.StatusOK, reqCtx.Actor)
 }

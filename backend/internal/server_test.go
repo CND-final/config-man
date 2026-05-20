@@ -15,7 +15,7 @@ import (
 
 func newTestHandler() http.Handler {
 	log := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
-	server, err := NewServer(processor.New(log), log, config.Config{})
+	server, err := NewServer(processor.NewInMemory(), log, config.Config{})
 	if err != nil {
 		panic(err)
 	}
@@ -65,6 +65,14 @@ func TestLoginAndMe(t *testing.T) {
 	res = request(t, handler, http.MethodGet, "/api/v1/auth/me", "alice", nil)
 	if res.Code != http.StatusOK {
 		t.Fatalf("me status = %d body=%s", res.Code, res.Body.String())
+	}
+}
+
+func TestProtectedRoutesRequireAuthentication(t *testing.T) {
+	handler := newTestHandler()
+	res := request(t, handler, http.MethodGet, "/api/v1/projects", "", nil)
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("protected route status = %d body=%s", res.Code, res.Body.String())
 	}
 }
 

@@ -9,7 +9,7 @@ Start the Go backend first:
 
 ```bash
 cd ../backend
-go run ./cmd
+make dev
 ```
 
 Then start the Vite frontend:

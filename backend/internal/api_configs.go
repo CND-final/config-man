@@ -44,14 +44,10 @@ func (s *Server) getConfigRoutes() Routes {
 }
 
 func (s *Server) handleListConfigs(c *gin.Context) {
-	user, err := s.processor.RequireUser(c.Request)
-	if err != nil {
-		writeError(c, err)
-		return
-	}
+	reqCtx := requestContextFromGin(c)
 
 	reveal := strings.EqualFold(c.Query("revealSensitive"), "true")
-	payload, appErr := s.processor.ListConfigs(user, c.Param("projectId"), c.Query("env"), reveal)
+	payload, appErr := s.processor.ListConfigs(reqCtx, c.Param("projectId"), c.Query("env"), reveal)
 	if appErr != nil {
 		writeError(c, appErr)
 		return
@@ -60,11 +56,7 @@ func (s *Server) handleListConfigs(c *gin.Context) {
 }
 
 func (s *Server) handleCreateConfig(c *gin.Context) {
-	user, err := s.processor.RequireUser(c.Request)
-	if err != nil {
-		writeError(c, err)
-		return
-	}
+	reqCtx := requestContextFromGin(c)
 
 	var req model.CreateConfigRequest
 	if err := decodeJSON(c, &req); err != nil {
@@ -72,7 +64,7 @@ func (s *Server) handleCreateConfig(c *gin.Context) {
 		return
 	}
 
-	entry, appErr := s.processor.CreateConfig(user, c.Param("projectId"), req)
+	entry, appErr := s.processor.CreateConfig(reqCtx, c.Param("projectId"), req)
 	if appErr != nil {
 		writeError(c, appErr)
 		return
@@ -81,11 +73,7 @@ func (s *Server) handleCreateConfig(c *gin.Context) {
 }
 
 func (s *Server) handleImportConfigs(c *gin.Context) {
-	user, err := s.processor.RequireUser(c.Request)
-	if err != nil {
-		writeError(c, err)
-		return
-	}
+	reqCtx := requestContextFromGin(c)
 
 	var req model.ImportConfigRequest
 	if err := decodeJSON(c, &req); err != nil {
@@ -93,7 +81,7 @@ func (s *Server) handleImportConfigs(c *gin.Context) {
 		return
 	}
 
-	payload, appErr := s.processor.ImportConfigs(user, c.Param("projectId"), req)
+	payload, appErr := s.processor.ImportConfigs(reqCtx, c.Param("projectId"), req)
 	if appErr != nil {
 		writeError(c, appErr)
 		return
@@ -102,11 +90,7 @@ func (s *Server) handleImportConfigs(c *gin.Context) {
 }
 
 func (s *Server) handleUpdateConfig(c *gin.Context) {
-	user, err := s.processor.RequireUser(c.Request)
-	if err != nil {
-		writeError(c, err)
-		return
-	}
+	reqCtx := requestContextFromGin(c)
 
 	var req model.UpdateConfigRequest
 	if err := decodeJSON(c, &req); err != nil {
@@ -114,7 +98,7 @@ func (s *Server) handleUpdateConfig(c *gin.Context) {
 		return
 	}
 
-	entry, appErr := s.processor.UpdateConfig(user, c.Param("projectId"), c.Param("configId"), req)
+	entry, appErr := s.processor.UpdateConfig(reqCtx, c.Param("projectId"), c.Param("configId"), req)
 	if appErr != nil {
 		writeError(c, appErr)
 		return
@@ -123,13 +107,9 @@ func (s *Server) handleUpdateConfig(c *gin.Context) {
 }
 
 func (s *Server) handleDeleteConfig(c *gin.Context) {
-	user, err := s.processor.RequireUser(c.Request)
-	if err != nil {
-		writeError(c, err)
-		return
-	}
+	reqCtx := requestContextFromGin(c)
 
-	payload, appErr := s.processor.DeleteConfig(user, c.Param("projectId"), c.Param("configId"))
+	payload, appErr := s.processor.DeleteConfig(reqCtx, c.Param("projectId"), c.Param("configId"))
 	if appErr != nil {
 		writeError(c, appErr)
 		return

@@ -27,20 +27,3 @@ func applyRoutes(group *gin.RouterGroup, routes []Route) {
 		}
 	}
 }
-
-func (s *Server) registerRoutes() {
-	apiGroup := s.router.Group("/api/v1")
-	applyRoutes(apiGroup, s.getRoutes())
-}
-
-func (s *Server) getRoutes() Routes {
-	routes := Routes{}
-	routes = append(routes, s.getHealthRoutes()...)
-	routes = append(routes, s.getAuthRoutes()...)
-	routes = append(routes, s.getTemplateRoutes()...)
-	routes = append(routes, s.getProjectRoutes()...)
-	routes = append(routes, s.getConfigRoutes()...)
-	routes = append(routes, s.getValidationRoutes()...)
-	routes = append(routes, s.getReviewRoutes()...)
-	return routes
-}

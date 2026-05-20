@@ -1,51 +1,41 @@
-package processor
+package store
 
 import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 
 	"config-man/backend/model"
-
-	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-func NewStoreWithDatabase(ctx context.Context, databaseURL string) (*Store, error) {
-	db, err := sql.Open("pgx", databaseURL)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := db.PingContext(ctx); err != nil {
-		db.Close()
-		return nil, err
+func NewStoreWithDB(ctx context.Context, db *sql.DB) (*Store, error) {
+	if db == nil {
+		return nil, fmt.Errorf("database connection is required")
 	}
 
 	store := newStoreBase(db)
 	if err := store.initSchema(ctx); err != nil {
-		db.Close()
 		return nil, err
 	}
 	if err := store.loadSnapshot(ctx); err != nil {
-		db.Close()
 		return nil, err
 	}
 	if len(store.projects) == 0 {
 		store.seedDemoData()
 		if err := store.persistSnapshotLocked(ctx); err != nil {
-			db.Close()
 			return nil, err
 		}
 	}
 	return store, nil
 }
 
-func (s *Store) persistLocked() *AppError {
+func (s *Store) persistLocked() error {
 	if s.db == nil {
 		return nil
 	}
 	if err := s.persistSnapshotLocked(context.Background()); err != nil {
-		return internalError("database persistence failed: " + err.Error())
+		return err
 	}
 	return nil
 }

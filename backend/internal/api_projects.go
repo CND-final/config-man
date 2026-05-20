@@ -4,8 +4,6 @@ import (
 	"config-man/backend/model"
 	"net/http"
 
-	"config-man/backend/internal/processor"
-
 	"github.com/gin-gonic/gin"
 )
 
@@ -33,23 +31,12 @@ func (s *Server) getProjectRoutes() Routes {
 }
 
 func (s *Server) handleListProjects(c *gin.Context) {
-	if _, err := s.processor.RequireUser(c.Request); err != nil {
-		writeError(c, err)
-		return
-	}
-	writeJSON(c, http.StatusOK, s.processor.ListProjects())
+	reqCtx := requestContextFromGin(c)
+	writeJSON(c, http.StatusOK, s.processor.ListProjects(reqCtx))
 }
 
 func (s *Server) handleCreateProject(c *gin.Context) {
-	user, err := s.processor.RequireUser(c.Request)
-	if err != nil {
-		writeError(c, err)
-		return
-	}
-	if user.Role != model.RoleSystemAdmin && user.Role != model.RoleProjectAdmin {
-		writeError(c, &processor.AppError{Status: http.StatusForbidden, Message: "Only system_admin or project_admin can register projects"})
-		return
-	}
+	reqCtx := requestContextFromGin(c)
 
 	var req model.CreateProjectRequest
 	if err := decodeJSON(c, &req); err != nil {
@@ -57,7 +44,7 @@ func (s *Server) handleCreateProject(c *gin.Context) {
 		return
 	}
 
-	project, appErr := s.processor.CreateProject(req, user.Name)
+	project, appErr := s.processor.CreateProject(reqCtx, req)
 	if appErr != nil {
 		writeError(c, appErr)
 		return
@@ -66,11 +53,8 @@ func (s *Server) handleCreateProject(c *gin.Context) {
 }
 
 func (s *Server) handleGetProject(c *gin.Context) {
-	if _, err := s.processor.RequireUser(c.Request); err != nil {
-		writeError(c, err)
-		return
-	}
-	project, appErr := s.processor.GetProject(c.Param("projectId"))
+	reqCtx := requestContextFromGin(c)
+	project, appErr := s.processor.GetProject(reqCtx, c.Param("projectId"))
 	if appErr != nil {
 		writeError(c, appErr)
 		return

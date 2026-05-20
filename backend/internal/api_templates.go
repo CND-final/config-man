@@ -18,9 +18,6 @@ func (s *Server) getTemplateRoutes() Routes {
 }
 
 func (s *Server) handleBaseTemplate(c *gin.Context) {
-	if _, err := s.processor.RequireUser(c.Request); err != nil {
-		writeError(c, err)
-		return
-	}
-	writeJSON(c, http.StatusOK, s.processor.BaseTemplate())
+	reqCtx := requestContextFromGin(c)
+	writeJSON(c, http.StatusOK, s.processor.BaseTemplate(reqCtx))
 }

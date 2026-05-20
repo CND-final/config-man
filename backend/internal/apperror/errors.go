@@ -1,4 +1,4 @@
-package processor
+package apperror
 
 import "net/http"
 
@@ -11,26 +11,26 @@ func (e *AppError) Error() string {
 	return e.Message
 }
 
-func badRequest(message string) *AppError {
+func BadRequest(message string) *AppError {
 	return &AppError{Status: http.StatusBadRequest, Message: message}
 }
 
-func unauthorized(message string) *AppError {
+func Unauthorized(message string) *AppError {
 	return &AppError{Status: http.StatusUnauthorized, Message: message}
 }
 
-func forbidden(message string) *AppError {
+func Forbidden(message string) *AppError {
 	return &AppError{Status: http.StatusForbidden, Message: message}
 }
 
-func notFound(message string) *AppError {
+func NotFound(message string) *AppError {
 	return &AppError{Status: http.StatusNotFound, Message: message}
 }
 
-func conflict(message string) *AppError {
+func Conflict(message string) *AppError {
 	return &AppError{Status: http.StatusConflict, Message: message}
 }
 
-func internalError(message string) *AppError {
+func Internal(message string) *AppError {
 	return &AppError{Status: http.StatusInternalServerError, Message: message}
 }

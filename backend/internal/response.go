@@ -5,7 +5,7 @@ import (
 	"io"
 	"net/http"
 
-	"config-man/backend/internal/processor"
+	"config-man/backend/internal/apperror"
 
 	"github.com/gin-gonic/gin"
 )
@@ -15,7 +15,7 @@ func writeJSON(c *gin.Context, status int, payload any) {
 }
 
 func writeError(c *gin.Context, err error) {
-	var appErr *processor.AppError
+	var appErr *apperror.AppError
 	if errors.As(err, &appErr) {
 		writeJSON(c, appErr.Status, gin.H{"message": appErr.Message})
 		return
@@ -23,14 +23,14 @@ func writeError(c *gin.Context, err error) {
 	writeJSON(c, http.StatusInternalServerError, gin.H{"message": err.Error()})
 }
 
-func decodeJSON(c *gin.Context, target any) *processor.AppError {
+func decodeJSON(c *gin.Context, target any) *apperror.AppError {
 	if err := c.ShouldBindJSON(target); err != nil {
-		return &processor.AppError{Status: http.StatusBadRequest, Message: "Invalid JSON body: " + err.Error()}
+		return &apperror.AppError{Status: http.StatusBadRequest, Message: "Invalid JSON body: " + err.Error()}
 	}
 	return nil
 }
 
-func decodeOptionalJSON(c *gin.Context, target any) *processor.AppError {
+func decodeOptionalJSON(c *gin.Context, target any) *apperror.AppError {
 	if c.Request.Body == nil {
 		return nil
 	}
@@ -38,7 +38,7 @@ func decodeOptionalJSON(c *gin.Context, target any) *processor.AppError {
 		if errors.Is(err, io.EOF) {
 			return nil
 		}
-		return &processor.AppError{Status: http.StatusBadRequest, Message: "Invalid JSON body: " + err.Error()}
+		return &apperror.AppError{Status: http.StatusBadRequest, Message: "Invalid JSON body: " + err.Error()}
 	}
 	return nil
 }

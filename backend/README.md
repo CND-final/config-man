@@ -5,10 +5,9 @@ Phase 1 Go backend for the multi-project configuration management MVP.
 ## Stack
 
 - Gin HTTP server
-- In-memory seeded store for the first rewrite
+- PostgreSQL-backed store using `DATABASE_URL`
 - `cmd/`, `internal/`, and `pkg/config` layout inspired by free5GC NF projects
 
-This directory is now Go-only; the previous NestJS/Prisma backend has been removed.
 
 ## Structure
 
@@ -16,56 +15,57 @@ This directory is now Go-only; the previous NestJS/Prisma backend has been remov
 backend/
 ├── cmd/main.go
 ├── model/
-│   ├── request.go
-│   ├── user.go
-│   ├── project.go
-│   ├── config.go
-│   ├── review.go
-│   ├── template.go
-│   └── validation.go
 ├── internal/
+│   ├── apperror/
+│   │   └── errors.go
+│   ├── context/
+│   │   ├── context.go
+│   │   └── request_context.go
 │   ├── processor/
+│   │   ├── processor.go
 │   │   ├── service.go
+│   │   ├── project.go
+│   │   ├── config.go
+│   │   ├── review_request.go
+│   │   ├── validation.go
+│   │   └── audit.go
+│   ├── store/
 │   │   ├── store.go
-│   │   ├── permissions.go
-│   │   ├── config_parser.go
-│   │   └── validation.go
+│   │   └── db_store.go
 │   ├── logger/
 │   │   └── logger.go
-│   ├── api_auth.go
-│   ├── api_configs.go
-│   ├── api_health.go
-│   ├── api_projects.go
-│   ├── api_reviews.go
-│   ├── api_templates.go
-│   ├── api_validation.go
+│   ├── api_*.go
+│   ├── middleware.go
 │   ├── response.go
 │   ├── routes.go
 │   └── server.go
-└── pkg/config/
-    ├── config.go
-    └── factory.go
+└── pkg/
+    ├── config/
+    └── util/
 ```
 
 ## Local Development
 
 ```bash
 cd backend
-go run ./cmd
+make dev
 ```
 
 API base path: `http://localhost:3000/api/v1`
 
 Environment variables:
 
+- `DATABASE_URL`, required. Example: `postgres://config_man:config_man@localhost:5432/config_man?sslmode=disable`
 - `CONFIG_MAN_HOST`, default `0.0.0.0`
 - `CONFIG_MAN_PORT`, default `3000`
+
+`make run` and `make dev` automatically create `.env` from `.env.example` when needed and export the variables for `go run ./cmd`.
 
 ## Test
 
 ```bash
 cd backend
-go test ./...
+make test
 ```
 
 The tests cover login, project registration, masked sensitive configs, prod write permission, JSON config import, review request approval, and validation.

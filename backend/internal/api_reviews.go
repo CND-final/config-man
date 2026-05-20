@@ -43,11 +43,8 @@ func (s *Server) getReviewRoutes() Routes {
 }
 
 func (s *Server) handleListReviewRequests(c *gin.Context) {
-	if _, err := s.processor.RequireUser(c.Request); err != nil {
-		writeError(c, err)
-		return
-	}
-	requests, appErr := s.processor.ListReviewRequests("", reviewFiltersFromContext(c))
+	reqCtx := requestContextFromGin(c)
+	requests, appErr := s.processor.ListReviewRequests(reqCtx, "", reviewFiltersFromContext(c))
 	if appErr != nil {
 		writeError(c, appErr)
 		return
@@ -56,11 +53,8 @@ func (s *Server) handleListReviewRequests(c *gin.Context) {
 }
 
 func (s *Server) handleListProjectReviewRequests(c *gin.Context) {
-	if _, err := s.processor.RequireUser(c.Request); err != nil {
-		writeError(c, err)
-		return
-	}
-	requests, appErr := s.processor.ListReviewRequests(c.Param("projectId"), reviewFiltersFromContext(c))
+	reqCtx := requestContextFromGin(c)
+	requests, appErr := s.processor.ListReviewRequests(reqCtx, c.Param("projectId"), reviewFiltersFromContext(c))
 	if appErr != nil {
 		writeError(c, appErr)
 		return
@@ -69,11 +63,7 @@ func (s *Server) handleListProjectReviewRequests(c *gin.Context) {
 }
 
 func (s *Server) handleCreateReviewRequest(c *gin.Context) {
-	user, err := s.processor.RequireUser(c.Request)
-	if err != nil {
-		writeError(c, err)
-		return
-	}
+	reqCtx := requestContextFromGin(c)
 
 	var req model.CreateReviewRequest
 	if err := decodeJSON(c, &req); err != nil {
@@ -81,7 +71,7 @@ func (s *Server) handleCreateReviewRequest(c *gin.Context) {
 		return
 	}
 
-	request, appErr := s.processor.CreateReviewRequest(user, req)
+	request, appErr := s.processor.CreateReviewRequest(reqCtx, req)
 	if appErr != nil {
 		writeError(c, appErr)
 		return
@@ -98,11 +88,7 @@ func (s *Server) handleRejectReviewRequest(c *gin.Context) {
 }
 
 func (s *Server) handleReviewDecision(c *gin.Context, status string) {
-	user, err := s.processor.RequireUser(c.Request)
-	if err != nil {
-		writeError(c, err)
-		return
-	}
+	reqCtx := requestContextFromGin(c)
 
 	var req model.ReviewDecisionRequest
 	if err := decodeOptionalJSON(c, &req); err != nil {
@@ -110,7 +96,7 @@ func (s *Server) handleReviewDecision(c *gin.Context, status string) {
 		return
 	}
 
-	request, appErr := s.processor.SetReviewStatus(user, c.Param("requestId"), status, req.Comment)
+	request, appErr := s.processor.SetReviewStatus(reqCtx, c.Param("requestId"), status, req.Comment)
 	if appErr != nil {
 		writeError(c, appErr)
 		return

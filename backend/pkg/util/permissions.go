@@ -1,4 +1,4 @@
-package processor
+package util
 
 import (
 	"strings"
@@ -6,31 +6,33 @@ import (
 	"config-man/backend/model"
 )
 
-const demoPassword = "password"
+func CanRegisterProject(user model.User) bool {
+	return user.Role == model.RoleSystemAdmin || user.Role == model.RoleProjectAdmin
+}
 
-func canWriteEnvironment(user model.User, environment string) bool {
+func CanWriteEnvironment(user model.User, environment string) bool {
 	if user.Role == model.RoleSystemAdmin || user.Role == model.RoleProjectAdmin {
 		return true
 	}
 	return user.Role == model.RoleDeveloper && strings.ToLower(environment) != "prod"
 }
 
-func canRevealSensitive(user model.User) bool {
+func CanRevealSensitive(user model.User) bool {
 	return user.Role == model.RoleSystemAdmin || user.Role == model.RoleProjectAdmin || user.Role == model.RoleDeveloper
 }
 
-func canCreateReview(user model.User) bool {
+func CanCreateReview(user model.User) bool {
 	return user.Role == model.RoleSystemAdmin ||
 		user.Role == model.RoleProjectAdmin ||
 		user.Role == model.RoleDeveloper ||
 		user.Role == model.RoleReviewer
 }
 
-func canReview(user model.User) bool {
+func CanReview(user model.User) bool {
 	return user.Role == model.RoleSystemAdmin || user.Role == model.RoleReviewer
 }
 
-func normalizeValueType(valueType string) string {
+func NormalizeValueType(valueType string) string {
 	switch strings.ToLower(strings.TrimSpace(valueType)) {
 	case "", "string":
 		return "string"
@@ -45,7 +47,7 @@ func normalizeValueType(valueType string) string {
 	}
 }
 
-func isSupportedConfigFormat(format string) bool {
+func IsSupportedConfigFormat(format string) bool {
 	switch strings.ToLower(strings.TrimSpace(format)) {
 	case "properties", "json", "yaml":
 		return true

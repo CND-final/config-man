@@ -19,10 +19,7 @@ func (s *Server) getValidationRoutes() Routes {
 }
 
 func (s *Server) handleValidateProject(c *gin.Context) {
-	if _, err := s.processor.RequireUser(c.Request); err != nil {
-		writeError(c, err)
-		return
-	}
+	reqCtx := requestContextFromGin(c)
 
 	var req model.ValidateProjectRequest
 	if err := decodeOptionalJSON(c, &req); err != nil {
@@ -30,7 +27,7 @@ func (s *Server) handleValidateProject(c *gin.Context) {
 		return
 	}
 
-	result, appErr := s.processor.ValidateProject(c.Param("projectId"), req)
+	result, appErr := s.processor.ValidateProject(reqCtx, c.Param("projectId"), req)
 	if appErr != nil {
 		writeError(c, appErr)
 		return

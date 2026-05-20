@@ -1,26 +1,15 @@
 package processor
 
-import (
-	"context"
-	"log/slog"
-)
+import "config-man/backend/internal/store"
 
 type Processor struct {
-	store *Store
-	log   *slog.Logger
+	store *store.Store
 }
 
-func New(log *slog.Logger) *Processor {
-	return &Processor{
-		store: NewStore(),
-		log:   log,
-	}
+func New(dataStore *store.Store) *Processor {
+	return &Processor{store: dataStore}
 }
 
-func NewWithDatabase(ctx context.Context, log *slog.Logger, databaseURL string) (*Processor, error) {
-	store, err := NewStoreWithDatabase(ctx, databaseURL)
-	if err != nil {
-		return nil, err
-	}
-	return &Processor{store: store, log: log}, nil
+func NewInMemory() *Processor {
+	return New(store.NewStore())
 }

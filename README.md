@@ -17,7 +17,7 @@ Start the Go backend on `3000`:
 
 ```bash
 cd backend
-go run ./cmd
+make dev
 ```
 
 Start the frontend on `5173`:
@@ -36,7 +36,7 @@ The frontend calls relative paths such as `/api/v1/auth/login`; Vite proxies `/a
 
 ```bash
 cd backend
-go test ./...
+make test
 ```
 
 ## Demo Login
@@ -63,6 +63,6 @@ Supported formats:
 
 ## Notes
 
-- The Go backend currently uses an in-memory seeded store so the first rewrite is easy to run and demo.
+- The Go backend requires `DATABASE_URL` at startup and persists data to PostgreSQL. Use `make dev` from `backend/` to load `.env` automatically.
 - The API keeps the existing `/api/v1` contract used by the frontend.
 - `cicd-lab/` is a separate assignment project and is not used by config-man.

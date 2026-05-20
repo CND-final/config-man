@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -10,6 +9,7 @@ import (
 	"syscall"
 
 	app "config-man/backend/internal"
+	appctx "config-man/backend/internal/context"
 	"config-man/backend/internal/logger"
 	"config-man/backend/internal/processor"
 	"config-man/backend/pkg/config"
@@ -22,12 +22,18 @@ func main() {
 	traceCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	proc, err := newProcessor(traceCtx, cfg)
+	runtime, err := appctx.NewConfigManContext(traceCtx, cfg)
 	if err != nil {
-		log.Error("initialize processor failed", slog.Any("error", err))
+		log.Error("initialize config-man context failed", slog.Any("error", err))
 		os.Exit(1)
 	}
+	defer func() {
+		if err := runtime.Close(); err != nil {
+			log.Error("close config-man context failed", slog.Any("error", err))
+		}
+	}()
 
+	proc := processor.New(runtime.Store)
 	server, err := app.NewServer(proc, logger.APILog, cfg)
 	if err != nil {
 		log.Error("initialize config-man server failed", slog.Any("error", err))
@@ -47,13 +53,4 @@ func main() {
 	cancel()
 	server.Stop()
 	wg.Wait()
-}
-
-func newProcessor(ctx context.Context, cfg config.Config) (*processor.Processor, error) {
-	if cfg.DatabaseURL == "" {
-		return nil, fmt.Errorf("DATABASE_URL is required for backend startup")
-	}
-
-	logger.DBLog.Info("DATABASE_URL detected; using PostgreSQL store")
-	return processor.NewWithDatabase(ctx, logger.ProcessorLog, cfg.DatabaseURL)
 }
