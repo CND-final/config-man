@@ -150,7 +150,6 @@ jobs:
             echo "NPM_INSTALL_CMD=install" >> "$GITHUB_ENV"
           fi
 
-      # Fix: Setup the pnpm CLI tool BEFORE setup-node tries to configure its cache
       - name: Setup pnpm
         if: env.PKG_MANAGER == 'pnpm'
         uses: pnpm/action-setup@v4
@@ -176,11 +175,28 @@ jobs:
           esac
 
       - name: Check formatting with Prettier
-        continue-on-error: true
-        run: npx --yes prettier --check .
+        # Removed continue-on-error so the pipeline correctly flags a failure
+        run: npx --yes prettier --check . 2>&1 | tee prettier-output.txt
+
+      - name: Publish Prettier Summary
+        if: always()
+        run: |
+          echo "### Prettier Formatting Report" >> $GITHUB_STEP_SUMMARY
+          
+          if grep -q -E "\[warn\]|Error" prettier-output.txt; then
+            echo "❌ **Status:** Failed" >> $GITHUB_STEP_SUMMARY
+            echo "#### Unformatted Files" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`text" >> $GITHUB_STEP_SUMMARY
+            # Extracts just the file names that triggered warnings, ignoring the extra instructional text
+            grep "\[warn\]" prettier-output.txt | grep -v "Code style issues found" >> $GITHUB_STEP_SUMMARY || true
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ **Status:** Passed" >> $GITHUB_STEP_SUMMARY
+          fi
 
       - name: Run frontend tests
-        # Force Node test runners to output clean, raw text without ANSI color codes
+        # This ensures tests still run even if Prettier failed the job above
+        if: success() || failure()
         env:
           FORCE_COLOR: 0
           NO_COLOR: true
@@ -206,14 +222,15 @@ jobs:
             
             echo "#### Test Framework Output" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`text" >> $GITHUB_STEP_SUMMARY
-            # Target ONLY the vitest dashboard lines, bypassing background logs/stack traces
-            grep -E "Test Files|Tests|Duration|Snapshots|✓|×" test-output.txt >> $GITHUB_STEP_SUMMARY || true
+            grep -E "Test Files|Tests|Duration|Snapshots|✓|$(printf '\u00d7')" test-output.txt >> $GITHUB_STEP_SUMMARY || true
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           else
             echo "ℹ️ No tests were executed (test script not present in package.json or step was skipped)." >> $GITHUB_STEP_SUMMARY
           fi
 
       - name: Build production bundle
+        # Ensures the build still runs to check for TS/bundling errors even if formatting/tests fail
+        if: success() || failure()
         run: |
           case "$PKG_MANAGER" in
             pnpm) pnpm run build ;;
