@@ -374,13 +374,13 @@ export function renderConfigRow(configId) {
 
 function renderConfigRowMarkup(config) {
   const revealKey = `${config.projectId}:${config.environment}:${config.key}`;
-  const valueIsMasked =
-    config.isSensitive && !state.revealedKeys.has(revealKey);
+  const valueIsRevealed = config.isSensitive && state.revealedKeys.has(revealKey);
+  const valueIsMasked = config.isSensitive && !valueIsRevealed;
   const visibleValue = valueIsMasked ? "******" : config.value;
   return `
     <tr data-config-row="${escapeHtml(config.id)}">
       ${renderEditableConfigCell(config, "key", config.key, "key-cell")}
-      ${renderEditableConfigCell(config, "value", visibleValue, "value-cell", valueIsMasked, revealKey)}
+      ${renderEditableConfigCell(config, "value", visibleValue, "value-cell", valueIsMasked, revealKey, valueIsRevealed)}
       <td>${escapeHtml(config.updated)}</td>
     </tr>
   `;
@@ -393,6 +393,7 @@ function renderEditableConfigCell(
   className,
   valueIsMasked = false,
   revealKey = "",
+  valueIsRevealed = false,
 ) {
   const isEditing =
     state.inlineEdit?.configId === config.id &&
@@ -422,16 +423,31 @@ function renderEditableConfigCell(
     <td class="${className} editable-cell">
       <span class="editable-value">${escapeHtml(value)}</span>
       <span class="cell-tools">
-        ${
-          valueIsMasked
-            ? `<button class="cell-text-button" type="button" data-reveal="${escapeHtml(revealKey)}">Reveal</button>`
-            : ""
-        }
-        <button class="cell-edit-button" type="button" data-start-inline-edit="${escapeHtml(config.id)}" data-field="${field}" aria-label="${label}">
+        ${renderRevealToggle(config, valueIsMasked, valueIsRevealed, revealKey)}
+        <button class="cell-icon-button cell-edit-button" type="button" data-start-inline-edit="${escapeHtml(config.id)}" data-field="${field}" aria-label="${label}" title="${label}">
           <span class="pencil-icon" aria-hidden="true"></span>
         </button>
       </span>
     </td>
+  `;
+}
+
+function renderRevealToggle(config, valueIsMasked, valueIsRevealed, revealKey) {
+  if (!config.isSensitive || !revealKey) return "";
+
+  const label = valueIsMasked ? "Reveal sensitive value" : "Hide sensitive value";
+  const iconClass = valueIsMasked ? "eye-icon eye-icon-off" : "eye-icon";
+  return `
+    <button
+      class="cell-icon-button reveal-toggle"
+      type="button"
+      data-reveal="${escapeHtml(revealKey)}"
+      aria-label="${label}"
+      aria-pressed="${valueIsRevealed ? "true" : "false"}"
+      title="${label}"
+    >
+      <span class="${iconClass}" aria-hidden="true"><span></span></span>
+    </button>
   `;
 }
 

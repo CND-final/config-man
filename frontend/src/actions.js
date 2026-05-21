@@ -726,10 +726,10 @@ export async function handleReviewDecision(id, action) {
 export async function toggleSensitiveReveal(revealKey) {
   if (state.revealedKeys.has(revealKey)) {
     state.revealedKeys.delete(revealKey);
-    await loadConfigsAndHistory();
   } else {
     state.revealedKeys.add(revealKey);
-    await loadConfigsAndHistory(true);
   }
+
+  await loadConfigsAndHistory(state.revealedKeys.size > 0);
   renderConfigRows();
 }
