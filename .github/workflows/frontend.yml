@@ -96,7 +96,10 @@ jobs:
         env:
           FORCE_COLOR: 0
           NO_COLOR: true
-        run: npx --yes prettier --check . 2>&1 | tee prettier-output.txt
+        run: |
+          # Fix: Force Bash to fail the entire step if any command in a pipe fails
+          set -o pipefail
+          npx --yes prettier --check . 2>&1 | tee prettier-output.txt
 
       - name: Publish Frontend Formatting Summary
         if: always()
