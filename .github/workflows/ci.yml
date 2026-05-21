@@ -59,35 +59,42 @@ jobs:
 
       - name: Prepare Environment & Integration Database
         run: |
-          # 1. Create the .env file from your example template
           make env
-          
-          # 2. Inject the .env variables (DATABASE_URL, etc.) directly into the GitHub runner context
           cat .env >> $GITHUB_ENV
-          
-          # 3. Spin up PostgreSQL using your exact docker-compose.yml and wait for it to be ready
           make db-up
 
-      - name: Check gofmt
+      - name: Check formatting with gofmt
         run: |
-          unformatted=$(gofmt -l .)
-          if [ -n "$unformatted" ]; then
-            echo "gofmt found unformatted files:"
-            echo "$unformatted"
+          gofmt -l . > gofmt-output.txt
+          # If the file is not empty, gofmt found issues. Exit 1 to fail the step.
+          if [ -s gofmt-output.txt ]; then
             exit 1
           fi
 
-      - name: Run go vet
-        run: go vet ./...
+      - name: Publish Backend Formatting Summary
+        if: always()
+        run: |
+          echo "### 🛠️ Backend Formatting Report" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -s gofmt-output.txt ]; then
+            echo "❌ **Status:** Failed" >> $GITHUB_STEP_SUMMARY
+            echo "#### Unformatted Files" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`text" >> $GITHUB_STEP_SUMMARY
+            cat gofmt-output.txt >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ **Status:** Passed" >> $GITHUB_STEP_SUMMARY
+          fi
 
       - name: Run unit & integration tests
-        # The Go tests will now automatically read the DATABASE_URL from $GITHUB_ENV
+        # Ensures tests still run even if gofmt failed the job above
+        if: success() || failure()
         run: go test -v -race ./... | tee test-output.txt
 
       - name: Publish Backend Test Summary
         if: always()
         run: |
-          echo "### Backend Test Report" >> $GITHUB_STEP_SUMMARY
+          echo "### 🐹 Backend Test Report" >> $GITHUB_STEP_SUMMARY
           
           if grep -q "FAIL" test-output.txt; then
             echo "❌ **Status:** Failed" >> $GITHUB_STEP_SUMMARY
@@ -108,7 +115,10 @@ jobs:
           fi
 
       - name: Build cmd targets
+        # Ensures the build verification runs even if formatting/tests fail
+        if: success() || failure()
         run: go build -o /tmp/config-man ./cmd/...
+
 
   # 3. Vite Frontend Job (Only runs if frontend changes)
   frontend-ci:
@@ -175,19 +185,17 @@ jobs:
           esac
 
       - name: Check formatting with Prettier
-        # Removed continue-on-error so the pipeline correctly flags a failure
         run: npx --yes prettier --check . 2>&1 | tee prettier-output.txt
 
-      - name: Publish Prettier Summary
+      - name: Publish Frontend Formatting Summary
         if: always()
         run: |
-          echo "### Prettier Formatting Report" >> $GITHUB_STEP_SUMMARY
+          echo "### 💅 Frontend Formatting Report" >> $GITHUB_STEP_SUMMARY
           
           if grep -q -E "\[warn\]|Error" prettier-output.txt; then
             echo "❌ **Status:** Failed" >> $GITHUB_STEP_SUMMARY
             echo "#### Unformatted Files" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`text" >> $GITHUB_STEP_SUMMARY
-            # Extracts just the file names that triggered warnings, ignoring the extra instructional text
             grep "\[warn\]" prettier-output.txt | grep -v "Code style issues found" >> $GITHUB_STEP_SUMMARY || true
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           else
@@ -195,7 +203,6 @@ jobs:
           fi
 
       - name: Run frontend tests
-        # This ensures tests still run even if Prettier failed the job above
         if: success() || failure()
         env:
           FORCE_COLOR: 0
@@ -211,7 +218,7 @@ jobs:
       - name: Publish Frontend Test Summary
         if: always()
         run: |
-          echo "### Frontend Test Report" >> $GITHUB_STEP_SUMMARY
+          echo "### 🌐 Frontend Test Report" >> $GITHUB_STEP_SUMMARY
           
           if [ -s test-output.txt ]; then
             if grep -q -i "fail" test-output.txt; then
@@ -229,7 +236,6 @@ jobs:
           fi
 
       - name: Build production bundle
-        # Ensures the build still runs to check for TS/bundling errors even if formatting/tests fail
         if: success() || failure()
         run: |
           case "$PKG_MANAGER" in
