@@ -1,24 +1,24 @@
 export function escapeHtml(value) {
-  return String(value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 export function statusClass(status) {
   const normalized = String(status).toLowerCase();
-  if (['approved'].includes(normalized)) {
-    return 'success';
+  if (["approved"].includes(normalized)) {
+    return "success";
   }
-  if (['pending', 'warning'].includes(normalized)) {
-    return 'warning';
+  if (["pending", "warning"].includes(normalized)) {
+    return "warning";
   }
-  if (['blocked', 'failed', 'danger', 'rejected'].includes(normalized)) {
-    return 'danger';
+  if (["blocked", "failed", "danger", "rejected"].includes(normalized)) {
+    return "danger";
   }
-  return 'neutral';
+  return "neutral";
 }
 
 export function initials(name) {
@@ -26,29 +26,30 @@ export function initials(name) {
     .split(/\s+/)
     .filter(Boolean)
     .map((part) => part[0])
-    .join('')
+    .join("")
     .slice(0, 2)
     .toUpperCase();
 }
 
 export function formatDateTime(value) {
-  if (!value) return 'unknown time';
+  if (!value) return "unknown time";
   return new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short'
+    dateStyle: "medium",
+    timeStyle: "short",
   }).format(new Date(value));
 }
 
 export function parseEnvironmentInput(value) {
   return value
-    .split(',')
+    .split(",")
     .map((environment) => environment.trim().toLowerCase())
     .filter(Boolean);
 }
 
 export function isProdSensitiveEdit(config) {
   return (
-    config.environment === 'prod' &&
-    (config.isSensitive || /(database|db).*(password|url)|password|secret|token/i.test(config.key))
+    config.environment === "prod" &&
+    (config.isSensitive ||
+      /(database|db).*(password|url)|password|secret|token/i.test(config.key))
   );
 }

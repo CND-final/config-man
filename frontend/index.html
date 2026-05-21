@@ -45,7 +45,11 @@
         </div>
         <label class="global-search">
           <span>Search</span>
-          <input id="globalSearch" type="search" placeholder="Project, key, owner" />
+          <input
+            id="globalSearch"
+            type="search"
+            placeholder="Project, key, owner"
+          />
         </label>
         <div class="topbar-actions">
           <button class="icon-button" type="button" aria-label="Notifications">
@@ -70,7 +74,12 @@
               <p class="eyebrow">Dashboard</p>
               <h1>Configuration Control Center</h1>
             </div>
-            <button class="primary-action" type="button" data-jump="projects" data-open-project-form="true">
+            <button
+              class="primary-action"
+              type="button"
+              data-jump="projects"
+              data-open-project-form="true"
+            >
               New Project
             </button>
           </div>
@@ -116,7 +125,11 @@
               <p class="eyebrow">Templates</p>
               <h1>Template Library</h1>
             </div>
-            <button id="openTemplateCreate" class="primary-action" type="button">
+            <button
+              id="openTemplateCreate"
+              class="primary-action"
+              type="button"
+            >
               New Template
             </button>
           </div>
@@ -132,16 +145,29 @@
               </button>
               <p class="eyebrow">Config Editor</p>
               <h1 id="configTitle">Project Config</h1>
-              <p id="configVersionLabel" class="project-meta config-version-label"></p>
+              <p
+                id="configVersionLabel"
+                class="project-meta config-version-label"
+              ></p>
             </div>
             <div class="page-actions">
-              <button id="openImportConfig" class="secondary-action" type="button">
+              <button
+                id="openImportConfig"
+                class="secondary-action"
+                type="button"
+              >
                 Import Config
               </button>
               <button id="exportConfig" class="secondary-action" type="button">
                 Export Config
               </button>
-              <button id="openConfigHistory" class="icon-button history-button" type="button" aria-label="Open config history" title="Config history">
+              <button
+                id="openConfigHistory"
+                class="icon-button history-button"
+                type="button"
+                aria-label="Open config history"
+                title="Config history"
+              >
                 <span class="history-icon" aria-hidden="true"></span>
               </button>
             </div>
@@ -158,7 +184,11 @@
                 <div id="environmentTabs" class="segmented-control"></div>
                 <label class="local-search">
                   <span>Filter</span>
-                  <input id="configSearch" type="search" placeholder="Key or value" />
+                  <input
+                    id="configSearch"
+                    type="search"
+                    placeholder="Key or value"
+                  />
                 </label>
               </div>
               <div class="table-wrap">
@@ -191,7 +221,6 @@
       </main>
     </div>
 
-
     <div id="reviewDock" class="review-dock hidden" aria-live="polite">
       <button id="submitReview" class="review-submit" type="button">
         <span>Submit Review</span>
@@ -199,24 +228,38 @@
       </button>
     </div>
 
-
-
-
-    <div id="templateCreateModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="templateCreateTitle">
+    <div
+      id="templateCreateModal"
+      class="modal-backdrop hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="templateCreateTitle"
+    >
       <form id="templateCreateForm" class="modal-panel template-create-panel">
         <div class="modal-header">
           <div>
             <p class="eyebrow">Personal Template</p>
             <h2 id="templateCreateTitle">New Template</h2>
           </div>
-          <button class="icon-button" type="button" aria-label="Close template form" data-close-modal="template-create">
+          <button
+            class="icon-button"
+            type="button"
+            aria-label="Close template form"
+            data-close-modal="template-create"
+          >
             <span aria-hidden="true">X</span>
           </button>
         </div>
         <div class="form-grid">
           <label>
             <span>Name</span>
-            <input id="templateName" type="text" autocomplete="off" required minlength="2" />
+            <input
+              id="templateName"
+              type="text"
+              autocomplete="off"
+              required
+              minlength="2"
+            />
           </label>
           <label>
             <span>Format</span>
@@ -232,19 +275,36 @@
           </label>
           <label class="form-wide">
             <span>Template Body</span>
-            <textarea id="templateBody" class="template-body-input" rows="12" required placeholder="server:
-  port: ${APP_PORT}"></textarea>
+            <textarea
+              id="templateBody"
+              class="template-body-input"
+              rows="12"
+              required
+              placeholder="server:
+  port: ${APP_PORT}"
+            ></textarea>
           </label>
         </div>
         <div class="modal-actions">
-          <button class="secondary-action" type="button" data-close-modal="template-create">Cancel</button>
+          <button
+            class="secondary-action"
+            type="button"
+            data-close-modal="template-create"
+          >
+            Cancel
+          </button>
           <button class="primary-action" type="submit">Create Template</button>
         </div>
       </form>
     </div>
 
-
-    <div id="templateModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="templateModalTitle">
+    <div
+      id="templateModal"
+      class="modal-backdrop hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="templateModalTitle"
+    >
       <section class="modal-panel template-apply-panel">
         <div class="modal-header">
           <div>
@@ -252,7 +312,12 @@
             <h2 id="templateModalTitle">Template Variables</h2>
             <p id="templateModalMeta" class="project-meta"></p>
           </div>
-          <button class="icon-button" type="button" aria-label="Close template variables" data-close-modal="template">
+          <button
+            class="icon-button"
+            type="button"
+            aria-label="Close template variables"
+            data-close-modal="template"
+          >
             <span aria-hidden="true">X</span>
           </button>
         </div>
@@ -265,15 +330,36 @@
             <option value="properties">properties</option>
           </select>
         </label>
-        <pre id="templateRenderedPreview" class="template-rendered-preview"></pre>
+        <pre
+          id="templateRenderedPreview"
+          class="template-rendered-preview"
+        ></pre>
         <div class="modal-actions">
-          <button id="confirmApplyTemplate" class="primary-action" type="button">Extract Config</button>
-          <button class="secondary-action" type="button" data-close-modal="template">Cancel</button>
+          <button
+            id="confirmApplyTemplate"
+            class="primary-action"
+            type="button"
+          >
+            Extract Config
+          </button>
+          <button
+            class="secondary-action"
+            type="button"
+            data-close-modal="template"
+          >
+            Cancel
+          </button>
         </div>
       </section>
     </div>
 
-    <div id="exportModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="exportModalTitle">
+    <div
+      id="exportModal"
+      class="modal-backdrop hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="exportModalTitle"
+    >
       <section class="modal-panel export-panel">
         <div class="modal-header">
           <div>
@@ -281,7 +367,12 @@
             <h2 id="exportModalTitle">Choose Export Format</h2>
             <p id="exportModalMeta" class="project-meta"></p>
           </div>
-          <button class="icon-button" type="button" aria-label="Close export config" data-close-modal="export">
+          <button
+            class="icon-button"
+            type="button"
+            aria-label="Close export config"
+            data-close-modal="export"
+          >
             <span aria-hidden="true">X</span>
           </button>
         </div>
@@ -293,15 +384,32 @@
             <option value="properties">properties</option>
           </select>
         </label>
-        <p class="modal-note">Export checks reveal-sensitive permission and downloads unmasked config values only when allowed.</p>
+        <p class="modal-note">
+          Export checks reveal-sensitive permission and downloads unmasked
+          config values only when allowed.
+        </p>
         <div class="modal-actions">
-          <button id="confirmExportConfig" class="primary-action" type="button">Export Config</button>
-          <button class="secondary-action" type="button" data-close-modal="export">Cancel</button>
+          <button id="confirmExportConfig" class="primary-action" type="button">
+            Export Config
+          </button>
+          <button
+            class="secondary-action"
+            type="button"
+            data-close-modal="export"
+          >
+            Cancel
+          </button>
         </div>
       </section>
     </div>
 
-    <div id="reviewModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="reviewModalTitle">
+    <div
+      id="reviewModal"
+      class="modal-backdrop hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="reviewModalTitle"
+    >
       <section class="modal-panel review-panel">
         <div class="modal-header">
           <div>
@@ -309,7 +417,12 @@
             <h2 id="reviewModalTitle">Review Config Changes</h2>
             <p id="reviewModalMeta" class="project-meta"></p>
           </div>
-          <button class="icon-button" type="button" aria-label="Close review changes" data-close-modal="review">
+          <button
+            class="icon-button"
+            type="button"
+            aria-label="Close review changes"
+            data-close-modal="review"
+          >
             <span aria-hidden="true">X</span>
           </button>
         </div>
@@ -319,35 +432,71 @@
           <textarea id="reviewReason" rows="3"></textarea>
         </label>
         <div class="modal-actions">
-          <button id="confirmSubmitReview" class="primary-action" type="button">Submit Review</button>
-          <button class="secondary-action" type="button" data-close-modal="review">Cancel</button>
+          <button id="confirmSubmitReview" class="primary-action" type="button">
+            Submit Review
+          </button>
+          <button
+            class="secondary-action"
+            type="button"
+            data-close-modal="review"
+          >
+            Cancel
+          </button>
         </div>
       </section>
     </div>
 
-    <div id="projectModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="projectModalTitle">
+    <div
+      id="projectModal"
+      class="modal-backdrop hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="projectModalTitle"
+    >
       <form id="projectForm" class="modal-panel">
         <div class="modal-header">
           <div>
             <p class="eyebrow">Projects</p>
             <h2 id="projectModalTitle">Register Project</h2>
           </div>
-          <button class="icon-button" type="button" aria-label="Close project form" data-close-modal="project">
+          <button
+            class="icon-button"
+            type="button"
+            aria-label="Close project form"
+            data-close-modal="project"
+          >
             <span aria-hidden="true">X</span>
           </button>
         </div>
         <div class="form-grid">
           <label>
             <span>Name</span>
-            <input id="projectName" type="text" autocomplete="off" required minlength="2" />
+            <input
+              id="projectName"
+              type="text"
+              autocomplete="off"
+              required
+              minlength="2"
+            />
           </label>
           <label>
             <span>Owner</span>
-            <input id="projectOwner" type="text" autocomplete="off" required minlength="2" />
+            <input
+              id="projectOwner"
+              type="text"
+              autocomplete="off"
+              required
+              minlength="2"
+            />
           </label>
           <label>
             <span>Repository URL</span>
-            <input id="projectRepo" type="url" autocomplete="off" placeholder="https://git.example.com/team/app" />
+            <input
+              id="projectRepo"
+              type="url"
+              autocomplete="off"
+              placeholder="https://git.example.com/team/app"
+            />
           </label>
           <label>
             <span>Default Format</span>
@@ -360,14 +509,33 @@
           <div class="form-wide template-picker-field">
             <span>Apply Template</span>
             <div class="template-choice-row">
-              <button id="chooseProjectTemplate" class="secondary-action" type="button">Choose from Template Library</button>
-              <button id="clearProjectTemplate" class="ghost-action" type="button">Clear</button>
+              <button
+                id="chooseProjectTemplate"
+                class="secondary-action"
+                type="button"
+              >
+                Choose from Template Library
+              </button>
+              <button
+                id="clearProjectTemplate"
+                class="ghost-action"
+                type="button"
+              >
+                Clear
+              </button>
             </div>
-            <p id="projectTemplateSelection" class="project-meta">No template selected.</p>
+            <p id="projectTemplateSelection" class="project-meta">
+              No template selected.
+            </p>
           </div>
           <label class="form-wide">
             <span>Environments</span>
-            <input id="projectEnvironments" type="text" value="dev, staging, prod" autocomplete="off" />
+            <input
+              id="projectEnvironments"
+              type="text"
+              value="dev, staging, prod"
+              autocomplete="off"
+            />
           </label>
           <label class="form-wide">
             <span>Description</span>
@@ -375,26 +543,46 @@
           </label>
         </div>
         <div class="modal-actions">
-          <button class="secondary-action" type="button" data-close-modal="project">Cancel</button>
+          <button
+            class="secondary-action"
+            type="button"
+            data-close-modal="project"
+          >
+            Cancel
+          </button>
           <button class="primary-action" type="submit">Create Project</button>
         </div>
       </form>
     </div>
 
-
-    <div id="importModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="importModalTitle">
+    <div
+      id="importModal"
+      class="modal-backdrop hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="importModalTitle"
+    >
       <section class="modal-panel import-panel">
         <div class="modal-header">
           <div>
             <p class="eyebrow">Import Config</p>
             <h2 id="importModalTitle">Choose Config File</h2>
           </div>
-          <button class="icon-button" type="button" aria-label="Close import config" data-close-modal="import">
+          <button
+            class="icon-button"
+            type="button"
+            aria-label="Close import config"
+            data-close-modal="import"
+          >
             <span aria-hidden="true">X</span>
           </button>
         </div>
         <div class="import-toolbar import-modal-toolbar">
-          <input id="configFile" type="file" accept=".json,.yaml,.yml,.properties" />
+          <input
+            id="configFile"
+            type="file"
+            accept=".json,.yaml,.yml,.properties"
+          />
           <select id="configFormat">
             <option value="yaml">yaml</option>
             <option value="json">json</option>
@@ -405,12 +593,24 @@
           </button>
         </div>
         <div class="modal-actions">
-          <button class="secondary-action" type="button" data-close-modal="import">Cancel</button>
+          <button
+            class="secondary-action"
+            type="button"
+            data-close-modal="import"
+          >
+            Cancel
+          </button>
         </div>
       </section>
     </div>
 
-    <div id="historyModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="historyTitle">
+    <div
+      id="historyModal"
+      class="modal-backdrop hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="historyTitle"
+    >
       <section class="modal-panel history-panel">
         <div class="modal-header">
           <div>
@@ -418,20 +618,39 @@
             <h2 id="historyTitle">Config History</h2>
             <p id="historyMeta" class="project-meta"></p>
           </div>
-          <button class="icon-button" type="button" aria-label="Close version history" data-close-modal="history">
+          <button
+            class="icon-button"
+            type="button"
+            aria-label="Close version history"
+            data-close-modal="history"
+          >
             <span aria-hidden="true">X</span>
           </button>
         </div>
         <div id="historySummary" class="history-summary"></div>
         <div id="versionList" class="version-list"></div>
         <div class="modal-actions">
-          <button id="rollbackLatest" class="primary-action" type="button">Rollback Previous Config</button>
-          <button class="secondary-action" type="button" data-close-modal="history">Close</button>
+          <button id="rollbackLatest" class="primary-action" type="button">
+            Rollback Previous Config
+          </button>
+          <button
+            class="secondary-action"
+            type="button"
+            data-close-modal="history"
+          >
+            Close
+          </button>
         </div>
       </section>
     </div>
 
-    <div id="importPreviewModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="importPreviewTitle">
+    <div
+      id="importPreviewModal"
+      class="modal-backdrop hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="importPreviewTitle"
+    >
       <section class="modal-panel history-panel">
         <div class="modal-header">
           <div>
@@ -439,15 +658,34 @@
             <h2 id="importPreviewTitle">Extracted Config</h2>
             <p id="importPreviewMeta" class="project-meta"></p>
           </div>
-          <button class="icon-button" type="button" aria-label="Close import preview" data-close-modal="import-preview">
+          <button
+            class="icon-button"
+            type="button"
+            aria-label="Close import preview"
+            data-close-modal="import-preview"
+          >
             <span aria-hidden="true">X</span>
           </button>
         </div>
-        <div id="importPreviewSummary" class="history-summary import-preview-summary"></div>
-        <div id="importPreviewList" class="version-list import-preview-list"></div>
+        <div
+          id="importPreviewSummary"
+          class="history-summary import-preview-summary"
+        ></div>
+        <div
+          id="importPreviewList"
+          class="version-list import-preview-list"
+        ></div>
         <div class="modal-actions">
-          <button id="applyImportConfig" class="primary-action" type="button">Apply Import</button>
-          <button class="secondary-action" type="button" data-close-modal="import-preview">Cancel</button>
+          <button id="applyImportConfig" class="primary-action" type="button">
+            Apply Import
+          </button>
+          <button
+            class="secondary-action"
+            type="button"
+            data-close-modal="import-preview"
+          >
+            Cancel
+          </button>
         </div>
       </section>
     </div>

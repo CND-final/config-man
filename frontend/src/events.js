@@ -28,70 +28,69 @@ import {
   submitReviewChanges,
   switchView,
   updateTemplateValue,
-  toggleSensitiveReveal
-} from './actions.js';
-import { api } from './api.js';
-import { loadConfigsAndHistory, loadInitialData } from './data.js';
-import { $, setAuthenticated, showToast } from './dom.js';
-import { renderAll, renderConfigRows } from './render.js';
-import { activeProject, state } from './state.js';
+  toggleSensitiveReveal,
+} from "./actions.js";
+import { api } from "./api.js";
+import { loadConfigsAndHistory, loadInitialData } from "./data.js";
+import { $, setAuthenticated, showToast } from "./dom.js";
+import { renderAll, renderConfigRows } from "./render.js";
+import { activeProject, state } from "./state.js";
 
 export function bindEvents() {
-  document.addEventListener('click', handleDocumentClick);
-  document.addEventListener('keydown', handleDocumentKeydown);
-  document.addEventListener('focusout', handleDocumentFocusOut);
+  document.addEventListener("click", handleDocumentClick);
+  document.addEventListener("keydown", handleDocumentKeydown);
+  document.addEventListener("focusout", handleDocumentFocusOut);
 
-  $('#loginForm').addEventListener('submit', handleLogin);
-  $('#logoutButton').addEventListener('click', handleLogout);
+  $("#loginForm").addEventListener("submit", handleLogin);
+  $("#logoutButton").addEventListener("click", handleLogout);
 
-  $('#globalSearch').addEventListener('input', (event) => {
+  $("#globalSearch").addEventListener("input", (event) => {
     state.globalSearch = event.target.value;
     renderAll();
   });
 
-  $('#configSearch').addEventListener('input', (event) => {
+  $("#configSearch").addEventListener("input", (event) => {
     state.configSearch = event.target.value;
     renderConfigRows();
   });
 
-  document.addEventListener('input', (event) => {
-    const target = event.target.closest('[data-template-variable]');
+  document.addEventListener("input", (event) => {
+    const target = event.target.closest("[data-template-variable]");
     if (!target) return;
     updateTemplateValue(target.dataset.templateVariable, target.value);
   });
 
-
-  document.addEventListener('change', (event) => {
-    const target = event.target.closest('#templateApplyFormat');
+  document.addEventListener("change", (event) => {
+    const target = event.target.closest("#templateApplyFormat");
     if (!target) return;
     state.templateApplyFormat = target.value;
   });
 
-  $('#configFile').addEventListener('change', (event) => {
-    const name = event.target.files[0]?.name || '';
-    const ext = name.split('.').pop()?.toLowerCase();
-    if (ext === 'json') $('#configFormat').value = 'json';
-    if (ext === 'yaml' || ext === 'yml') $('#configFormat').value = 'yaml';
-    if (ext === 'properties') $('#configFormat').value = 'properties';
+  $("#configFile").addEventListener("change", (event) => {
+    const name = event.target.files[0]?.name || "";
+    const ext = name.split(".").pop()?.toLowerCase();
+    if (ext === "json") $("#configFormat").value = "json";
+    if (ext === "yaml" || ext === "yml") $("#configFormat").value = "yaml";
+    if (ext === "properties") $("#configFormat").value = "properties";
   });
 
-  $('#importConfig').addEventListener('click', () => {
+  $("#importConfig").addEventListener("click", () => {
     extractConfigFile().catch((error) => showToast(error.message));
   });
 
-  $('#submitReview').addEventListener('click', () => {
+  $("#submitReview").addEventListener("click", () => {
     createReviewRequest().catch((error) => showToast(error.message));
   });
 
-  $('#exportConfig').addEventListener('click', () => {
+  $("#exportConfig").addEventListener("click", () => {
     openExportConfig();
   });
 
-  $('#projectForm').addEventListener('submit', (event) => {
+  $("#projectForm").addEventListener("submit", (event) => {
     createProject(event).catch((error) => showToast(error.message));
   });
 
-  $('#templateCreateForm').addEventListener('submit', (event) => {
+  $("#templateCreateForm").addEventListener("submit", (event) => {
     createTemplate(event).catch((error) => showToast(error.message));
   });
 }
@@ -114,72 +113,72 @@ export function initApp() {
 }
 
 async function handleDocumentClick(event) {
-  const target = event.target.closest('button');
+  const target = event.target.closest("button");
   if (!target) return;
 
   try {
-    if (target.dataset.closeModal === 'project') {
+    if (target.dataset.closeModal === "project") {
       setProjectModal(false);
       return;
     }
 
-    if (target.dataset.closeModal === 'history') {
+    if (target.dataset.closeModal === "history") {
       setHistoryModal(false);
       return;
     }
 
-    if (target.dataset.closeModal === 'export') {
+    if (target.dataset.closeModal === "export") {
       setExportModal(false);
       return;
     }
 
-    if (target.dataset.closeModal === 'import') {
+    if (target.dataset.closeModal === "import") {
       setImportModal(false);
       return;
     }
 
-    if (target.dataset.closeModal === 'import-preview') {
+    if (target.dataset.closeModal === "import-preview") {
       setImportPreviewModal(false);
       return;
     }
 
-    if (target.dataset.closeModal === 'review') {
+    if (target.dataset.closeModal === "review") {
       setReviewModal(false);
       return;
     }
 
-    if (target.dataset.closeModal === 'template') {
+    if (target.dataset.closeModal === "template") {
       setTemplateModal(false);
       return;
     }
 
-    if (target.dataset.closeModal === 'template-create') {
+    if (target.dataset.closeModal === "template-create") {
       setTemplateCreateModal(false);
       return;
     }
 
-    if (target.id === 'registerProject') {
+    if (target.id === "registerProject") {
       setProjectModal(true);
       return;
     }
 
-    if (target.id === 'backToProjects') {
-      switchView('projects');
+    if (target.id === "backToProjects") {
+      switchView("projects");
       renderAll();
       return;
     }
 
-    if (target.id === 'chooseProjectTemplate') {
+    if (target.id === "chooseProjectTemplate") {
       openProjectTemplatePicker();
       return;
     }
 
-    if (target.id === 'clearProjectTemplate') {
+    if (target.id === "clearProjectTemplate") {
       clearProjectTemplateSelection();
       return;
     }
 
-    if (target.id === 'openTemplateCreate') {
+    if (target.id === "openTemplateCreate") {
       if (state.templatePickerActive) {
         cancelProjectTemplatePicker();
         return;
@@ -193,32 +192,32 @@ async function handleDocumentClick(event) {
       return;
     }
 
-    if (target.id === 'openImportConfig') {
+    if (target.id === "openImportConfig") {
       setImportModal(true);
       return;
     }
 
-    if (target.id === 'rollbackLatest') {
+    if (target.id === "rollbackLatest") {
       await rollbackLatestVersion();
       return;
     }
 
-    if (target.id === 'applyImportConfig') {
+    if (target.id === "applyImportConfig") {
       await applyImportPreview();
       return;
     }
 
-    if (target.id === 'confirmSubmitReview') {
+    if (target.id === "confirmSubmitReview") {
       await submitReviewChanges();
       return;
     }
 
-    if (target.id === 'confirmExportConfig') {
+    if (target.id === "confirmExportConfig") {
       await exportCurrentConfig();
       return;
     }
 
-    if (target.id === 'confirmApplyTemplate') {
+    if (target.id === "confirmApplyTemplate") {
       await applyTemplate();
       return;
     }
@@ -247,13 +246,13 @@ async function handleDocumentClick(event) {
     const projectId = target.dataset.openConfig ?? target.dataset.selectProject;
     if (projectId) {
       state.activeProjectId = projectId;
-      state.activeConfigFile = 'application.yaml';
+      state.activeConfigFile = "application.yaml";
       const project = activeProject();
-      state.activeEnvironment = project.environments.includes('prod')
-        ? 'prod'
+      state.activeEnvironment = project.environments.includes("prod")
+        ? "prod"
         : project.environments[0];
       await loadConfigsAndHistory();
-      switchView('config');
+      switchView("config");
       renderAll();
       return;
     }
@@ -270,7 +269,7 @@ async function handleDocumentClick(event) {
       return;
     }
 
-    if (target.id === 'openConfigHistory') {
+    if (target.id === "openConfigHistory") {
       await openVersionHistory();
       return;
     }
@@ -281,24 +280,23 @@ async function handleDocumentClick(event) {
     }
 
     if (target.dataset.approve) {
-      await handleReviewDecision(target.dataset.approve, 'approve');
+      await handleReviewDecision(target.dataset.approve, "approve");
       return;
     }
 
     if (target.dataset.reject) {
-      await handleReviewDecision(target.dataset.reject, 'reject');
+      await handleReviewDecision(target.dataset.reject, "reject");
     }
   } catch (error) {
     showToast(error.message);
   }
 }
 
-
 async function handleDocumentKeydown(event) {
-  const input = event.target.closest('[data-inline-input]');
+  const input = event.target.closest("[data-inline-input]");
   if (!input) return;
 
-  if (event.key === 'Enter') {
+  if (event.key === "Enter") {
     event.preventDefault();
     try {
       await commitInlineEdit(input);
@@ -308,14 +306,14 @@ async function handleDocumentKeydown(event) {
     return;
   }
 
-  if (event.key === 'Escape') {
+  if (event.key === "Escape") {
     event.preventDefault();
     cancelInlineEdit();
   }
 }
 
 function handleDocumentFocusOut(event) {
-  const input = event.target.closest('[data-inline-input]');
+  const input = event.target.closest("[data-inline-input]");
   if (!input) return;
 
   window.setTimeout(() => {
@@ -327,17 +325,17 @@ function handleDocumentFocusOut(event) {
 async function handleLogin(event) {
   event.preventDefault();
   try {
-    const data = await api('/auth/login', {
-      method: 'POST',
+    const data = await api("/auth/login", {
+      method: "POST",
       body: JSON.stringify({
-        email: $('#loginEmail').value,
-        password: $('#loginPassword').value
-      })
+        email: $("#loginEmail").value,
+        password: $("#loginPassword").value,
+      }),
     });
     state.token = data.token;
     state.user = data.user;
-    localStorage.setItem('configManToken', state.token);
-    localStorage.setItem('configManUser', JSON.stringify(state.user));
+    localStorage.setItem("configManToken", state.token);
+    localStorage.setItem("configManUser", JSON.stringify(state.user));
     setAuthenticated(true);
     await loadInitialData();
     renderAll();
@@ -348,9 +346,9 @@ async function handleLogin(event) {
 }
 
 function handleLogout() {
-  localStorage.removeItem('configManToken');
-  localStorage.removeItem('configManUser');
-  state.token = '';
+  localStorage.removeItem("configManToken");
+  localStorage.removeItem("configManUser");
+  state.token = "";
   state.user = null;
   setAuthenticated(false);
 }
