@@ -1,0 +1,107 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+permissions:
+  contents: read
+
+jobs:
+  detect-changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Filter paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            backend:
+              - "backend/**"
+              - ".github/workflows/backend.yml"
+
+  backend-ci:
+    name: Backend CI
+    needs: detect-changes
+    if: needs.detect-changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+          cache: true
+          cache-dependency-path: backend/go.sum
+
+      - name: Prepare Environment & Integration Database
+        run: |
+          make env
+          cat .env >> $GITHUB_ENV
+          make db-up
+
+      - name: Check formatting with gofmt
+        run: |
+          gofmt -l . > gofmt-output.txt
+          if [ -s gofmt-output.txt ]; then
+            exit 1
+          fi
+
+      - name: Publish Backend Formatting Summary
+        if: always()
+        run: |
+          echo "### 🛠️ Backend Formatting Report" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -s gofmt-output.txt ]; then
+            echo "❌ **Status:** Failed" >> $GITHUB_STEP_SUMMARY
+            echo "#### Unformatted Files" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`text" >> $GITHUB_STEP_SUMMARY
+            cat gofmt-output.txt >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ **Status:** Passed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Run unit & integration tests
+        if: success() || failure()
+        run: go test -v -race ./... | tee test-output.txt
+
+      - name: Publish Backend Test Summary
+        if: always()
+        run: |
+          echo "### 🐹 Backend Test Report" >> $GITHUB_STEP_SUMMARY
+          
+          if grep -q "FAIL" test-output.txt; then
+            echo "❌ **Status:** Failed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ **Status:** Passed" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "#### Package Overview" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`text" >> $GITHUB_STEP_SUMMARY
+          grep -E "^(ok|FAIL)" test-output.txt >> $GITHUB_STEP_SUMMARY || true
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          
+          if grep -q "--- FAIL:" test-output.txt; then
+            echo "#### 🔍 Failed Tests" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`text" >> $GITHUB_STEP_SUMMARY
+            grep "--- FAIL:" test-output.txt >> $GITHUB_STEP_SUMMARY || true
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Build cmd targets
+        if: success() || failure()
+        run: go build -o /tmp/config-man ./cmd/...

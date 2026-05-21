@@ -1,0 +1,162 @@
+name: Frontend CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+permissions:
+  contents: read
+
+jobs:
+  detect-changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Filter paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            frontend:
+              - "frontend/**"
+              - ".github/workflows/frontend.yml"
+
+  frontend-ci:
+    name: Frontend CI
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Detect package manager
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            echo "PKG_MANAGER=pnpm" >> "$GITHUB_ENV"
+            echo "NODE_CACHE=pnpm" >> "$GITHUB_ENV"
+            echo "NODE_CACHE_DEP=frontend/pnpm-lock.yaml" >> "$GITHUB_ENV"
+          elif [ -f yarn.lock ]; then
+            echo "PKG_MANAGER=yarn" >> "$GITHUB_ENV"
+            echo "NODE_CACHE=yarn" >> "$GITHUB_ENV"
+            echo "NODE_CACHE_DEP=frontend/yarn.lock" >> "$GITHUB_ENV"
+          elif [ -f package-lock.json ]; then
+            echo "PKG_MANAGER=npm" >> "$GITHUB_ENV"
+            echo "NODE_CACHE=npm" >> "$GITHUB_ENV"
+            echo "NODE_CACHE_DEP=frontend/package-lock.json" >> "$GITHUB_ENV"
+            echo "NPM_INSTALL_CMD=ci" >> "$GITHUB_ENV"
+          elif [ -f npm-shrinkwrap.json ]; then
+            echo "PKG_MANAGER=npm" >> "$GITHUB_ENV"
+            echo "NODE_CACHE=npm" >> "$GITHUB_ENV"
+            echo "NODE_CACHE_DEP=frontend/npm-shrinkwrap.json" >> "$GITHUB_ENV"
+            echo "NPM_INSTALL_CMD=ci" >> "$GITHUB_ENV"
+          else
+            echo "PKG_MANAGER=npm" >> "$GITHUB_ENV"
+            echo "NODE_CACHE=npm" >> "$GITHUB_ENV"
+            echo "NODE_CACHE_DEP=frontend/package-lock.json" >> "$GITHUB_ENV"
+            echo "NPM_INSTALL_CMD=install" >> "$GITHUB_ENV"
+          fi
+
+      - name: Setup pnpm
+        if: env.PKG_MANAGER == 'pnpm'
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: ${{ env.NODE_CACHE }}
+          cache-dependency-path: ${{ env.NODE_CACHE_DEP }}
+
+      - name: Enable Corepack (Yarn Berry/Pnpm fallback)
+        if: env.PKG_MANAGER != 'npm'
+        run: corepack enable
+
+      - name: Install dependencies
+        run: |
+          case "$PKG_MANAGER" in
+            pnpm) pnpm install --frozen-lockfile ;;
+            yarn) yarn install --frozen-lockfile ;;
+            npm) npm "$NPM_INSTALL_CMD" ;;
+            *) echo "Unknown package manager: $PKG_MANAGER"; exit 1 ;;
+          esac
+
+      - name: Check formatting with Prettier
+        # Strip invisible ANSI color codes so grep can actually read the text
+        env:
+          FORCE_COLOR: 0
+          NO_COLOR: true
+        run: |
+          # Fix: Force Bash to fail the entire step if any command in a pipe fails
+          set -o pipefail
+          npx --yes prettier --check . 2>&1 | tee prettier-output.txt
+
+      - name: Publish Frontend Formatting Summary
+        if: always()
+        run: |
+          echo "### 💅 Frontend Formatting Report" >> $GITHUB_STEP_SUMMARY
+          
+          # Use single quotes to ensure the regex brackets are interpreted safely
+          if grep -q -E '\[warn\]|Error' prettier-output.txt; then
+            echo "❌ **Status:** Failed" >> $GITHUB_STEP_SUMMARY
+            echo "#### Unformatted Files" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`text" >> $GITHUB_STEP_SUMMARY
+            # Capture the warnings but exclude the final instructional line
+            grep '\[warn\]' prettier-output.txt | grep -v "Code style issues found" >> $GITHUB_STEP_SUMMARY || true
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ **Status:** Passed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Run frontend tests
+        if: success() || failure()
+        env:
+          FORCE_COLOR: 0
+          NO_COLOR: true
+        run: |
+          case "$PKG_MANAGER" in
+            pnpm) pnpm test --if-present 2>&1 | tee test-output.txt ;;
+            yarn) yarn test --if-present 2>&1 | tee test-output.txt ;;
+            npm) npm run test --if-present 2>&1 | tee test-output.txt ;;
+            *) echo "Unknown package manager: $PKG_MANAGER"; exit 1 ;;
+          esac
+
+      - name: Publish Frontend Test Summary
+        if: always()
+        run: |
+          echo "### 🌐 Frontend Test Report" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -s test-output.txt ]; then
+            if grep -q -i "fail" test-output.txt; then
+              echo "❌ **Status:** Failed" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "✅ **Status:** Passed" >> $GITHUB_STEP_SUMMARY
+            fi
+            
+            echo "#### Test Framework Output" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`text" >> $GITHUB_STEP_SUMMARY
+            grep -E "Test Files|Tests|Duration|Snapshots|✓|$(printf '\u00d7')" test-output.txt >> $GITHUB_STEP_SUMMARY || true
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "ℹ️ No tests were executed (test script not present in package.json or step was skipped)." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Build production bundle
+        if: success() || failure()
+        run: |
+          case "$PKG_MANAGER" in
+            pnpm) pnpm run build ;;
+            yarn) yarn build ;;
+            npm) npm run build ;;
+            *) echo "Unknown package manager: $PKG_MANAGER"; exit 1 ;;
+          esac

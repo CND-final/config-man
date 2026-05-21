@@ -1,4 +1,4 @@
-import { API_BASE, state } from './state.js';
+import { API_BASE, state } from "./state.js";
 
 export async function api(path, options = {}) {
   const url = `${API_BASE}${path}`;
@@ -7,15 +7,15 @@ export async function api(path, options = {}) {
     response = await fetch(url, {
       ...options,
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
         ...(state.token ? { Authorization: `Bearer ${state.token}` } : {}),
-        ...(options.headers || {})
-      }
+        ...(options.headers || {}),
+      },
     });
   } catch (error) {
-    console.error('Network error while calling API:', url, error);
+    console.error("Network error while calling API:", url, error);
     throw new Error(
-      `Cannot reach API ${url}. Check backend is running and configManApiBase is correct.`
+      `Cannot reach API ${url}. Check backend is running and configManApiBase is correct.`,
     );
   }
 

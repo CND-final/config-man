@@ -7,13 +7,13 @@ export function $all(selector) {
 }
 
 export function showToast(message) {
-  const toast = $('#toast');
+  const toast = $("#toast");
   toast.textContent = message;
-  toast.classList.add('show');
-  window.setTimeout(() => toast.classList.remove('show'), 2200);
+  toast.classList.add("show");
+  window.setTimeout(() => toast.classList.remove("show"), 2200);
 }
 
 export function setAuthenticated(authenticated) {
-  $('#loginScreen').classList.toggle('hidden', authenticated);
-  $('#appShell').classList.toggle('hidden', !authenticated);
+  $("#loginScreen").classList.toggle("hidden", authenticated);
+  $("#appShell").classList.toggle("hidden", !authenticated);
 }

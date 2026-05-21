@@ -22,17 +22,17 @@ const (
 const serviceName = "config-man"
 
 var (
-	Log        *slog.Logger
-	Main       *slog.Logger
-	API        *slog.Logger
-	Processor  *slog.Logger
-	Store      *slog.Logger
-	DB         *slog.Logger
-	Auth       *slog.Logger
-	Project    *slog.Logger
-	Config   *slog.Logger
-	Review   *slog.Logger
-	Template *slog.Logger
+	Log       *slog.Logger
+	Main      *slog.Logger
+	API       *slog.Logger
+	Processor *slog.Logger
+	Store     *slog.Logger
+	DB        *slog.Logger
+	Auth      *slog.Logger
+	Project   *slog.Logger
+	Config    *slog.Logger
+	Review    *slog.Logger
+	Template  *slog.Logger
 )
 
 func init() {
