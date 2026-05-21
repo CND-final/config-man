@@ -30,10 +30,9 @@ var (
 	DB         *slog.Logger
 	Auth       *slog.Logger
 	Project    *slog.Logger
-	Config     *slog.Logger
-	Review     *slog.Logger
-	Validation *slog.Logger
-	Template   *slog.Logger
+	Config   *slog.Logger
+	Review   *slog.Logger
+	Template *slog.Logger
 )
 
 func init() {
@@ -54,7 +53,6 @@ func Init(writer io.Writer) {
 	Project = category("project")
 	Config = category("config")
 	Review = category("review")
-	Validation = category("validation")
 	Template = category("template")
 }
 

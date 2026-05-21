@@ -59,6 +59,14 @@ func (p *Processor) CreateProject(ctx appctx.RequestContext, req model.CreatePro
 		return model.Project{}, model.Conflict(fmt.Sprintf("Project %q already exists", name))
 	}
 
+	templateID := strings.TrimSpace(req.TemplateID)
+	if templateID != "" {
+		if _, ok := p.findAccessibleTemplate(ctx, templateID); !ok {
+			logger.Project.Warn("create project invalid", append(fields, "reason", "template_not_accessible", "template_id", templateID)...)
+			return model.Project{}, model.NotFound(fmt.Sprintf("Template %q not found", templateID))
+		}
+	}
+
 	envs := util.NormalizeEnvironments(req.Environments)
 	now := time.Now().UTC()
 	project := model.Project{
@@ -68,6 +76,7 @@ func (p *Processor) CreateProject(ctx appctx.RequestContext, req model.CreatePro
 		RepoURL:       strings.TrimSpace(req.RepoURL),
 		OwnerName:     owner,
 		DefaultFormat: format,
+		TemplateID:    templateID,
 		Environments:  make([]model.ProjectEnvironment, 0, len(envs)),
 		CreatedAt:     now,
 		UpdatedAt:     now,
@@ -83,6 +92,7 @@ func (p *Processor) CreateProject(ctx appctx.RequestContext, req model.CreatePro
 	if err := p.store.SaveProject(project, newAudit(ctx.ActorName(), "project.create", "project", project.ID, project.ID, map[string]any{
 		"name":         project.Name,
 		"environments": envs,
+		"templateId":   project.TemplateID,
 	})); err != nil {
 		logger.Project.Error("create project persistence failed", append(fields, "error", err)...)
 		return model.Project{}, model.InternalError("database persistence failed: " + err.Error())
@@ -92,6 +102,7 @@ func (p *Processor) CreateProject(ctx appctx.RequestContext, req model.CreatePro
 		logger.FieldProjectID, project.ID,
 		"environment_count", len(envs),
 		"default_format", project.DefaultFormat,
+		"template_id", project.TemplateID,
 	)...)
 	return project, nil
 }

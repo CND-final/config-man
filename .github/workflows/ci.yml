@@ -57,6 +57,17 @@ jobs:
           cache: true
           cache-dependency-path: backend/go.sum
 
+      - name: Prepare Environment & Integration Database
+        run: |
+          # 1. Create the .env file from your example template
+          make env
+          
+          # 2. Inject the .env variables (DATABASE_URL, etc.) directly into the GitHub runner context
+          cat .env >> $GITHUB_ENV
+          
+          # 3. Spin up PostgreSQL using your exact docker-compose.yml and wait for it to be ready
+          make db-up
+
       - name: Check gofmt
         run: |
           unformatted=$(gofmt -l .)
@@ -69,7 +80,8 @@ jobs:
       - name: Run go vet
         run: go vet ./...
 
-      - name: Run unit tests
+      - name: Run unit & integration tests
+        # The Go tests will now automatically read the DATABASE_URL from $GITHUB_ENV
         run: go test -v -race ./... | tee test-output.txt
 
       - name: Publish Backend Test Summary
@@ -85,14 +97,12 @@ jobs:
           
           echo "#### Package Overview" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`text" >> $GITHUB_STEP_SUMMARY
-          # Fix: Added the redirection so the text actually writes to the summary page
           grep -E "^(ok|FAIL)" test-output.txt >> $GITHUB_STEP_SUMMARY || true
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           
           if grep -q "--- FAIL:" test-output.txt; then
             echo "#### 🔍 Failed Tests" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`text" >> $GITHUB_STEP_SUMMARY
-            # Fix: Added the redirection here too
             grep "--- FAIL:" test-output.txt >> $GITHUB_STEP_SUMMARY || true
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           fi

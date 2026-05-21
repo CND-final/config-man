@@ -346,7 +346,6 @@
 | POST | `/api/v1/projects/{projectId}/configs/import` | 匯入 Config 檔案 |
 | GET | `/api/v1/projects/{projectId}/configs/export?env=prod&format=yaml` | 匯出 Config |
 | GET | `/api/v1/projects/{projectId}/diff?source=staging&target=prod` | 環境差異比對 |
-| POST | `/api/v1/projects/{projectId}/validate` | 執行 Config 驗證 |
 | GET | `/api/v1/projects/{projectId}/versions` | 查詢版本歷史 |
 | POST | `/api/v1/change-requests` | 建立 prod 變更申請 |
 | PUT | `/api/v1/change-requests/{requestId}/approve` | 審核通過 |

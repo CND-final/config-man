@@ -26,6 +26,11 @@ func NewStoreWithDB(ctx context.Context, db *sql.DB) (*Store, error) {
 		if err := store.persistSnapshotLocked(ctx); err != nil {
 			return nil, err
 		}
+	} else if len(store.snapshots) == 0 {
+		store.seedCurrentSnapshots()
+		if err := store.persistSnapshotLocked(ctx); err != nil {
+			return nil, err
+		}
 	}
 	return store, nil
 }
@@ -49,6 +54,19 @@ func (s *Store) initSchema(ctx context.Context) error {
 			repo_url TEXT NOT NULL DEFAULT '',
 			owner_name TEXT NOT NULL,
 			default_format TEXT NOT NULL DEFAULT 'yaml',
+			template_id TEXT NOT NULL DEFAULT '',
+			created_at TIMESTAMPTZ NOT NULL,
+			updated_at TIMESTAMPTZ NOT NULL
+		)`,
+		`ALTER TABLE projects ADD COLUMN IF NOT EXISTS template_id TEXT NOT NULL DEFAULT ''`,
+		`CREATE TABLE IF NOT EXISTS custom_templates (
+			id TEXT PRIMARY KEY,
+			owner_user_id TEXT NOT NULL,
+			name TEXT NOT NULL,
+			description TEXT NOT NULL DEFAULT '',
+			format TEXT NOT NULL,
+			body TEXT NOT NULL,
+			variables JSONB NOT NULL DEFAULT '[]'::jsonb,
 			created_at TIMESTAMPTZ NOT NULL,
 			updated_at TIMESTAMPTZ NOT NULL
 		)`,
@@ -77,6 +95,15 @@ func (s *Store) initSchema(ctx context.Context) error {
 			config_id TEXT NOT NULL,
 			old_value TEXT,
 			new_value TEXT NOT NULL,
+			changed_by TEXT NOT NULL,
+			change_reason TEXT NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS config_snapshots (
+			id TEXT PRIMARY KEY,
+			project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+			environment TEXT NOT NULL,
+			entries JSONB NOT NULL DEFAULT '[]'::jsonb,
 			changed_by TEXT NOT NULL,
 			change_reason TEXT NOT NULL,
 			created_at TIMESTAMPTZ NOT NULL
@@ -122,10 +149,16 @@ func (s *Store) loadSnapshot(ctx context.Context) error {
 	if err := s.loadProjectEnvironments(ctx); err != nil {
 		return err
 	}
+	if err := s.loadCustomTemplates(ctx); err != nil {
+		return err
+	}
 	if err := s.loadConfigEntries(ctx); err != nil {
 		return err
 	}
 	if err := s.loadConfigVersions(ctx); err != nil {
+		return err
+	}
+	if err := s.loadConfigSnapshots(ctx); err != nil {
 		return err
 	}
 	if err := s.loadReviewRequests(ctx); err != nil {
@@ -135,7 +168,7 @@ func (s *Store) loadSnapshot(ctx context.Context) error {
 }
 
 func (s *Store) loadProjects(ctx context.Context) error {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, description, repo_url, owner_name, default_format, created_at, updated_at FROM projects`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, description, repo_url, owner_name, default_format, template_id, created_at, updated_at FROM projects`)
 	if err != nil {
 		return err
 	}
@@ -143,10 +176,31 @@ func (s *Store) loadProjects(ctx context.Context) error {
 
 	for rows.Next() {
 		project := &model.Project{}
-		if err := rows.Scan(&project.ID, &project.Name, &project.Description, &project.RepoURL, &project.OwnerName, &project.DefaultFormat, &project.CreatedAt, &project.UpdatedAt); err != nil {
+		if err := rows.Scan(&project.ID, &project.Name, &project.Description, &project.RepoURL, &project.OwnerName, &project.DefaultFormat, &project.TemplateID, &project.CreatedAt, &project.UpdatedAt); err != nil {
 			return err
 		}
 		s.projects[project.ID] = project
+	}
+	return rows.Err()
+}
+
+func (s *Store) loadCustomTemplates(ctx context.Context) error {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, owner_user_id, name, description, format, body, variables, created_at, updated_at FROM custom_templates`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		template := &model.Template{IsCustom: true}
+		var variablesBytes []byte
+		if err := rows.Scan(&template.ID, &template.OwnerUserID, &template.Name, &template.Description, &template.Format, &template.Body, &variablesBytes, &template.CreatedAt, &template.UpdatedAt); err != nil {
+			return err
+		}
+		if len(variablesBytes) > 0 {
+			_ = json.Unmarshal(variablesBytes, &template.Variables)
+		}
+		s.templates[template.ID] = template
 	}
 	return rows.Err()
 }
@@ -210,6 +264,27 @@ func (s *Store) loadConfigVersions(ctx context.Context) error {
 	return rows.Err()
 }
 
+func (s *Store) loadConfigSnapshots(ctx context.Context) error {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, project_id, environment, entries, changed_by, change_reason, created_at FROM config_snapshots ORDER BY created_at ASC`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		snapshot := model.ConfigSnapshot{}
+		var entriesBytes []byte
+		if err := rows.Scan(&snapshot.ID, &snapshot.ProjectID, &snapshot.Environment, &entriesBytes, &snapshot.ChangedBy, &snapshot.ChangeReason, &snapshot.CreatedAt); err != nil {
+			return err
+		}
+		if len(entriesBytes) > 0 {
+			_ = json.Unmarshal(entriesBytes, &snapshot.Entries)
+		}
+		s.snapshots = append(s.snapshots, snapshot)
+	}
+	return rows.Err()
+}
+
 func (s *Store) loadReviewRequests(ctx context.Context) error {
 	rows, err := s.db.QueryContext(ctx, `SELECT id, project_id, project_name, environment, config_key, requester, reviewer, status, reason, comment, created_at, updated_at FROM review_requests`)
 	if err != nil {
@@ -262,10 +337,12 @@ func (s *Store) persistSnapshotLocked(ctx context.Context) error {
 	statements := []string{
 		`DELETE FROM audit_logs`,
 		`DELETE FROM review_requests`,
+		`DELETE FROM config_snapshots`,
 		`DELETE FROM config_versions`,
 		`DELETE FROM config_entries`,
 		`DELETE FROM project_environments`,
 		`DELETE FROM projects`,
+		`DELETE FROM custom_templates`,
 	}
 	for _, statement := range statements {
 		if _, err := tx.ExecContext(ctx, statement); err != nil {
@@ -274,13 +351,23 @@ func (s *Store) persistSnapshotLocked(ctx context.Context) error {
 	}
 
 	for _, project := range s.projects {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO projects (id, name, description, repo_url, owner_name, default_format, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, project.ID, project.Name, project.Description, project.RepoURL, project.OwnerName, project.DefaultFormat, project.CreatedAt, project.UpdatedAt); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO projects (id, name, description, repo_url, owner_name, default_format, template_id, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, project.ID, project.Name, project.Description, project.RepoURL, project.OwnerName, project.DefaultFormat, project.TemplateID, project.CreatedAt, project.UpdatedAt); err != nil {
 			return err
 		}
 		for _, env := range project.Environments {
 			if _, err := tx.ExecContext(ctx, `INSERT INTO project_environments (id, project_id, name, sort_order) VALUES ($1,$2,$3,$4)`, env.ID, project.ID, env.Name, env.SortOrder); err != nil {
 				return err
 			}
+		}
+	}
+
+	for _, template := range s.templates {
+		variables, err := json.Marshal(template.Variables)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO custom_templates (id, owner_user_id, name, description, format, body, variables, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, template.ID, template.OwnerUserID, template.Name, template.Description, template.Format, template.Body, variables, template.CreatedAt, template.UpdatedAt); err != nil {
+			return err
 		}
 	}
 
@@ -292,6 +379,16 @@ func (s *Store) persistSnapshotLocked(ctx context.Context) error {
 
 	for _, version := range s.versions {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO config_versions (id, config_id, old_value, new_value, changed_by, change_reason, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)`, version.ID, version.ConfigID, version.OldValue, version.NewValue, version.ChangedBy, version.ChangeReason, version.CreatedAt); err != nil {
+			return err
+		}
+	}
+
+	for _, snapshot := range s.snapshots {
+		entries, err := json.Marshal(snapshot.Entries)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO config_snapshots (id, project_id, environment, entries, changed_by, change_reason, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)`, snapshot.ID, snapshot.ProjectID, snapshot.Environment, entries, snapshot.ChangedBy, snapshot.ChangeReason, snapshot.CreatedAt); err != nil {
 			return err
 		}
 	}

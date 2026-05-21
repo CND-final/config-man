@@ -98,7 +98,9 @@ All demo users use password `password`.
 - `GET /api/v1/health`
 - `POST /api/v1/auth/login`
 - `GET /api/v1/auth/me`
+- `GET /api/v1/templates`
 - `GET /api/v1/templates/base`
+- `POST /api/v1/templates`
 - `GET /api/v1/projects`
 - `POST /api/v1/projects`
 - `GET /api/v1/projects/:projectId`
@@ -107,12 +109,16 @@ All demo users use password `password`.
 - `POST /api/v1/projects/:projectId/configs/import`
 - `PUT /api/v1/projects/:projectId/configs/:configId`
 - `DELETE /api/v1/projects/:projectId/configs/:configId`
-- `POST /api/v1/projects/:projectId/validate`
 - `GET /api/v1/review-requests`
 - `GET /api/v1/projects/:projectId/review-requests`
 - `POST /api/v1/review-requests`
 - `PUT /api/v1/review-requests/:requestId/approve`
 - `PUT /api/v1/review-requests/:requestId/reject`
+
+
+## Infrastructure Templates
+
+`GET /api/v1/templates` returns the shared infrastructure catalog plus the authenticated user's personal templates. The shared catalog currently includes `global-logging-template` and `spring-boot-base-template`. `global-logging-template` is the enterprise logging baseline with `${LOG_LEVEL_ROOT}`, `${LOG_LEVEL_COMPANY}`, and `${APP_NAME}` variables. `spring-boot-base-template` is a YAML skeleton with variables such as `${APP_PORT}`, `${DB_HOST}`, `${DB_NAME}`, `${DB_USER}`, `${DB_SECRET}`, and `${REDIS_HOST}`. `POST /api/v1/templates` creates a personal template in the DB under the current user ID, so other users cannot see or reference it. Project creation accepts an optional `templateId` and validates that the template is either shared or owned by the actor. The frontend applies templates from the New Project flow, renders variables as a form, lets the user choose yaml/json/properties output, and then extracts the rendered config through the normal config import preview flow.
 
 ## Config Import
 
