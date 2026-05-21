@@ -92,6 +92,10 @@ jobs:
           esac
 
       - name: Check formatting with Prettier
+        # Strip invisible ANSI color codes so grep can actually read the text
+        env:
+          FORCE_COLOR: 0
+          NO_COLOR: true
         run: npx --yes prettier --check . 2>&1 | tee prettier-output.txt
 
       - name: Publish Frontend Formatting Summary
@@ -99,11 +103,13 @@ jobs:
         run: |
           echo "### 💅 Frontend Formatting Report" >> $GITHUB_STEP_SUMMARY
           
-          if grep -q -E "\[warn\]|Error" prettier-output.txt; then
+          # Use single quotes to ensure the regex brackets are interpreted safely
+          if grep -q -E '\[warn\]|Error' prettier-output.txt; then
             echo "❌ **Status:** Failed" >> $GITHUB_STEP_SUMMARY
             echo "#### Unformatted Files" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`text" >> $GITHUB_STEP_SUMMARY
-            grep "\[warn\]" prettier-output.txt | grep -v "Code style issues found" >> $GITHUB_STEP_SUMMARY || true
+            # Capture the warnings but exclude the final instructional line
+            grep '\[warn\]' prettier-output.txt | grep -v "Code style issues found" >> $GITHUB_STEP_SUMMARY || true
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           else
             echo "✅ **Status:** Passed" >> $GITHUB_STEP_SUMMARY
