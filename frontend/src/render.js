@@ -974,7 +974,8 @@ export function renderConfigRow(configId) {
 
 function renderConfigRowMarkup(config) {
   const revealKey = `${config.projectId}:${config.environment}:${config.key}`;
-  const valueIsRevealed = config.isSensitive && state.revealedKeys.has(revealKey);
+  const valueIsRevealed =
+    config.isSensitive && state.revealedKeys.has(revealKey);
   const valueIsMasked = config.isSensitive && !valueIsRevealed;
   const visibleValue = valueIsMasked ? "******" : config.value;
   return `
@@ -1035,7 +1036,9 @@ function renderEditableConfigCell(
 function renderRevealToggle(config, valueIsMasked, valueIsRevealed, revealKey) {
   if (!config.isSensitive || !revealKey) return "";
 
-  const label = valueIsMasked ? "Reveal sensitive value" : "Hide sensitive value";
+  const label = valueIsMasked
+    ? "Reveal sensitive value"
+    : "Hide sensitive value";
   const iconClass = valueIsMasked ? "eye-icon eye-icon-off" : "eye-icon";
   return `
     <button
@@ -1378,9 +1381,7 @@ function renderReviewChange(change) {
 
 function formatRevisionVersion(id) {
   if (!id) return "current";
-  return String(id)
-    .replace(/^rev-/, "")
-    .slice(0, 7);
+  return String(id).replace(/^rev-/, "").slice(0, 7);
 }
 
 export function renderImportPreview() {
