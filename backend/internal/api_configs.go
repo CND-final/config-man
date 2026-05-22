@@ -101,13 +101,13 @@ func (s *Server) handleListConfigHistory(c *gin.Context) {
 func (s *Server) handleRollbackConfigHistory(c *gin.Context) {
 	reqCtx := requestContextFromGin(c)
 
-	var req model.RollbackConfigSnapshotRequest
+	var req model.RollbackConfigRevisionRequest
 	if err := response.DecodeJSON(c, &req); err != nil {
 		response.WriteError(c, err)
 		return
 	}
 
-	payload, appErr := s.processor.RollbackConfigSnapshot(reqCtx, c.Param("projectId"), req)
+	payload, appErr := s.processor.RollbackConfigRevision(reqCtx, c.Param("projectId"), req)
 	if appErr != nil {
 		response.WriteError(c, appErr)
 		return

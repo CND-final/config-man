@@ -382,12 +382,12 @@ export async function rollbackLatestVersion() {
   const project = activeProject();
   const previous = state.configHistory[1];
   if (!project || !previous) {
-    showToast("No previous config snapshot to restore");
+    showToast("No previous config revision to restore");
     return;
   }
 
   const confirmed = window.confirm(
-    `Rollback ${project.name} ${state.activeEnvironment} config to the previous snapshot?`,
+    `Rollback ${project.name} ${state.activeEnvironment} config to the previous revision?`,
   );
   if (!confirmed) return;
 
@@ -395,8 +395,8 @@ export async function rollbackLatestVersion() {
     method: "POST",
     body: JSON.stringify({
       environment: state.activeEnvironment,
-      snapshotId: previous.id,
-      changeReason: "rollback config snapshot from frontend history",
+      revisionId: previous.id,
+      changeReason: "rollback config revision from frontend history",
     }),
   });
 

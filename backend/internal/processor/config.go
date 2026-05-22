@@ -15,27 +15,18 @@ const maskedValue = "******"
 
 func (p *Processor) ListConfigs(ctx appctx.RequestContext, projectID, environment string, revealSensitive bool) (map[string]any, *model.ErrorDetail) {
 	environment = strings.TrimSpace(environment)
-	fields := []any{
-		"operation", "config.list",
-		logger.FieldUserID, ctx.Actor.ID,
-		logger.FieldActor, ctx.ActorName(),
-		logger.FieldRole, string(ctx.Actor.Role),
-		logger.FieldProjectID, projectID,
-		logger.FieldEnvironment, environment,
-		"reveal_sensitive", revealSensitive,
-	}
-	logger.Config.Info("list configs requested", fields...)
+	logger.Config.Info("list configs requested")
 
 	if environment == "" {
-		logger.Config.Warn("list configs invalid", append(fields, "reason", "missing_environment")...)
+		logger.Config.Warn("list configs invalid")
 		return nil, model.InvalidInput(`Query parameter "env" is required`)
 	}
 	if revealSensitive && !util.CanRevealSensitive(ctx.Actor) {
-		logger.Config.Warn("list configs denied", append(fields, "reason", "reveal_sensitive_not_allowed")...)
+		logger.Config.Warn("list configs denied")
 		return nil, model.Forbidden("Role cannot reveal sensitive values")
 	}
 	if err := p.requireEnvironment(projectID, environment); err != nil {
-		logger.Config.Warn("list configs failed", append(fields, "error_kind", err.Kind, "error", err.Detail)...)
+		logger.Config.Warn("list configs failed")
 		return nil, err
 	}
 
@@ -53,45 +44,35 @@ func (p *Processor) ListConfigs(ctx appctx.RequestContext, projectID, environmen
 		"entryCount":   len(entries),
 		"maskedValues": !revealSensitive,
 	}
-	logger.Config.Info("configs listed", append(fields, "entry_count", len(entries), "masked_values", !revealSensitive)...)
+	logger.Config.Info("configs listed")
 	return payload, nil
 }
 
 func (p *Processor) CreateConfig(ctx appctx.RequestContext, projectID string, req model.CreateConfigRequest) (model.ConfigEntry, *model.ErrorDetail) {
 	environment := strings.TrimSpace(req.Environment)
 	key := strings.TrimSpace(req.Key)
-	fields := []any{
-		"operation", "config.create",
-		logger.FieldUserID, ctx.Actor.ID,
-		logger.FieldActor, ctx.ActorName(),
-		logger.FieldRole, string(ctx.Actor.Role),
-		logger.FieldProjectID, projectID,
-		logger.FieldEnvironment, environment,
-		logger.FieldConfigKey, key,
-		"is_sensitive", req.IsSensitive,
-	}
-	logger.Config.Info("create config requested", fields...)
+	logger.Config.Info("create config requested")
 
 	if environment == "" || key == "" {
-		logger.Config.Warn("create config invalid", append(fields, "reason", "missing_environment_or_key")...)
+		logger.Config.Warn("create config invalid")
 		return model.ConfigEntry{}, model.InvalidInput("environment and key are required")
 	}
 	if !util.CanWriteEnvironment(ctx.Actor, environment) {
-		logger.Config.Warn("create config denied", append(fields, "reason", "environment_write_not_allowed")...)
+		logger.Config.Warn("create config denied")
 		return model.ConfigEntry{}, model.Forbidden(fmt.Sprintf("Role %q cannot modify %q config", ctx.Actor.Role, environment))
 	}
 	if err := p.requireEnvironment(projectID, environment); err != nil {
-		logger.Config.Warn("create config failed", append(fields, "error_kind", err.Kind, "error", err.Detail)...)
+		logger.Config.Warn("create config failed")
 		return model.ConfigEntry{}, err
 	}
 	if _, ok := p.store.FindConfigByKey(projectID, environment, key); ok {
-		logger.Config.Warn("create config conflict", fields...)
+		logger.Config.Warn("create config conflict")
 		return model.ConfigEntry{}, model.Conflict(fmt.Sprintf("Config key %q already exists in %q", key, environment))
 	}
 
 	valueType := util.NormalizeValueType(req.ValueType)
 	if valueType == "" {
-		logger.Config.Warn("create config invalid", append(fields, "reason", "unsupported_value_type", "value_type", req.ValueType)...)
+		logger.Config.Warn("create config invalid")
 		return model.ConfigEntry{}, model.InvalidInput("valueType must be string, number, boolean, or json")
 	}
 
@@ -114,39 +95,30 @@ func (p *Processor) CreateConfig(ctx appctx.RequestContext, projectID string, re
 		"key":         entry.Key,
 		"isSensitive": entry.IsSensitive,
 	})
-	if err := p.store.SaveConfig(entry, version, audit); err != nil {
-		logger.Config.Error("create config persistence failed", append(fields, "error", err)...)
+	if err := p.store.SaveConfig([]model.ConfigEntry{entry}, []model.ConfigVersion{version}, audit); err != nil {
+		logger.Config.Error("create config persistence failed")
 		return model.ConfigEntry{}, model.InternalError("database persistence failed: " + err.Error())
 	}
 
-	logger.Config.Info("config created", append(fields, logger.FieldConfigID, entry.ID, "value_type", entry.ValueType)...)
+	logger.Config.Info("config created")
 	return entry, nil
 }
 
 func (p *Processor) UpdateConfig(ctx appctx.RequestContext, projectID, configID string, req model.UpdateConfigRequest) (model.ConfigEntry, *model.ErrorDetail) {
-	fields := []any{
-		"operation", "config.update",
-		logger.FieldUserID, ctx.Actor.ID,
-		logger.FieldActor, ctx.ActorName(),
-		logger.FieldRole, string(ctx.Actor.Role),
-		logger.FieldProjectID, projectID,
-		logger.FieldConfigID, configID,
-	}
-	logger.Config.Info("update config requested", fields...)
+	logger.Config.Info("update config requested")
 
 	if req.Key == nil && req.Value == nil && req.ValueType == nil && req.IsSensitive == nil {
-		logger.Config.Warn("update config invalid", append(fields, "reason", "empty_update")...)
+		logger.Config.Warn("update config invalid")
 		return model.ConfigEntry{}, model.InvalidInput("No config fields provided for update")
 	}
 
 	entry, ok := p.store.FindConfig(projectID, configID)
 	if !ok {
-		logger.Config.Warn("update config not found", fields...)
+		logger.Config.Warn("update config not found")
 		return model.ConfigEntry{}, model.NotFound(fmt.Sprintf("Config %q not found for project %q", configID, projectID))
 	}
-	fields = append(fields, logger.FieldEnvironment, entry.Environment, logger.FieldConfigKey, entry.Key)
 	if !util.CanWriteEnvironment(ctx.Actor, entry.Environment) {
-		logger.Config.Warn("update config denied", append(fields, "reason", "environment_write_not_allowed")...)
+		logger.Config.Warn("update config denied")
 		return model.ConfigEntry{}, model.Forbidden(fmt.Sprintf("Role %q cannot modify %q config", ctx.Actor.Role, entry.Environment))
 	}
 
@@ -154,12 +126,12 @@ func (p *Processor) UpdateConfig(ctx appctx.RequestContext, projectID, configID 
 	if req.Key != nil {
 		nextKey := strings.TrimSpace(*req.Key)
 		if nextKey == "" {
-			logger.Config.Warn("update config invalid", append(fields, "reason", "empty_key")...)
+			logger.Config.Warn("update config invalid")
 			return model.ConfigEntry{}, model.InvalidInput("key is required")
 		}
 		if nextKey != entry.Key {
 			if existing, exists := p.store.FindConfigByKey(projectID, entry.Environment, nextKey); exists && existing.ID != entry.ID {
-				logger.Config.Warn("update config conflict", append(fields, "next_key", nextKey)...)
+				logger.Config.Warn("update config conflict")
 				return model.ConfigEntry{}, model.Conflict(fmt.Sprintf("Config key %q already exists in %q", nextKey, entry.Environment))
 			}
 			entry.Key = nextKey
@@ -171,7 +143,7 @@ func (p *Processor) UpdateConfig(ctx appctx.RequestContext, projectID, configID 
 	if req.ValueType != nil {
 		valueType := util.NormalizeValueType(*req.ValueType)
 		if valueType == "" {
-			logger.Config.Warn("update config invalid", append(fields, "reason", "unsupported_value_type", "value_type", *req.ValueType)...)
+			logger.Config.Warn("update config invalid")
 			return model.ConfigEntry{}, model.InvalidInput("valueType must be string, number, boolean, or json")
 		}
 		entry.ValueType = valueType
@@ -189,40 +161,25 @@ func (p *Processor) UpdateConfig(ctx appctx.RequestContext, projectID, configID 
 		"valueType":   entry.ValueType,
 		"isSensitive": entry.IsSensitive,
 	})
-	if err := p.store.SaveConfig(entry, version, audit); err != nil {
-		logger.Config.Error("update config persistence failed", append(fields, "error", err)...)
+	if err := p.store.SaveConfig([]model.ConfigEntry{entry}, []model.ConfigVersion{version}, audit); err != nil {
+		logger.Config.Error("update config persistence failed")
 		return model.ConfigEntry{}, model.InternalError("database persistence failed: " + err.Error())
 	}
 
-	logger.Config.Info("config updated", append(fields,
-		"key_updated", req.Key != nil,
-		"value_updated", req.Value != nil,
-		"value_type_updated", req.ValueType != nil,
-		"sensitive_updated", req.IsSensitive != nil,
-		"is_sensitive", entry.IsSensitive,
-	)...)
+	logger.Config.Info("config updated")
 	return entry, nil
 }
 
 func (p *Processor) DeleteConfig(ctx appctx.RequestContext, projectID, configID string) (map[string]any, *model.ErrorDetail) {
-	fields := []any{
-		"operation", "config.delete",
-		logger.FieldUserID, ctx.Actor.ID,
-		logger.FieldActor, ctx.ActorName(),
-		logger.FieldRole, string(ctx.Actor.Role),
-		logger.FieldProjectID, projectID,
-		logger.FieldConfigID, configID,
-	}
-	logger.Config.Info("delete config requested", fields...)
+	logger.Config.Info("delete config requested")
 
 	entry, ok := p.store.FindConfig(projectID, configID)
 	if !ok {
-		logger.Config.Warn("delete config not found", fields...)
+		logger.Config.Warn("delete config not found")
 		return nil, model.NotFound(fmt.Sprintf("Config %q not found for project %q", configID, projectID))
 	}
-	fields = append(fields, logger.FieldEnvironment, entry.Environment, logger.FieldConfigKey, entry.Key)
 	if !util.CanWriteEnvironment(ctx.Actor, entry.Environment) {
-		logger.Config.Warn("delete config denied", append(fields, "reason", "environment_write_not_allowed")...)
+		logger.Config.Warn("delete config denied")
 		return nil, model.Forbidden(fmt.Sprintf("Role %q cannot modify %q config", ctx.Actor.Role, entry.Environment))
 	}
 
@@ -232,38 +189,28 @@ func (p *Processor) DeleteConfig(ctx appctx.RequestContext, projectID, configID 
 	})
 	deleted, ok, err := p.store.DeleteConfig(projectID, configID, audit)
 	if err != nil {
-		logger.Config.Error("delete config persistence failed", append(fields, "error", err)...)
+		logger.Config.Error("delete config persistence failed")
 		return nil, model.InternalError("database persistence failed: " + err.Error())
 	}
 	if !ok {
-		logger.Config.Warn("delete config disappeared before delete", fields...)
+		logger.Config.Warn("delete config disappeared before delete")
 		return nil, model.NotFound(fmt.Sprintf("Config %q not found for project %q", configID, projectID))
 	}
 
-	logger.Config.Info("config deleted", fields...)
+	logger.Config.Info("config deleted")
 	return map[string]any{"deleted": true, "config": deleted}, nil
 }
 
 func (p *Processor) ListConfigVersions(ctx appctx.RequestContext, projectID, configID string, revealSensitive bool) (map[string]any, *model.ErrorDetail) {
-	fields := []any{
-		"operation", "config.version.list",
-		logger.FieldUserID, ctx.Actor.ID,
-		logger.FieldActor, ctx.ActorName(),
-		logger.FieldRole, string(ctx.Actor.Role),
-		logger.FieldProjectID, projectID,
-		logger.FieldConfigID, configID,
-		"reveal_sensitive", revealSensitive,
-	}
-	logger.Config.Info("list config versions requested", fields...)
+	logger.Config.Info("list config versions requested")
 
 	entry, ok := p.store.FindConfig(projectID, configID)
 	if !ok {
-		logger.Config.Warn("list config versions not found", fields...)
+		logger.Config.Warn("list config versions not found")
 		return nil, model.NotFound(fmt.Sprintf("Config %q not found for project %q", configID, projectID))
 	}
-	fields = append(fields, logger.FieldEnvironment, entry.Environment, logger.FieldConfigKey, entry.Key)
 	if revealSensitive && !util.CanRevealSensitive(ctx.Actor) {
-		logger.Config.Warn("list config versions denied", append(fields, "reason", "reveal_sensitive_not_allowed")...)
+		logger.Config.Warn("list config versions denied")
 		return nil, model.Forbidden("Role cannot reveal sensitive values")
 	}
 
@@ -282,40 +229,31 @@ func (p *Processor) ListConfigVersions(ctx appctx.RequestContext, projectID, con
 		"versionCount": len(versions),
 		"maskedValues": entry.IsSensitive && !revealSensitive,
 	}
-	logger.Config.Info("config versions listed", append(fields, "version_count", len(versions), "masked_values", entry.IsSensitive && !revealSensitive)...)
+	logger.Config.Info("config versions listed")
 	return payload, nil
 }
 
 func (p *Processor) RollbackConfig(ctx appctx.RequestContext, projectID, configID string, req model.RollbackConfigRequest) (model.ConfigEntry, *model.ErrorDetail) {
-	fields := []any{
-		"operation", "config.rollback",
-		logger.FieldUserID, ctx.Actor.ID,
-		logger.FieldActor, ctx.ActorName(),
-		logger.FieldRole, string(ctx.Actor.Role),
-		logger.FieldProjectID, projectID,
-		logger.FieldConfigID, configID,
-	}
-	logger.Config.Info("rollback config requested", fields...)
+	logger.Config.Info("rollback config requested")
 
 	entry, ok := p.store.FindConfig(projectID, configID)
 	if !ok {
-		logger.Config.Warn("rollback config not found", fields...)
+		logger.Config.Warn("rollback config not found")
 		return model.ConfigEntry{}, model.NotFound(fmt.Sprintf("Config %q not found for project %q", configID, projectID))
 	}
-	fields = append(fields, logger.FieldEnvironment, entry.Environment, logger.FieldConfigKey, entry.Key)
 	if !util.CanWriteEnvironment(ctx.Actor, entry.Environment) {
-		logger.Config.Warn("rollback config denied", append(fields, "reason", "environment_write_not_allowed")...)
+		logger.Config.Warn("rollback config denied")
 		return model.ConfigEntry{}, model.Forbidden(fmt.Sprintf("Role %q cannot modify %q config", ctx.Actor.Role, entry.Environment))
 	}
 
 	versions := p.store.ListConfigVersions(configID)
 	version, ok := selectRollbackVersion(versions, strings.TrimSpace(req.VersionID))
 	if !ok {
-		logger.Config.Warn("rollback config version not found", append(fields, "version_id", req.VersionID)...)
+		logger.Config.Warn("rollback config version not found")
 		return model.ConfigEntry{}, model.NotFound("Rollback version not found")
 	}
 	if version.OldValue == nil {
-		logger.Config.Warn("rollback config unavailable", append(fields, "version_id", version.ID, "reason", "no_previous_value")...)
+		logger.Config.Warn("rollback config unavailable")
 		return model.ConfigEntry{}, model.InvalidInput("Selected version does not have a previous value")
 	}
 
@@ -331,128 +269,110 @@ func (p *Processor) RollbackConfig(ctx appctx.RequestContext, projectID, configI
 		"key":               entry.Key,
 		"rollbackVersionId": version.ID,
 	})
-	if err := p.store.SaveConfig(entry, nextVersion, audit); err != nil {
-		logger.Config.Error("rollback config persistence failed", append(fields, "error", err)...)
+	if err := p.store.SaveConfig([]model.ConfigEntry{entry}, []model.ConfigVersion{nextVersion}, audit); err != nil {
+		logger.Config.Error("rollback config persistence failed")
 		return model.ConfigEntry{}, model.InternalError("database persistence failed: " + err.Error())
 	}
 
-	logger.Config.Info("config rolled back", append(fields, "rollback_version_id", version.ID)...)
+	logger.Config.Info("config rolled back")
 	return entry, nil
 }
 
 func (p *Processor) ListConfigHistory(ctx appctx.RequestContext, projectID, environment string, revealSensitive bool) (map[string]any, *model.ErrorDetail) {
 	environment = strings.TrimSpace(environment)
-	fields := []any{
-		"operation", "config.history.list",
-		logger.FieldUserID, ctx.Actor.ID,
-		logger.FieldActor, ctx.ActorName(),
-		logger.FieldRole, string(ctx.Actor.Role),
-		logger.FieldProjectID, projectID,
-		logger.FieldEnvironment, environment,
-		"reveal_sensitive", revealSensitive,
-	}
-	logger.Config.Info("list config history requested", fields...)
+	logger.Config.Info("list config history requested")
 
 	if environment == "" {
-		logger.Config.Warn("list config history invalid", append(fields, "reason", "missing_environment")...)
+		logger.Config.Warn("list config history invalid")
 		return nil, model.InvalidInput(`Query parameter "env" is required`)
 	}
 	if revealSensitive && !util.CanRevealSensitive(ctx.Actor) {
-		logger.Config.Warn("list config history denied", append(fields, "reason", "reveal_sensitive_not_allowed")...)
+		logger.Config.Warn("list config history denied")
 		return nil, model.Forbidden("Role cannot reveal sensitive values")
 	}
 	if err := p.requireEnvironment(projectID, environment); err != nil {
-		logger.Config.Warn("list config history failed", append(fields, "error_kind", err.Kind, "error", err.Detail)...)
+		logger.Config.Warn("list config history failed")
 		return nil, err
 	}
 
-	snapshots := p.store.ListConfigSnapshots(projectID, environment)
+	revisions := p.store.ListConfigRevisions(projectID, environment)
 	if !revealSensitive {
-		maskSnapshotValues(snapshots)
+		maskRevisionValues(revisions)
 	}
 
 	payload := map[string]any{
 		"projectId":     projectID,
 		"environment":   environment,
-		"snapshots":     snapshots,
-		"snapshotCount": len(snapshots),
+		"revisions":     revisions,
+		"revisionCount": len(revisions),
 		"maskedValues":  !revealSensitive,
 	}
-	logger.Config.Info("config history listed", append(fields, "snapshot_count", len(snapshots), "masked_values", !revealSensitive)...)
+	logger.Config.Info("config history listed")
 	return payload, nil
 }
 
-func (p *Processor) RollbackConfigSnapshot(ctx appctx.RequestContext, projectID string, req model.RollbackConfigSnapshotRequest) (map[string]any, *model.ErrorDetail) {
+func (p *Processor) RollbackConfigRevision(ctx appctx.RequestContext, projectID string, req model.RollbackConfigRevisionRequest) (map[string]any, *model.ErrorDetail) {
 	environment := strings.TrimSpace(req.Environment)
-	snapshotID := strings.TrimSpace(req.SnapshotID)
-	fields := []any{
-		"operation", "config.history.rollback",
-		logger.FieldUserID, ctx.Actor.ID,
-		logger.FieldActor, ctx.ActorName(),
-		logger.FieldRole, string(ctx.Actor.Role),
-		logger.FieldProjectID, projectID,
-		logger.FieldEnvironment, environment,
-		"snapshot_id", snapshotID,
-	}
-	logger.Config.Info("rollback config snapshot requested", fields...)
+	revisionID := strings.TrimSpace(req.RevisionID)
+	logger.Config.Info("rollback config revision requested")
 
-	if environment == "" || snapshotID == "" {
-		logger.Config.Warn("rollback config snapshot invalid", append(fields, "reason", "missing_environment_or_snapshot")...)
-		return nil, model.InvalidInput("environment and snapshotId are required")
+	if environment == "" || revisionID == "" {
+		logger.Config.Warn("rollback config revision invalid")
+		return nil, model.InvalidInput("environment and revisionId are required")
 	}
 	if !util.CanWriteEnvironment(ctx.Actor, environment) {
-		logger.Config.Warn("rollback config snapshot denied", append(fields, "reason", "environment_write_not_allowed")...)
+		logger.Config.Warn("rollback config revision denied")
 		return nil, model.Forbidden(fmt.Sprintf("Role %q cannot modify %q config", ctx.Actor.Role, environment))
 	}
 	if err := p.requireEnvironment(projectID, environment); err != nil {
-		logger.Config.Warn("rollback config snapshot failed", append(fields, "error_kind", err.Kind, "error", err.Detail)...)
+		logger.Config.Warn("rollback config revision failed")
 		return nil, err
 	}
 
-	snapshot, ok := selectSnapshot(p.store.ListConfigSnapshots(projectID, environment), snapshotID)
+	revision, ok := selectRevision(p.store.ListConfigRevisions(projectID, environment), revisionID)
 	if !ok {
-		logger.Config.Warn("rollback config snapshot not found", fields...)
-		return nil, model.NotFound("Config snapshot not found")
+		logger.Config.Warn("rollback config revision not found")
+		return nil, model.NotFound("Config revision not found")
 	}
 
-	changeReason := util.Fallback(req.ChangeReason, "rollback config snapshot")
-	audit := newAudit(ctx.ActorName(), "config.rollback_snapshot", "config_snapshot", snapshot.ID, projectID, map[string]any{
+	changeReason := util.Fallback(req.ChangeReason, "rollback config revision")
+	audit := newAudit(ctx.ActorName(), "config.rollback_revision", "config_revision", revision.ID, projectID, map[string]any{
 		"environment": environment,
-		"snapshotId":  snapshot.ID,
-		"entryCount":  len(snapshot.Entries),
+		"revisionId":  revision.ID,
+		"entryCount":  len(revision.Entries),
 	})
-	if err := p.store.RestoreConfigSnapshot(projectID, environment, snapshot, ctx.ActorName(), changeReason, audit); err != nil {
-		logger.Config.Error("rollback config snapshot persistence failed", append(fields, "error", err)...)
+	if err := p.store.RestoreConfigRevision(projectID, environment, revision, ctx.ActorName(), changeReason, audit); err != nil {
+		logger.Config.Error("rollback config revision persistence failed")
 		return nil, model.InternalError("database persistence failed: " + err.Error())
 	}
 
-	logger.Config.Info("config snapshot rolled back", append(fields, "entry_count", len(snapshot.Entries))...)
+	logger.Config.Info("config revision rolled back")
 	return map[string]any{
 		"restored":    true,
 		"projectId":   projectID,
 		"environment": environment,
-		"snapshotId":  snapshot.ID,
-		"entryCount":  len(snapshot.Entries),
+		"revisionId":  revision.ID,
+		"entryCount":  len(revision.Entries),
 	}, nil
 }
 
-func maskSnapshotValues(snapshots []model.ConfigSnapshot) {
-	for snapshotIndex := range snapshots {
-		for entryIndex := range snapshots[snapshotIndex].Entries {
-			if snapshots[snapshotIndex].Entries[entryIndex].IsSensitive {
-				snapshots[snapshotIndex].Entries[entryIndex].Value = maskedValue
+func maskRevisionValues(revisions []model.ConfigRevision) {
+	for revisionIndex := range revisions {
+		for entryIndex := range revisions[revisionIndex].Entries {
+			if revisions[revisionIndex].Entries[entryIndex].IsSensitive {
+				revisions[revisionIndex].Entries[entryIndex].Value = maskedValue
 			}
 		}
 	}
 }
 
-func selectSnapshot(snapshots []model.ConfigSnapshot, snapshotID string) (model.ConfigSnapshot, bool) {
-	for _, snapshot := range snapshots {
-		if snapshot.ID == snapshotID {
-			return snapshot, true
+func selectRevision(revisions []model.ConfigRevision, revisionID string) (model.ConfigRevision, bool) {
+	for _, revision := range revisions {
+		if revision.ID == revisionID {
+			return revision, true
 		}
 	}
-	return model.ConfigSnapshot{}, false
+	return model.ConfigRevision{}, false
 }
 
 func maskVersions(versions []model.ConfigVersion) {
@@ -482,41 +402,32 @@ func selectRollbackVersion(versions []model.ConfigVersion, versionID string) (mo
 
 func (p *Processor) ExtractConfigs(ctx appctx.RequestContext, projectID string, req model.ImportConfigRequest) (map[string]any, *model.ErrorDetail) {
 	environment := strings.TrimSpace(req.Environment)
-	fields := []any{
-		"operation", "config.extract",
-		logger.FieldUserID, ctx.Actor.ID,
-		logger.FieldActor, ctx.ActorName(),
-		logger.FieldRole, string(ctx.Actor.Role),
-		logger.FieldProjectID, projectID,
-		logger.FieldEnvironment, environment,
-		"format", req.Format,
-	}
-	logger.Config.Info("extract configs requested", fields...)
+	logger.Config.Info("extract configs requested")
 
 	if environment == "" {
-		logger.Config.Warn("extract configs invalid", append(fields, "reason", "missing_environment")...)
+		logger.Config.Warn("extract configs invalid")
 		return nil, model.InvalidInput("environment is required")
 	}
 	if !util.CanWriteEnvironment(ctx.Actor, environment) {
-		logger.Config.Warn("extract configs denied", append(fields, "reason", "environment_write_not_allowed")...)
+		logger.Config.Warn("extract configs denied")
 		return nil, model.Forbidden(fmt.Sprintf("Role %q cannot modify %q config", ctx.Actor.Role, environment))
 	}
 	if !util.IsSupportedConfigFormat(req.Format) {
-		logger.Config.Warn("extract configs invalid", append(fields, "reason", "unsupported_format")...)
+		logger.Config.Warn("extract configs invalid")
 		return nil, model.InvalidInput("format must be json, yaml, or properties")
 	}
 	if err := p.requireEnvironment(projectID, environment); err != nil {
-		logger.Config.Warn("extract configs failed", append(fields, "error_kind", err.Kind, "error", err.Detail)...)
+		logger.Config.Warn("extract configs failed")
 		return nil, err
 	}
 
 	parsed, parseErr := util.ParseConfigFile(req.Format, req.Content)
 	if parseErr != nil {
-		logger.Config.Warn("extract configs parse failed", append(fields, "error", parseErr)...)
+		logger.Config.Warn("extract configs parse failed")
 		return nil, model.InvalidInput(parseErr.Error())
 	}
 	if len(parsed) == 0 {
-		logger.Config.Warn("extract configs invalid", append(fields, "reason", "empty_config_file")...)
+		logger.Config.Warn("extract configs invalid")
 		return nil, model.InvalidInput("No config entries found in file content")
 	}
 
@@ -531,12 +442,12 @@ func (p *Processor) ExtractConfigs(ctx appctx.RequestContext, projectID string, 
 		"updated":     updated,
 		"unchanged":   unchanged,
 	}
-	logger.Config.Info("configs extracted", append(fields, "entry_count", len(entries), "created", created, "updated", updated, "unchanged", unchanged)...)
+	logger.Config.Info("configs extracted")
 	return payload, nil
 }
 
-func (p *Processor) previewParsedConfigs(projectID, environment string, parsed []util.ParsedConfigEntry) ([]model.ConfigSnapshotEntry, int, int, int) {
-	entries := make([]model.ConfigSnapshotEntry, 0, len(parsed))
+func (p *Processor) previewParsedConfigs(projectID, environment string, parsed []util.ParsedConfigEntry) ([]model.ConfigRevisionEntry, int, int, int) {
+	entries := make([]model.ConfigRevisionEntry, 0, len(parsed))
 	created, updated, unchanged := 0, 0, 0
 	for _, parsedEntry := range parsed {
 		isSensitive := util.LooksSensitive(parsedEntry.Key)
@@ -550,7 +461,7 @@ func (p *Processor) previewParsedConfigs(projectID, environment string, parsed [
 		} else {
 			created++
 		}
-		entries = append(entries, model.ConfigSnapshotEntry{
+		entries = append(entries, model.ConfigRevisionEntry{
 			Key:         parsedEntry.Key,
 			Value:       parsedEntry.Value,
 			ValueType:   parsedEntry.ValueType,
@@ -562,41 +473,32 @@ func (p *Processor) previewParsedConfigs(projectID, environment string, parsed [
 
 func (p *Processor) ImportConfigs(ctx appctx.RequestContext, projectID string, req model.ImportConfigRequest) (map[string]any, *model.ErrorDetail) {
 	environment := strings.TrimSpace(req.Environment)
-	fields := []any{
-		"operation", "config.import",
-		logger.FieldUserID, ctx.Actor.ID,
-		logger.FieldActor, ctx.ActorName(),
-		logger.FieldRole, string(ctx.Actor.Role),
-		logger.FieldProjectID, projectID,
-		logger.FieldEnvironment, environment,
-		"format", req.Format,
-	}
-	logger.Config.Info("import configs requested", fields...)
+	logger.Config.Info("import configs requested")
 
 	if environment == "" {
-		logger.Config.Warn("import configs invalid", append(fields, "reason", "missing_environment")...)
+		logger.Config.Warn("import configs invalid")
 		return nil, model.InvalidInput("environment is required")
 	}
 	if !util.CanWriteEnvironment(ctx.Actor, environment) {
-		logger.Config.Warn("import configs denied", append(fields, "reason", "environment_write_not_allowed")...)
+		logger.Config.Warn("import configs denied")
 		return nil, model.Forbidden(fmt.Sprintf("Role %q cannot modify %q config", ctx.Actor.Role, environment))
 	}
 	if !util.IsSupportedConfigFormat(req.Format) {
-		logger.Config.Warn("import configs invalid", append(fields, "reason", "unsupported_format")...)
+		logger.Config.Warn("import configs invalid")
 		return nil, model.InvalidInput("format must be json, yaml, or properties")
 	}
 	if err := p.requireEnvironment(projectID, environment); err != nil {
-		logger.Config.Warn("import configs failed", append(fields, "error_kind", err.Kind, "error", err.Detail)...)
+		logger.Config.Warn("import configs failed")
 		return nil, err
 	}
 
 	parsed, parseErr := util.ParseConfigFile(req.Format, req.Content)
 	if parseErr != nil {
-		logger.Config.Warn("import configs parse failed", append(fields, "error", parseErr)...)
+		logger.Config.Warn("import configs parse failed")
 		return nil, model.InvalidInput(parseErr.Error())
 	}
 	if len(parsed) == 0 {
-		logger.Config.Warn("import configs invalid", append(fields, "reason", "empty_config_file")...)
+		logger.Config.Warn("import configs invalid")
 		return nil, model.InvalidInput("No config entries found in file content")
 	}
 
@@ -648,8 +550,8 @@ func (p *Processor) ImportConfigs(ctx appctx.RequestContext, projectID string, r
 		"updated":     updated,
 		"unchanged":   unchanged,
 	})
-	if err := p.store.SaveConfigBatch(entries, versions, audit); err != nil {
-		logger.Config.Error("import configs persistence failed", append(fields, "error", err)...)
+	if err := p.store.SaveConfig(entries, versions, audit); err != nil {
+		logger.Config.Error("import configs persistence failed")
 		return nil, model.InternalError("database persistence failed: " + err.Error())
 	}
 
@@ -663,6 +565,6 @@ func (p *Processor) ImportConfigs(ctx appctx.RequestContext, projectID string, r
 		"unchanged":    unchanged,
 		"changeReason": util.Fallback(req.ChangeReason, "import config file"),
 	}
-	logger.Config.Info("configs imported", append(fields, "imported", len(parsed), "created", created, "updated", updated, "unchanged", unchanged)...)
+	logger.Config.Info("configs imported")
 	return payload, nil
 }

@@ -1276,33 +1276,33 @@ td {
 }
 
 .version-values div,
-.snapshot-entry {
+.revision-entry {
   min-width: 0;
   border-radius: 8px;
   padding: 10px;
   background: #fff;
 }
 
-.snapshot-entry-list {
+.revision-entry-list {
   display: grid;
   gap: 8px;
   margin-top: 12px;
 }
 
-.snapshot-entry {
+.revision-entry {
   display: grid;
   grid-template-columns: minmax(120px, 0.42fr) minmax(0, 1fr);
   gap: 10px;
 }
 
-.snapshot-entry span {
+.revision-entry span {
   overflow-wrap: anywhere;
   color: var(--muted);
   font-size: 12px;
   font-weight: 800;
 }
 
-.snapshot-entry code {
+.revision-entry code {
   overflow-wrap: anywhere;
   color: var(--text);
   font-size: 13px;
@@ -1575,7 +1575,7 @@ td {
   .template-variable-list,
   .review-change-item,
   .review-value-pair,
-  .snapshot-entry {
+  .revision-entry {
     display: grid;
     grid-template-columns: 1fr;
   }

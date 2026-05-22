@@ -20,11 +20,7 @@ func NewProcessor(dataStore *store.Store) (*Processor, error) {
 func New(dataStore *store.Store) *Processor {
 	proc, err := NewProcessor(dataStore)
 	if err != nil {
-		return &Processor{store: store.NewStore()}
+		panic(err)
 	}
 	return proc
-}
-
-func NewInMemory() *Processor {
-	return New(store.NewStore())
 }

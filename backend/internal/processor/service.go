@@ -14,19 +14,15 @@ const demoPassword = "password"
 
 func (p *Processor) Login(req model.LoginRequest) (model.AuthResponse, *model.ErrorDetail) {
 	email := strings.TrimSpace(req.Email)
-	logger.Auth.Info("login attempt", "operation", "auth.login", "email", email)
+	logger.Auth.Info("login attempt")
 
 	user, ok := p.store.FindUserByEmail(email)
 	if !ok || req.Password != demoPassword {
-		logger.Auth.Warn("login failed", "operation", "auth.login", "email", email)
+		logger.Auth.Warn("login failed")
 		return model.AuthResponse{}, model.Unauthorized("Invalid email or password")
 	}
 
-	logger.Auth.Info("login succeeded",
-		"operation", "auth.login",
-		logger.FieldUserID, user.ID,
-		logger.FieldRole, string(user.Role),
-	)
+	logger.Auth.Info("login succeeded")
 	return model.AuthResponse{Token: user.ID, User: user}, nil
 }
 
@@ -34,37 +30,23 @@ func (p *Processor) AuthenticateToken(token string) (appctx.RequestContext, *mod
 	token = strings.TrimSpace(token)
 	user, ok := p.store.FindUserByID(token)
 	if !ok {
-		logger.Auth.Warn("authentication failed", "operation", "auth.authenticate")
+		logger.Auth.Warn("authentication failed")
 		return appctx.RequestContext{}, model.Unauthorized("Missing or invalid login token")
 	}
 
-	logger.Auth.Info("authentication succeeded",
-		"operation", "auth.authenticate",
-		logger.FieldUserID, user.ID,
-		logger.FieldRole, string(user.Role),
-	)
+	logger.Auth.Info("authentication succeeded")
 	return appctx.RequestContext{Actor: user}, nil
 }
 
 func (p *Processor) Templates(ctx appctx.RequestContext) []model.Template {
-	logger.Template.Info("templates listed",
-		"operation", "template.list",
-		logger.FieldUserID, ctx.Actor.ID,
-		logger.FieldActor, ctx.ActorName(),
-		logger.FieldRole, string(ctx.Actor.Role),
-	)
+	logger.Template.Info("templates listed")
 	templates := model.InfrastructureTemplates()
 	templates = append(templates, p.store.ListTemplates(ctx.Actor.ID)...)
 	return templates
 }
 
 func (p *Processor) BaseTemplate(ctx appctx.RequestContext) model.Template {
-	logger.Template.Info("base template loaded",
-		"operation", "template.base",
-		logger.FieldUserID, ctx.Actor.ID,
-		logger.FieldActor, ctx.ActorName(),
-		logger.FieldRole, string(ctx.Actor.Role),
-	)
+	logger.Template.Info("base template loaded")
 	return model.BaseTemplate()
 }
 
@@ -72,14 +54,7 @@ func (p *Processor) CreateTemplate(ctx appctx.RequestContext, req model.CreateTe
 	name := strings.TrimSpace(req.Name)
 	format := strings.ToLower(strings.TrimSpace(req.Format))
 	body := req.Body
-	logger.Template.Info("create template requested",
-		"operation", "template.create",
-		logger.FieldUserID, ctx.Actor.ID,
-		logger.FieldActor, ctx.ActorName(),
-		logger.FieldRole, string(ctx.Actor.Role),
-		"template_name", name,
-		"format", format,
-	)
+	logger.Template.Info("create template requested")
 
 	if len(name) < 2 {
 		return model.Template{}, model.InvalidInput("template name is required")
@@ -112,16 +87,11 @@ func (p *Processor) CreateTemplate(ctx appctx.RequestContext, req model.CreateTe
 		"name":   template.Name,
 		"format": template.Format,
 	})); err != nil {
-		logger.Template.Error("create template persistence failed", "operation", "template.create", "error", err)
+		logger.Template.Error("create template persistence failed")
 		return model.Template{}, model.InternalError("database persistence failed: " + err.Error())
 	}
 
-	logger.Template.Info("template created",
-		"operation", "template.create",
-		logger.FieldUserID, ctx.Actor.ID,
-		"template_id", template.ID,
-		"variable_count", len(template.Variables),
-	)
+	logger.Template.Info("template created")
 	return template, nil
 }
 

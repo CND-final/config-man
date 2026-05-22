@@ -524,25 +524,25 @@ export function renderVersionHistory() {
       </div>
       <div class="history-previous">
         <span>Previous Config</span>
-        <code>${previous ? `${previous.entries.length} keys · ${escapeHtml(previous.changeReason)}` : "No previous snapshot"}</code>
+        <code>${previous ? `${previous.entries.length} keys · ${escapeHtml(previous.changeReason)}` : "No previous revision"}</code>
       </div>
     `
     : '<p class="project-meta">No config history yet.</p>';
 
   $("#versionList").innerHTML = state.configHistory
-    .map((snapshot, index) => {
-      const version = formatSnapshotVersion(snapshot.id);
+    .map((revision, index) => {
+      const version = formatRevisionVersion(revision.id);
       return `
           <article class="version-item version-record">
             <div class="version-record-line">
-              <strong>${escapeHtml(snapshot.changedBy)}</strong>
+              <strong>${escapeHtml(revision.changedBy)}</strong>
               <span>${index === 0 ? "current version" : "version"}</span>
               <code>${escapeHtml(version)}</code>
-              <span>${escapeHtml(formatDateTime(snapshot.createdAt))}</span>
+              <span>${escapeHtml(formatDateTime(revision.createdAt))}</span>
             </div>
             <div class="version-record-meta">
-              <span>${snapshot.entries.length} keys</span>
-              <span>${escapeHtml(snapshot.changeReason)}</span>
+              <span>${revision.entries.length} keys</span>
+              <span>${escapeHtml(revision.changeReason)}</span>
             </div>
           </article>
         `;
@@ -566,7 +566,7 @@ function renderConfigVersionLabel() {
     return;
   }
 
-  const version = formatSnapshotVersion(current.id);
+  const version = formatRevisionVersion(current.id);
   label.textContent = `${state.activeEnvironment} · Version ${version} · ${formatDateTime(current.createdAt)} · ${current.entries.length} keys`;
 }
 
@@ -695,10 +695,10 @@ function renderReviewChange(change) {
   `;
 }
 
-function formatSnapshotVersion(id) {
+function formatRevisionVersion(id) {
   if (!id) return "current";
   return String(id)
-    .replace(/^snap-/, "")
+    .replace(/^rev-/, "")
     .slice(0, 7);
 }
 
@@ -740,7 +740,7 @@ export function renderImportPreview() {
   $("#importPreviewList").innerHTML = preview.entries
     .map(
       (entry) => `
-        <article class="snapshot-entry import-preview-entry">
+        <article class="revision-entry import-preview-entry">
           <span>${escapeHtml(entry.key)}</span>
           <code>${escapeHtml(entry.value)}</code>
         </article>

@@ -64,7 +64,7 @@ func resetDatabase(t *testing.T, db *sql.DB) {
 		TRUNCATE TABLE
 			audit_logs,
 			review_requests,
-			config_snapshots,
+			config_revisions,
 			config_versions,
 			config_entries,
 			project_environments,

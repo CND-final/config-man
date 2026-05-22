@@ -25,18 +25,18 @@ type ConfigVersion struct {
 	CreatedAt    time.Time `json:"createdAt"`
 }
 
-type ConfigSnapshotEntry struct {
+type ConfigRevisionEntry struct {
 	Key         string `json:"key"`
 	Value       string `json:"value"`
 	ValueType   string `json:"valueType"`
 	IsSensitive bool   `json:"isSensitive"`
 }
 
-type ConfigSnapshot struct {
+type ConfigRevision struct {
 	ID           string                `json:"id"`
 	ProjectID    string                `json:"projectId"`
 	Environment  string                `json:"environment"`
-	Entries      []ConfigSnapshotEntry `json:"entries"`
+	Entries      []ConfigRevisionEntry `json:"entries"`
 	ChangedBy    string                `json:"changedBy"`
 	ChangeReason string                `json:"changeReason"`
 	CreatedAt    time.Time             `json:"createdAt"`

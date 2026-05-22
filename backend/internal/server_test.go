@@ -2,25 +2,85 @@ package app
 
 import (
 	"bytes"
+	"context"
+	"database/sql"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
 	"config-man/backend/internal/processor"
+	"config-man/backend/internal/store"
 	"config-man/backend/model"
 	"config-man/backend/pkg/config"
+
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-func newTestHandler() http.Handler {
-	log := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
-	server, err := NewServer(processor.NewInMemory(), log, config.Config{})
+func newTestHandler(t *testing.T) http.Handler {
+	t.Helper()
+	db := openServerTestDB(t)
+	t.Cleanup(func() { _ = db.Close() })
+
+	ctx := context.Background()
+	if _, err := store.NewStoreWithDB(ctx, db); err != nil {
+		t.Fatalf("initialize schema: %v", err)
+	}
+	resetServerTestDB(t, db)
+
+	dataStore, err := store.NewStoreWithDB(ctx, db)
 	if err != nil {
-		panic(err)
+		t.Fatalf("initialize store: %v", err)
+	}
+	proc, err := processor.NewProcessor(dataStore)
+	if err != nil {
+		t.Fatalf("initialize processor: %v", err)
+	}
+	log := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
+	server, err := NewServer(proc, log, config.Config{})
+	if err != nil {
+		t.Fatalf("initialize server: %v", err)
 	}
 	return server.Handler()
+}
+
+func openServerTestDB(t *testing.T) *sql.DB {
+	t.Helper()
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_URL not set; skipping DB-backed server test")
+	}
+	db, err := sql.Open("pgx", databaseURL)
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	if err := db.PingContext(context.Background()); err != nil {
+		_ = db.Close()
+		t.Fatalf("ping database: %v", err)
+	}
+	return db
+}
+
+func resetServerTestDB(t *testing.T, db *sql.DB) {
+	t.Helper()
+	_, err := db.ExecContext(context.Background(), `
+		TRUNCATE TABLE
+			audit_logs,
+			review_requests,
+			config_revisions,
+			config_versions,
+			config_entries,
+			project_environments,
+			projects,
+			custom_templates
+		CASCADE
+	`)
+	if err != nil {
+		t.Fatalf("truncate tables: %v", err)
+	}
 }
 
 func request(t *testing.T, handler http.Handler, method, path, token string, body any) *httptest.ResponseRecorder {
@@ -53,7 +113,7 @@ func decodeBody[T any](t *testing.T, res *httptest.ResponseRecorder) T {
 }
 
 func TestLoginAndMe(t *testing.T) {
-	handler := newTestHandler()
+	handler := newTestHandler(t)
 	res := request(t, handler, http.MethodPost, "/api/v1/auth/login", "", map[string]any{"email": "admin@config-man.local", "password": "password"})
 	if res.Code != http.StatusOK {
 		t.Fatalf("login status = %d body=%s", res.Code, res.Body.String())
@@ -70,7 +130,7 @@ func TestLoginAndMe(t *testing.T) {
 }
 
 func TestProtectedRoutesRequireAuthentication(t *testing.T) {
-	handler := newTestHandler()
+	handler := newTestHandler(t)
 	res := request(t, handler, http.MethodGet, "/api/v1/projects", "", nil)
 	if res.Code != http.StatusUnauthorized {
 		t.Fatalf("protected route status = %d body=%s", res.Code, res.Body.String())
@@ -78,7 +138,7 @@ func TestProtectedRoutesRequireAuthentication(t *testing.T) {
 }
 
 func TestCreateProjectCreatesDefaultEnvironments(t *testing.T) {
-	handler := newTestHandler()
+	handler := newTestHandler(t)
 	res := request(t, handler, http.MethodPost, "/api/v1/projects", "alice", map[string]any{"name": "billing-service", "ownerName": "Billing Team"})
 	if res.Code != http.StatusCreated {
 		t.Fatalf("create project status = %d body=%s", res.Code, res.Body.String())
@@ -93,7 +153,7 @@ func TestCreateProjectCreatesDefaultEnvironments(t *testing.T) {
 }
 
 func TestListTemplatesIncludesBaseInfrastructureTemplates(t *testing.T) {
-	handler := newTestHandler()
+	handler := newTestHandler(t)
 	res := request(t, handler, http.MethodGet, "/api/v1/templates", "alice", nil)
 	if res.Code != http.StatusOK {
 		t.Fatalf("list templates status = %d body=%s", res.Code, res.Body.String())
@@ -118,7 +178,7 @@ func TestListTemplatesIncludesBaseInfrastructureTemplates(t *testing.T) {
 }
 
 func TestCreateTemplateIsPrivateToActor(t *testing.T) {
-	handler := newTestHandler()
+	handler := newTestHandler(t)
 	res := request(t, handler, http.MethodPost, "/api/v1/templates", "alice", map[string]any{
 		"name":        "Alice Spring Template",
 		"description": "private template",
@@ -202,7 +262,7 @@ func templateListHasID(templates []model.Template, id string) bool {
 }
 
 func TestSensitiveConfigIsMaskedByDefault(t *testing.T) {
-	handler := newTestHandler()
+	handler := newTestHandler(t)
 	res := request(t, handler, http.MethodGet, "/api/v1/projects/customer-portal/configs?env=prod", "alice", nil)
 	if res.Code != http.StatusOK {
 		t.Fatalf("list configs status = %d body=%s", res.Code, res.Body.String())
@@ -218,7 +278,7 @@ func TestSensitiveConfigIsMaskedByDefault(t *testing.T) {
 }
 
 func TestConfigVersionHistoryAndRollback(t *testing.T) {
-	handler := newTestHandler()
+	handler := newTestHandler(t)
 	nextValue := "warn"
 	res := request(t, handler, http.MethodPut, "/api/v1/projects/customer-portal/configs/cfg-staging-log-level", "alice", map[string]any{
 		"value":        nextValue,
@@ -255,12 +315,12 @@ func TestConfigVersionHistoryAndRollback(t *testing.T) {
 	}
 }
 
-func TestConfigHistorySnapshotsAndRollback(t *testing.T) {
-	handler := newTestHandler()
+func TestConfigHistoryRevisionsAndRollback(t *testing.T) {
+	handler := newTestHandler(t)
 	nextValue := "warn"
 	res := request(t, handler, http.MethodPut, "/api/v1/projects/customer-portal/configs/cfg-staging-log-level", "alice", map[string]any{
 		"value":        nextValue,
-		"changeReason": "snapshot update",
+		"changeReason": "revision update",
 	})
 	if res.Code != http.StatusOK {
 		t.Fatalf("update config status = %d body=%s", res.Code, res.Body.String())
@@ -271,22 +331,22 @@ func TestConfigHistorySnapshotsAndRollback(t *testing.T) {
 		t.Fatalf("list config history status = %d body=%s", res.Code, res.Body.String())
 	}
 	payload := decodeBody[struct {
-		Snapshots []model.ConfigSnapshot `json:"snapshots"`
+		Revisions []model.ConfigRevision `json:"revisions"`
 	}](t, res)
-	if len(payload.Snapshots) < 2 {
-		t.Fatalf("snapshot count = %d", len(payload.Snapshots))
+	if len(payload.Revisions) < 2 {
+		t.Fatalf("revision count = %d", len(payload.Revisions))
 	}
-	if !snapshotHasValue(payload.Snapshots[0], "log.level", nextValue) {
-		t.Fatalf("latest snapshot did not include updated log.level: %#v", payload.Snapshots[0])
+	if !revisionHasValue(payload.Revisions[0], "log.level", nextValue) {
+		t.Fatalf("latest revision did not include updated log.level: %#v", payload.Revisions[0])
 	}
 
 	res = request(t, handler, http.MethodPost, "/api/v1/projects/customer-portal/config-history/rollback", "alice", map[string]any{
 		"environment":  "staging",
-		"snapshotId":   payload.Snapshots[1].ID,
-		"changeReason": "snapshot rollback",
+		"revisionId":   payload.Revisions[1].ID,
+		"changeReason": "revision rollback",
 	})
 	if res.Code != http.StatusOK {
-		t.Fatalf("rollback snapshot status = %d body=%s", res.Code, res.Body.String())
+		t.Fatalf("rollback revision status = %d body=%s", res.Code, res.Body.String())
 	}
 
 	res = request(t, handler, http.MethodGet, "/api/v1/projects/customer-portal/configs?env=staging", "alice", nil)
@@ -301,7 +361,7 @@ func TestConfigHistorySnapshotsAndRollback(t *testing.T) {
 		if entry.Key == "log.level" {
 			found = true
 			if entry.Value != "info" {
-				t.Fatalf("rollback snapshot value = %q", entry.Value)
+				t.Fatalf("rollback revision value = %q", entry.Value)
 			}
 		}
 	}
@@ -310,8 +370,8 @@ func TestConfigHistorySnapshotsAndRollback(t *testing.T) {
 	}
 }
 
-func snapshotHasValue(snapshot model.ConfigSnapshot, key, value string) bool {
-	for _, entry := range snapshot.Entries {
+func revisionHasValue(revision model.ConfigRevision, key, value string) bool {
+	for _, entry := range revision.Entries {
 		if entry.Key == key && entry.Value == value {
 			return true
 		}
@@ -320,7 +380,7 @@ func snapshotHasValue(snapshot model.ConfigSnapshot, key, value string) bool {
 }
 
 func TestUpdateConfigKey(t *testing.T) {
-	handler := newTestHandler()
+	handler := newTestHandler(t)
 	res := request(t, handler, http.MethodPut, "/api/v1/projects/customer-portal/configs/cfg-staging-log-level", "alice", map[string]any{
 		"key":          "logging.level",
 		"changeReason": "rename key",
@@ -355,7 +415,7 @@ func configEntriesHaveKey(entries []model.ConfigEntry, key string) bool {
 }
 
 func TestDeveloperCannotModifyProdConfig(t *testing.T) {
-	handler := newTestHandler()
+	handler := newTestHandler(t)
 	value := "https://api2.example.com"
 	res := request(t, handler, http.MethodPut, "/api/v1/projects/customer-portal/configs/cfg-prod-api-baseurl", "nora", map[string]any{"value": value})
 	if res.Code != http.StatusForbidden {
@@ -364,7 +424,7 @@ func TestDeveloperCannotModifyProdConfig(t *testing.T) {
 }
 
 func TestImportJSONConfig(t *testing.T) {
-	handler := newTestHandler()
+	handler := newTestHandler(t)
 	res := request(t, handler, http.MethodPost, "/api/v1/projects/customer-portal/configs/import", "alice", map[string]any{"environment": "dev", "format": "json", "content": `{"feature":{"checkout":true},"limit":3}`})
 	if res.Code != http.StatusCreated {
 		t.Fatalf("import status = %d body=%s", res.Code, res.Body.String())
@@ -376,7 +436,7 @@ func TestImportJSONConfig(t *testing.T) {
 }
 
 func TestExtractConfigDoesNotPersist(t *testing.T) {
-	handler := newTestHandler()
+	handler := newTestHandler(t)
 	res := request(t, handler, http.MethodPost, "/api/v1/projects/customer-portal/configs/extract", "alice", map[string]any{
 		"environment": "dev",
 		"format":      "json",
@@ -386,7 +446,7 @@ func TestExtractConfigDoesNotPersist(t *testing.T) {
 		t.Fatalf("extract status = %d body=%s", res.Code, res.Body.String())
 	}
 	payload := decodeBody[struct {
-		Entries    []model.ConfigSnapshotEntry `json:"entries"`
+		Entries    []model.ConfigRevisionEntry `json:"entries"`
 		EntryCount int                         `json:"entryCount"`
 		Created    int                         `json:"created"`
 	}](t, res)
@@ -409,7 +469,7 @@ func TestExtractConfigDoesNotPersist(t *testing.T) {
 }
 
 func TestReviewRequestLifecycle(t *testing.T) {
-	handler := newTestHandler()
+	handler := newTestHandler(t)
 	res := request(t, handler, http.MethodPost, "/api/v1/review-requests", "nora", map[string]any{"projectId": "customer-portal", "environment": "prod", "configKey": "database.url", "reason": "Rotate database credential"})
 	if res.Code != http.StatusCreated {
 		t.Fatalf("create review status = %d body=%s", res.Code, res.Body.String())

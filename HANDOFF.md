@@ -115,8 +115,8 @@ Implemented phase 1 APIs:
 - `POST /api/v1/projects/:projectId/configs/extract`
 - `POST /api/v1/projects/:projectId/configs/import`
 - `PUT /api/v1/projects/:projectId/configs/:configId`
-- `GET /api/v1/projects/:projectId/configs/:configId/versions` (legacy per-entry history; UI now uses config snapshots)
-- `POST /api/v1/projects/:projectId/configs/:configId/rollback` (legacy per-entry rollback; UI now uses config snapshots)
+- `GET /api/v1/projects/:projectId/configs/:configId/versions` (legacy per-entry history; UI now uses config revisions)
+- `POST /api/v1/projects/:projectId/configs/:configId/rollback` (legacy per-entry rollback; UI now uses config revisions)
 - `DELETE /api/v1/projects/:projectId/configs/:configId`
 - `GET /api/v1/review-requests`
 - `GET /api/v1/projects/:projectId/review-requests`
@@ -207,16 +207,16 @@ Sensitive-looking keys are detected in `backend/pkg/util/sensitive.go` and are n
 
 ### Config Version History And Rollback
 
-Config create/update/import/delete/rollback operations now write environment-level `model.ConfigSnapshot` records in addition to the older per-entry `model.ConfigVersion` rows. The UI uses config snapshots, because history should represent the whole config for a project/environment rather than a single key/value.
+Config create/update/import/delete/rollback operations now write environment-level `model.ConfigRevision` records in addition to the older per-entry `model.ConfigVersion` rows. The UI uses config revisions, because history should represent the whole config for a project/environment rather than a single key/value.
 
-Current snapshot APIs:
+Current revision APIs:
 
 ```text
 GET /api/v1/projects/:projectId/config-history?env=dev
 POST /api/v1/projects/:projectId/config-history/rollback
 ```
 
-Snapshot rollback restores the selected snapshot's full entry set for that environment, removes keys not present in the snapshot, writes a new snapshot for the restored state, and records an audit log. Sensitive values are masked by default in snapshot history unless `revealSensitive=true` is supplied by an allowed role.
+Revision rollback restores the selected revision's full entry set for that environment, removes keys not present in the revision, writes a new revision for the restored state, and records an audit log. Sensitive values are masked by default in revision history unless `revealSensitive=true` is supplied by an allowed role.
 
 Legacy per-entry APIs still exist for now:
 
@@ -328,9 +328,9 @@ The frontend is an Apple-inspired admin UI and includes:
 - Templates with global logging/Spring Boot skeleton support, personal template creation, and variable extraction
 - Sidebar navigation uses SVG image icons from `frontend/public/nav-*.svg` instead of letter codes
 - Config Editor, entered through clickable project cards instead of sidebar navigation; the left rail shows standard config files (`application.yaml`, `redis.yaml`, `security.json`) for the selected project instead of other projects
-- Config header shows the current environment snapshot version
+- Config header shows the current environment revision version
 - GitHub-style history icon sits in the Config page top-right action area and opens the environment-level config history modal backed by `GET /config-history?env=...`
-- Rollback previous full-config snapshot backed by `POST /config-history/rollback`
+- Rollback previous full-config revision backed by `POST /config-history/rollback`
 - Change Requests
 - Config import from JSON/YAML/properties via a top-right Import Config modal, then Extract Config preview, then Apply Import
 - Config export via an Export Config modal that lets the user choose `json`, `yaml`, or `properties`, then checks reveal-sensitive permission before downloading unmasked values
@@ -348,7 +348,7 @@ The frontend was refactored from one large `app.js` into small ES modules under 
 - `api.js` owns the relative `/api/v1` fetch wrapper.
 - `data.js` loads API payloads into state but should not render.
 - `render.js` renders DOM from state and should avoid API calls.
-- `actions.js` coordinates workflows such as create project, edit config, import/export config, review decisions, config snapshot history, and rollback.
+- `actions.js` coordinates workflows such as create project, edit config, import/export config, review decisions, config revision history, and rollback.
 - `events.js` binds DOM events and bootstraps the app.
 - Modal open/close workflows in `actions.js` call modal render helpers directly, so keep `renderTemplateModal`, `renderExportModal`, and `renderReviewModal` imported when touching those flows.
 

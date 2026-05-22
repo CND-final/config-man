@@ -44,9 +44,9 @@ type RollbackConfigRequest struct {
 	ChangeReason string `json:"changeReason"`
 }
 
-type RollbackConfigSnapshotRequest struct {
+type RollbackConfigRevisionRequest struct {
 	Environment  string `json:"environment"`
-	SnapshotID   string `json:"snapshotId"`
+	RevisionID   string `json:"revisionId"`
 	ChangeReason string `json:"changeReason"`
 }
 

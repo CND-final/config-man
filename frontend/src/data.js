@@ -97,5 +97,5 @@ export async function loadConfigHistory() {
   const data = await api(
     `/projects/${project.id}/config-history?env=${encodeURIComponent(state.activeEnvironment)}`,
   );
-  state.configHistory = data.snapshots || [];
+  state.configHistory = data.revisions || [];
 }
