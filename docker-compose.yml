@@ -1,0 +1,77 @@
+# Full-stack Docker Compose for config-man
+# Services: postgres → backend → frontend (nginx)
+#
+# Usage (from project root):
+#   make docker-up    build images and start all three services
+#   make docker-down  stop all services (data volume is preserved)
+#
+# Environment variables are read from the root .env file.
+# backend/.env is a separate file used only by `make dev` (local Go run).
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: config-man-postgres
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB:-config_man}
+      POSTGRES_USER:     ${POSTGRES_USER:-config_man}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-config_man}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - config_man_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-config_man} -d ${POSTGRES_DB:-config_man}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - config-man-net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: config-man-backend
+    environment:
+      DATABASE_URL:    ${DATABASE_URL:-postgres://config_man:config_man@postgres:5432/config_man?sslmode=disable}
+      CONFIG_MAN_HOST: ${CONFIG_MAN_HOST:-0.0.0.0}
+      CONFIG_MAN_PORT: ${CONFIG_MAN_PORT:-3000}
+    ports:
+      - "${BACKEND_PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:3000/api/v1/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - config-man-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: config-man-frontend
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+      # - "443:443"  # For HTTPS: uncomment after configuring SSL in frontend/nginx.conf
+    # For HTTPS: uncomment to mount SSL certificates into nginx.
+    # volumes:
+    #   - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - config-man-net
+
+networks:
+  config-man-net:
+    driver: bridge
+
+volumes:
+  config_man_postgres:
