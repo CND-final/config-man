@@ -20,7 +20,22 @@ export async function api(path, options = {}) {
   }
 
   const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
+  let data = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch (error) {
+      const preview = text.replace(/\s+/g, " ").trim().slice(0, 120);
+      if (!response.ok) {
+        throw new Error(
+          `API ${path} failed: ${response.status}${preview ? ` ${preview}` : ""}`,
+        );
+      }
+      throw new Error(
+        `API ${path} returned invalid JSON${preview ? `: ${preview}` : ""}`,
+      );
+    }
+  }
   if (!response.ok) {
     throw new Error(data?.message || `API request failed: ${response.status}`);
   }

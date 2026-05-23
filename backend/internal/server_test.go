@@ -75,7 +75,9 @@ func resetServerTestDB(t *testing.T, db *sql.DB) {
 			config_entries,
 			project_environments,
 			projects,
-			custom_templates
+			custom_templates,
+			group_members,
+			groups
 		CASCADE
 	`)
 	if err != nil {
@@ -149,6 +151,62 @@ func TestCreateProjectCreatesDefaultEnvironments(t *testing.T) {
 	}
 	if project.Environments[0].Name != "dev" || project.Environments[2].Name != "prod" {
 		t.Fatalf("unexpected environments: %#v", project.Environments)
+	}
+}
+
+func TestCreateGroupAndManageMembers(t *testing.T) {
+	handler := newTestHandler(t)
+
+	res := request(t, handler, http.MethodGet, "/api/v1/users", "alice", nil)
+	if res.Code != http.StatusOK {
+		t.Fatalf("list users status = %d body=%s", res.Code, res.Body.String())
+	}
+	users := decodeBody[struct {
+		Users []model.User `json:"users"`
+	}](t, res)
+	if len(users.Users) == 0 {
+		t.Fatalf("expected demo users")
+	}
+
+	res = request(t, handler, http.MethodPost, "/api/v1/groups", "alice", map[string]any{
+		"name":      "Platform Owners",
+		"memberIds": []string{"paul"},
+	})
+	if res.Code != http.StatusCreated {
+		t.Fatalf("create group status = %d body=%s", res.Code, res.Body.String())
+	}
+	group := decodeBody[model.Group](t, res)
+	if group.ID == "" || group.Name != "Platform Owners" || !groupHasUser(group, "paul") {
+		t.Fatalf("unexpected created group: %#v", group)
+	}
+
+	res = request(t, handler, http.MethodPost, "/api/v1/groups/"+group.ID+"/members", "alice", map[string]any{"userId": "nora"})
+	if res.Code != http.StatusOK {
+		t.Fatalf("add group member status = %d body=%s", res.Code, res.Body.String())
+	}
+	group = decodeBody[model.Group](t, res)
+	if !groupHasUser(group, "paul") || !groupHasUser(group, "nora") {
+		t.Fatalf("group members not updated: %#v", group)
+	}
+
+	res = request(t, handler, http.MethodGet, "/api/v1/groups/"+group.ID, "alice", nil)
+	if res.Code != http.StatusOK {
+		t.Fatalf("get group status = %d body=%s", res.Code, res.Body.String())
+	}
+	payload := decodeBody[struct {
+		Group model.Group `json:"group"`
+	}](t, res)
+	if payload.Group.MemberCount != 2 || !groupHasUser(payload.Group, "nora") {
+		t.Fatalf("unexpected group detail: %#v", payload.Group)
+	}
+
+	res = request(t, handler, http.MethodDelete, "/api/v1/groups/"+group.ID+"/members/nora", "alice", nil)
+	if res.Code != http.StatusOK {
+		t.Fatalf("remove group member status = %d body=%s", res.Code, res.Body.String())
+	}
+	group = decodeBody[model.Group](t, res)
+	if groupHasUser(group, "nora") {
+		t.Fatalf("member was not removed: %#v", group)
 	}
 }
 
@@ -232,6 +290,15 @@ func TestCreateTemplateIsPrivateToActor(t *testing.T) {
 	if res.Code != http.StatusNotFound {
 		t.Fatalf("create project with another user template status = %d body=%s", res.Code, res.Body.String())
 	}
+}
+
+func groupHasUser(group model.Group, userID string) bool {
+	for _, member := range group.Members {
+		if member.ID == userID {
+			return true
+		}
+	}
+	return false
 }
 
 func findTemplateByID(templates []model.Template, id string) (model.Template, bool) {

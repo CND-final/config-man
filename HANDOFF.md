@@ -123,6 +123,14 @@ Implemented phase 1 APIs:
 - `POST /api/v1/review-requests`
 - `PUT /api/v1/review-requests/:requestId/approve`
 - `PUT /api/v1/review-requests/:requestId/reject`
+- `GET /api/v1/users`
+- `GET /api/v1/groups`
+- `POST /api/v1/groups`
+- `GET /api/v1/groups/:groupId`
+- `PATCH /api/v1/groups/:groupId`
+- `DELETE /api/v1/groups/:groupId`
+- `POST /api/v1/groups/:groupId/members`
+- `DELETE /api/v1/groups/:groupId/members/:userId`
 
 ### Auth And Permissions
 
@@ -156,6 +164,7 @@ Files:
 - `project.go`: project list/create/get
 - `config.go`: config list/create/update/delete/import plus version history and rollback behavior
 - `review_request.go`: review request list/create/approve/reject
+- `group.go`: group list/create/update/delete plus group member add/remove
 - `audit.go`: audit/version helper creation
 
 ### Store Layer
@@ -167,6 +176,27 @@ Important intent:
 - `store` should stay focused on saving/fetching data.
 - Do not put business permission decisions in `store`.
 - Processor should orchestrate calls and enforce behavior.
+
+### Group And Group Members
+
+Group management is partially implemented for the role architecture discussion. The current backend supports creating groups and adding/removing group members from the frontend Group modal.
+
+Current behavior:
+
+- `system_admin` can list users, create groups, update/delete groups, and add/remove group members.
+- Non-system users can list only groups they belong to.
+- A `group_admin` group member is allowed by the model and processor, but the current frontend does not yet expose role selection when adding members.
+- Groups are persisted in `groups`; membership is persisted in `group_members` with `group_id`, `user_id`, and `role`.
+- Demo users still live in the in-memory seed user list, so `group_members.user_id` is not yet a foreign key.
+
+Important files:
+
+- `backend/model/group.go`
+- `backend/internal/api_group.go`
+- `backend/internal/processor/group.go`
+- `backend/internal/store/group_stroe.go` (typo retained from existing file name)
+- `backend/internal/db_store/db_group.go`
+- `backend/internal/store/user_store.go`
 
 ### Response And Errors
 
@@ -332,6 +362,7 @@ The frontend is an Apple-inspired admin UI and includes:
 - GitHub-style history icon sits in the Config page top-right action area and opens the environment-level config history modal backed by `GET /config-history?env=...`
 - Rollback previous full-config revision backed by `POST /config-history/rollback`
 - Change Requests
+- Group modal from the user menu, backed by `/groups` and `/users`, with group creation and member add/remove for system admins
 - Config import from JSON/YAML/properties via a top-right Import Config modal, then Extract Config preview, then Apply Import
 - Config export via an Export Config modal that lets the user choose `json`, `yaml`, or `properties`, then checks reveal-sensitive permission before downloading unmasked values
 - Sensitive value handling in the UI
@@ -387,11 +418,12 @@ Recommended next steps:
 2. Check all processor files for consistent logger category use.
 3. Add request access logging middleware only if requested; current goal was processor-level trace logs.
 4. Improve DB migrations/schema management if the project moves past phase 1 demo.
-5. Replace demo auth with JWT + RBAC when core workflows stabilize.
-6. Add more API tests around config import formats and review request requirements. The extract preview endpoint currently has basic non-persistence coverage.
-7. Ensure frontend warnings for sensitive Prod DB password updates align exactly with backend permissions/review request flow.
-8. Consider adding targeted frontend tests if the vanilla JS UI keeps gaining workflow logic.
-9. Reintroduce environment compare/diff only if it becomes a concrete review workflow; it was removed from the MVP UI to keep the product focused.
+5. Decide how group/project roles should be assigned in the UI. The backend has `group_admin` support, but the current UI adds members as regular group members only.
+6. Replace demo auth with JWT + RBAC when core workflows stabilize.
+7. Add more API tests around config import formats and review request requirements. The extract preview endpoint currently has basic non-persistence coverage.
+8. Ensure frontend warnings for sensitive Prod DB password updates align exactly with backend permissions/review request flow.
+9. Consider adding targeted frontend tests if the vanilla JS UI keeps gaining workflow logic.
+10. Reintroduce environment compare/diff only if it becomes a concrete review workflow; it was removed from the MVP UI to keep the product focused.
 
 ## Useful Commands
 

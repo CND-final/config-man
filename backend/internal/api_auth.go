@@ -27,6 +27,12 @@ func (s *Server) getProtectedAuthRoutes() Routes {
 			Pattern: "/auth/me",
 			APIFunc: s.handleMe,
 		},
+		{
+			Name:    "ListUsers",
+			Method:  http.MethodGet,
+			Pattern: "/users",
+			APIFunc: s.handleListUsers,
+		},
 	}
 }
 
@@ -48,4 +54,13 @@ func (s *Server) handleLogin(c *gin.Context) {
 func (s *Server) handleMe(c *gin.Context) {
 	reqCtx := requestContextFromGin(c)
 	response.WriteJSON(c, http.StatusOK, reqCtx.Actor)
+}
+
+func (s *Server) handleListUsers(c *gin.Context) {
+	users, err := s.processor.ListUsers(requestContextFromGin(c))
+	if err != nil {
+		response.WriteError(c, err)
+		return
+	}
+	response.WriteJSON(c, http.StatusOK, gin.H{"users": users})
 }

@@ -57,6 +57,16 @@ type ImportConfigRequest struct {
 	ChangeReason string `json:"changeReason"`
 }
 
+type CreateGroupRequest struct {
+	Name      string   `json:"name"`
+	MemberIDs []string `json:"memberIds"`
+}
+
+type GroupMemberRequest struct {
+	UserID    string    `json:"userId"`
+	GroupRole GroupRole `json:"groupRole"`
+}
+
 type CreateReviewRequest struct {
 	ProjectID   string `json:"projectId"`
 	Environment string `json:"environment"`

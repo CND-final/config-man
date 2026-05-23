@@ -1,22 +1,31 @@
 import {
   cancelInlineEdit,
   commitInlineEdit,
+  createGroup,
   createProject,
   createTemplate,
   createReviewRequest,
   exportCurrentConfig,
   handleReviewDecision,
   extractConfigFile,
+  addGroupMember,
   applyImportPreview,
   applyTemplate,
   cancelProjectTemplatePicker,
   chooseProjectTemplate,
   clearProjectTemplateSelection,
   openExportConfig,
+  openGroupPanel,
   openProjectTemplatePicker,
   openVersionHistory,
   rollbackLatestVersion,
   setExportModal,
+  removeGroupMember,
+  removeSelectedCreateMember,
+  removeSelectedGroupMember,
+  selectGroup,
+  setGroupDetailTab,
+  setGroupModal,
   setHistoryModal,
   setImportModal,
   setImportPreviewModal,
@@ -25,8 +34,15 @@ import {
   setTemplateCreateModal,
   setTemplateModal,
   startInlineEdit,
+  toggleGroupCreate,
+  toggleGroupCreateMemberSelection,
+  toggleGroupMemberPicker,
+  toggleGroupMemberSelection,
   submitReviewChanges,
   switchView,
+  updateGroupCreateMemberSearch,
+  updateGroupMemberRole,
+  updateGroupMemberSearch,
   updateTemplateValue,
   toggleSensitiveReveal,
 } from "./actions.js";
@@ -42,8 +58,6 @@ export function bindEvents() {
   document.addEventListener("focusout", handleDocumentFocusOut);
 
   $("#loginForm").addEventListener("submit", handleLogin);
-  $("#logoutButton").addEventListener("click", handleLogout);
-
   $("#globalSearch").addEventListener("input", (event) => {
     state.globalSearch = event.target.value;
     renderAll();
@@ -55,15 +69,39 @@ export function bindEvents() {
   });
 
   document.addEventListener("input", (event) => {
+    const groupCreateSearch = event.target.closest("#groupCreateMemberSearch");
+    if (groupCreateSearch) {
+      updateGroupCreateMemberSearch(groupCreateSearch.value);
+      return;
+    }
+
+    const groupMemberSearch = event.target.closest("#groupMemberSearch");
+    if (groupMemberSearch) {
+      updateGroupMemberSearch(groupMemberSearch.value);
+      return;
+    }
+
     const target = event.target.closest("[data-template-variable]");
     if (!target) return;
     updateTemplateValue(target.dataset.templateVariable, target.value);
   });
 
   document.addEventListener("change", (event) => {
-    const target = event.target.closest("#templateApplyFormat");
-    if (!target) return;
-    state.templateApplyFormat = target.value;
+    const createMember = event.target.closest("[data-group-create-member-option]");
+    if (createMember) {
+      toggleGroupCreateMemberSelection(createMember.value, createMember.checked);
+      return;
+    }
+
+    const member = event.target.closest("[data-group-member-option]");
+    if (member) {
+      toggleGroupMemberSelection(member.value, member.checked);
+      return;
+    }
+
+    const targetTemplateFormat = event.target.closest("#templateApplyFormat");
+    if (!targetTemplateFormat) return;
+    state.templateApplyFormat = targetTemplateFormat.value;
   });
 
   $("#configFile").addEventListener("change", (event) => {
@@ -93,6 +131,10 @@ export function bindEvents() {
   $("#templateCreateForm").addEventListener("submit", (event) => {
     createTemplate(event).catch((error) => showToast(error.message));
   });
+
+  $("#groupForm").addEventListener("submit", (event) => {
+    createGroup(event).catch((error) => showToast(error.message));
+  });
 }
 
 export function initApp() {
@@ -114,9 +156,91 @@ export function initApp() {
 
 async function handleDocumentClick(event) {
   const target = event.target.closest("button");
+  
+  if (!event.target.closest(".group-role-dropdown-container")) {
+    const { state } = await import("./state.js");
+    if (state.groupRoleMenuUserId) {
+      const { toggleGroupRoleMenu } = await import("./actions.js");
+      toggleGroupRoleMenu("");
+    }
+  }
+
   if (!target) return;
 
   try {
+
+    if (target.dataset.userMenuAction === "groups") {
+      await openGroupPanel();
+      return;
+    }
+
+    if (target.dataset.userMenuAction === "logout") {
+      handleLogout();
+      return;
+    }
+
+    if (target.dataset.closeModal === "group") {
+      setGroupModal(false);
+      return;
+    }
+
+    if (target.dataset.selectGroup) {
+      await selectGroup(target.dataset.selectGroup);
+      return;
+    }
+
+    if (target.dataset.groupTab) {
+      setGroupDetailTab(target.dataset.groupTab);
+      return;
+    }
+
+    if (target.id === "openGroupCreate") {
+      toggleGroupCreate(true);
+      return;
+    }
+
+    if (target.id === "cancelGroupCreate") {
+      toggleGroupCreate(false);
+      return;
+    }
+
+    if (target.id === "openGroupMemberPicker" || target.closest("#closeGroupMemberPicker")) {
+      toggleGroupMemberPicker();
+      return;
+    }
+
+    if (target.id === "addGroupMember") {
+      await addGroupMember();
+      return;
+    }
+
+    if (target.dataset.removeSelectedCreateMember) {
+      removeSelectedCreateMember(target.dataset.removeSelectedCreateMember);
+      return;
+    }
+
+    if (target.dataset.removeSelectedGroupMember) {
+      removeSelectedGroupMember(target.dataset.removeSelectedGroupMember);
+      return;
+    }
+
+    if (target.dataset.removeGroupMember) {
+      await removeGroupMember(target.dataset.removeGroupMember);
+      return;
+    }
+
+    if (target.dataset.toggleRoleMenu) {
+      const { toggleGroupRoleMenu } = await import("./actions.js");
+      toggleGroupRoleMenu(target.dataset.toggleRoleMenu);
+      return;
+    }
+
+    if (target.dataset.setRole) {
+      const { updateGroupMemberRole } = await import("./actions.js");
+      await updateGroupMemberRole(target.dataset.userId, target.dataset.setRole);
+      return;
+    }
+
     if (target.dataset.closeModal === "project") {
       setProjectModal(false);
       return;

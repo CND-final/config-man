@@ -3,8 +3,11 @@ import { $, $all, showToast } from "./dom.js";
 import {
   loadConfigHistory,
   loadConfigsAndHistory,
+  reloadGroupDetail,
+  reloadGroups,
   reloadProjects,
   reloadTemplates,
+  reloadUsers,
 } from "./data.js";
 import {
   renderAll,
@@ -14,12 +17,16 @@ import {
   renderExportModal,
   renderNav,
   renderImportPreview,
+  renderGroupCreateMemberPicker,
+  renderGroupMemberPicker,
+  renderGroupModal,
   renderProjectTemplateOptions,
   renderRequests,
   renderReviewModal,
   renderReviewDock,
   renderTemplateCreateModal,
   renderTemplateModal,
+  renderUserMenu,
   renderVersionHistory,
 } from "./render.js";
 import { activeProject, state } from "./state.js";
@@ -31,6 +38,268 @@ export function switchView(viewId) {
     view.classList.toggle("active", view.dataset.view === viewId);
   });
   renderNav();
+}
+
+
+
+export function canCreateGroup() {
+  return state.user?.role === "system_admin";
+}
+
+export function canEditGroupMembers() {
+  return state.user?.role === "system_admin";
+}
+
+function clearGroupMemberPicker() {
+  state.groupMemberPickerOpen = false;
+  state.groupMemberSearch = "";
+  state.groupMemberSelection = new Set();
+  state.groupRoleMenuUserId = "";
+}
+
+function clearGroupCreatePicker() {
+  state.groupCreateMemberSearch = "";
+  state.groupCreateMemberSelection = new Set();
+}
+
+function renderPreservingMemberPicker(containerId, inputId, renderFn) {
+  const container = $(`#${containerId}`);
+  const optionsScrollTop = container?.querySelector(".member-picker-options")?.scrollTop ?? 0;
+  const selectedScrollTop = container?.querySelector(".selected-member-list")?.scrollTop ?? 0;
+  const active = document.activeElement;
+  const shouldRestoreInput = active?.id === inputId;
+  const selectionStart = shouldRestoreInput ? active.selectionStart : null;
+  const selectionEnd = shouldRestoreInput ? active.selectionEnd : null;
+
+  renderFn();
+
+  const nextContainer = $(`#${containerId}`);
+  const options = nextContainer?.querySelector(".member-picker-options");
+  const selected = nextContainer?.querySelector(".selected-member-list");
+  if (options) options.scrollTop = optionsScrollTop;
+  if (selected) selected.scrollTop = selectedScrollTop;
+
+  if (!shouldRestoreInput) return;
+  const input = $(`#${inputId}`);
+  if (!input) return;
+  input.focus({ preventScroll: true });
+  if (selectionStart !== null && selectionEnd !== null) {
+    input.setSelectionRange(selectionStart, selectionEnd);
+  }
+}
+
+export function setUserMenu(open) {
+  state.userMenuOpen = open;
+  renderUserMenu();
+}
+
+export async function openGroupPanel() {
+  state.userMenuOpen = false;
+  state.groupModalOpen = true;
+  clearGroupMemberPicker();
+  state.groupCreateOpen = false;
+  state.groupLoading = true;
+  state.groupError = "";
+  renderUserMenu();
+  renderGroupModal();
+  try {
+    await Promise.all([reloadGroups(), reloadUsers({ silent: true })]);
+    if (state.activeGroupId) {
+      await reloadGroupDetail(state.activeGroupId);
+    }
+  } catch (error) {
+    state.groupError = error.message;
+  } finally {
+    state.groupLoading = false;
+    renderGroupModal();
+  }
+}
+
+export function setGroupModal(open) {
+  state.groupModalOpen = open;
+  clearGroupMemberPicker();
+  state.groupCreateOpen = false;
+  clearGroupCreatePicker();
+  state.groupError = "";
+  renderGroupModal();
+}
+
+export async function selectGroup(groupId) {
+  state.activeGroupId = groupId;
+  state.groupLoading = true;
+  clearGroupMemberPicker();
+  state.groupCreateOpen = false;
+  renderGroupModal();
+  try {
+    await reloadGroupDetail(groupId);
+    state.groupError = "";
+  } catch (error) {
+    state.groupError = error.message;
+  } finally {
+    state.groupLoading = false;
+    renderGroupModal();
+  }
+}
+
+export function toggleGroupCreate(open = !state.groupCreateOpen) {
+  state.groupCreateOpen = open;
+  clearGroupMemberPicker();
+  if (open) {
+    clearGroupCreatePicker();
+  }
+  renderGroupModal();
+  if (open) {
+    window.setTimeout(() => $("#groupName")?.focus(), 0);
+  }
+}
+
+export function setGroupDetailTab(tab) {
+  if (!["members", "projects"].includes(tab)) return;
+  state.groupDetailTab = tab;
+  clearGroupMemberPicker();
+  renderGroupModal();
+}
+
+export function updateGroupCreateMemberSearch(value) {
+  state.groupCreateMemberSearch = value;
+  renderPreservingMemberPicker("groupCreateMemberPicker", "groupCreateMemberSearch", renderGroupCreateMemberPicker);
+}
+
+export function toggleGroupCreateMemberSelection(userId, selected) {
+  if (!userId) return;
+  if (selected) {
+    state.groupCreateMemberSelection.add(userId);
+  } else {
+    state.groupCreateMemberSelection.delete(userId);
+  }
+  renderPreservingMemberPicker("groupCreateMemberPicker", "groupCreateMemberSearch", renderGroupCreateMemberPicker);
+}
+
+export function removeSelectedCreateMember(userId) {
+  state.groupCreateMemberSelection.delete(userId);
+  renderPreservingMemberPicker("groupCreateMemberPicker", "groupCreateMemberSearch", renderGroupCreateMemberPicker);
+}
+
+export async function createGroup(event) {
+  event.preventDefault();
+  if (!canCreateGroup()) {
+    showToast("Only system admins can create groups");
+    return;
+  }
+  const selectedMembers = Array.from(state.groupCreateMemberSelection);
+  const created = await api("/groups", {
+    method: "POST",
+    body: JSON.stringify({
+      name: $("#groupName").value,
+      memberIds: selectedMembers,
+    }),
+  });
+  const groupId = created.id || created.groupId;
+  for (const userId of selectedMembers) {
+    try {
+      await api(`/groups/${encodeURIComponent(groupId)}/members`, {
+        method: "POST",
+        body: JSON.stringify({ userId }),
+      });
+    } catch (error) {
+      // Some backends may already apply memberIds during group creation.
+    }
+  }
+  await reloadGroups();
+  await reloadGroupDetail(groupId);
+  state.groupCreateOpen = false;
+  clearGroupCreatePicker();
+  $("#groupForm").reset();
+  renderGroupModal();
+  showToast(`${created.name || created.groupName} created`);
+}
+
+export function toggleGroupMemberPicker(open = !state.groupMemberPickerOpen) {
+  state.groupMemberPickerOpen = open;
+  state.groupMemberSearch = "";
+  state.groupMemberSelection = new Set();
+  state.groupRoleMenuUserId = "";
+  renderGroupModal();
+}
+
+export function toggleGroupRoleMenu(userId) {
+  state.groupRoleMenuUserId = state.groupRoleMenuUserId === userId ? "" : userId;
+  renderGroupModal();
+}
+
+export function updateGroupMemberSearch(value) {
+  state.groupMemberSearch = value;
+  renderPreservingMemberPicker("groupMemberTools", "groupMemberSearch", renderGroupMemberPicker);
+}
+
+export function toggleGroupMemberSelection(userId, selected) {
+  if (!userId) return;
+  if (selected) {
+    state.groupMemberSelection.add(userId);
+  } else {
+    state.groupMemberSelection.delete(userId);
+  }
+  renderPreservingMemberPicker("groupMemberTools", "groupMemberSearch", renderGroupMemberPicker);
+}
+
+export function removeSelectedGroupMember(userId) {
+  state.groupMemberSelection.delete(userId);
+  renderPreservingMemberPicker("groupMemberTools", "groupMemberSearch", renderGroupMemberPicker);
+}
+
+export async function addGroupMember() {
+  if (!canEditGroupMembers()) {
+    showToast("Only admins can edit group members");
+    return;
+  }
+  const groupId = state.activeGroupId;
+  const userIds = Array.from(state.groupMemberSelection);
+  if (!groupId || userIds.length === 0) return;
+  for (const userId of userIds) {
+    await api(`/groups/${encodeURIComponent(groupId)}/members`, {
+      method: "POST",
+      body: JSON.stringify({ userId }),
+    });
+  }
+  await reloadGroups();
+  await reloadGroupDetail(groupId);
+  clearGroupMemberPicker();
+  renderGroupModal();
+  showToast(`${userIds.length} member${userIds.length === 1 ? "" : "s"} added`);
+}
+
+export async function removeGroupMember(userId) {
+  if (!canEditGroupMembers()) {
+    showToast("Only admins can edit group members");
+    return;
+  }
+  const groupId = state.activeGroupId;
+  if (!groupId || !userId) return;
+  await api(`/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(userId)}`, {
+    method: "DELETE",
+  });
+  await reloadGroups();
+  await reloadGroupDetail(groupId);
+  renderGroupModal();
+  showToast("Member removed");
+}
+
+export async function updateGroupMemberRole(userId, groupRole) {
+  if (!canEditGroupMembers()) {
+    showToast("Only admins can edit group members");
+    return;
+  }
+  const groupId = state.activeGroupId;
+  if (!groupId || !userId) return;
+  await api(`/groups/${encodeURIComponent(groupId)}/members`, {
+    method: "POST",
+    body: JSON.stringify({ userId, groupRole }),
+  });
+  await reloadGroups();
+  await reloadGroupDetail(groupId);
+  state.groupRoleMenuUserId = "";
+  renderGroupModal();
+  showToast("Member role updated");
 }
 
 export function setProjectModal(open) {

@@ -38,6 +38,22 @@ export const state = {
   importApplying: false,
   projectModalOpen: false,
   historyModalOpen: false,
+  userMenuOpen: false,
+  groupModalOpen: false,
+  groupLoading: false,
+  groupError: "",
+  groupMemberPickerOpen: false,
+  groupMemberSearch: "",
+  groupMemberSelection: new Set(),
+  groupCreateOpen: false,
+  groupCreateMemberSearch: "",
+  groupCreateMemberSelection: new Set(),
+  groupDetailTab: "members",
+  groupRoleMenuUserId: "",
+  groups: [],
+  activeGroupId: "",
+  activeGroup: null,
+  users: [],
 };
 
 export const navItems = [

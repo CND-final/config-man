@@ -102,8 +102,20 @@ export function renderNav() {
 
 export function renderUser() {
   $("#userInitials").textContent = initials(state.user?.name || "--");
-  $("#userName").textContent =
-    `${state.user?.name || "Not signed in"} · ${state.user?.role || ""}`;
+  $("#userName").textContent = state.user?.name || "Not signed in";
+  renderUserMenu();
+}
+
+export function renderUserMenu() {
+  const button = $("#userMenuButton");
+  const menu = $("#userMenu");
+  if (!button || !menu) return;
+
+  button.setAttribute("aria-expanded", state.userMenuOpen ? "true" : "false");
+  menu.innerHTML = `
+    <button type="button" role="menuitem" data-user-menu-action="groups">Group</button>
+    <button type="button" role="menuitem" data-user-menu-action="logout">Log out</button>
+  `;
 }
 
 export function renderStats() {
@@ -749,6 +761,404 @@ export function renderImportPreview() {
     .join("");
 }
 
+
+function canCreateGroup() {
+  return state.user?.role === "system_admin";
+}
+
+function canEditGroupMembers() {
+  return state.user?.role === "system_admin";
+}
+
+function groupMembers() {
+  return state.activeGroup?.members || [];
+}
+
+function userLabel(user) {
+  return `${user.name || user.id}${user.email ? ` · ${user.email}` : ""}`;
+}
+
+function roleMode() {
+  return state.user?.role === "system_admin" ? "system" : "user";
+}
+
+function groupProjects(group) {
+  return group?.projects || group?.managedProjects || [];
+}
+
+function renderScopeChips(items, emptyLabel) {
+  if (!items?.length) return `<p class="project-meta">${emptyLabel}</p>`;
+  return `
+    <div class="group-chip-list">
+      ${items
+        .map((item) => {
+          const label = typeof item === "string" ? item : item.name || item.id;
+          return `<span>${escapeHtml(label || "Untitled")}</span>`;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
+function groupTabButton(tab, label) {
+  return `<button class="group-tab ${state.groupDetailTab === tab ? "active" : ""}" type="button" data-group-tab="${tab}">${label}</button>`;
+}
+
+function itemLabel(item) {
+  return typeof item === "string" ? item : item.name || item.id || "Untitled";
+}
+
+function renderPlainList(items, emptyLabel) {
+  if (!items?.length) return `<p class="group-empty-state">${emptyLabel}</p>`;
+  return `
+    <div class="group-plain-list">
+      ${items
+        .map(
+          (item) => `
+            <article class="group-plain-row">
+              <strong>${escapeHtml(itemLabel(item))}</strong>
+              ${typeof item === "string" || !item.email ? "" : `<p>${escapeHtml(item.email)}</p>`}
+            </article>
+          `,
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function groupRoleLabel(role) {
+  return role === "group_admin" ? "Group Admin" : "Member";
+}
+
+function renderGroupRoleControl(member, editAllowed) {
+  const id = member.id || member.userId;
+  const role = member.groupRole === "group_admin" ? "group_admin" : "member";
+  if (!editAllowed) return `<span class="group-role-text">${groupRoleLabel(role)}</span>`;
+  
+  const isOpen = state.groupRoleMenuUserId === id;
+
+  return `
+    <div class="group-role-dropdown-container" style="position: relative;">
+      <button type="button" class="group-role-button" data-toggle-role-menu="${escapeHtml(id)}">
+        <span>${groupRoleLabel(role)}</span>
+        <svg viewBox="0 0 24 24" width="14" height="14" stroke="#86868b" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" class="chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      </button>
+      ${isOpen ? `
+        <div class="apple-menu">
+          <button type="button" class="apple-menu-item ${role === 'member' ? 'active' : ''}" data-set-role="member" data-user-id="${escapeHtml(id)}">
+            <span class="apple-menu-icon" aria-hidden="true">${role === 'member' ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>' : ''}</span>
+            <span>Member</span>
+          </button>
+          <div class="apple-menu-divider"></div>
+          <button type="button" class="apple-menu-item ${role === 'group_admin' ? 'active' : ''}" data-set-role="group_admin" data-user-id="${escapeHtml(id)}">
+            <span class="apple-menu-icon" aria-hidden="true">${role === 'group_admin' ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>' : ''}</span>
+            <span>Group Admin</span>
+          </button>
+        </div>
+      ` : ""}
+    </div>
+  `;
+}
+
+function renderMemberRows(members, editAllowed) {
+  if (!members.length) return `<p class="group-empty-state">No members in this group.</p>`;
+  return `
+    <div class="group-plain-list group-member-list">
+      ${members
+        .map((member) => {
+          const id = member.id || member.userId;
+          const isCurrentUser = state.user?.id === id;
+          return `
+            <article class="group-member-row ${isCurrentUser ? "current-user-row" : ""}">
+              <div class="member-avatar">${escapeHtml(initials(member.name || id || "--"))}</div>
+              <div>
+                <strong>${escapeHtml(member.name || id || "Unknown user")}</strong>
+                <p class="project-meta">
+                  ${isCurrentUser ? `<span class="user-icon" aria-label="You"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></span>` : member.email ? `<span>${escapeHtml(member.email)}</span>` : ""}
+                </p>
+              </div>
+              <div class="group-member-controls">
+                ${renderGroupRoleControl(member, editAllowed)}
+                ${editAllowed ? `<button class="member-remove-button" type="button" data-remove-group-member="${escapeHtml(id)}" aria-label="Remove ${escapeHtml(member.name || id || "member")}"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-.7 11H7.7L7 9Zm3 2v7h2v-7h-2Zm4 0v7h2v-7h-2Z"></path></svg></button>` : ""}
+              </div>
+            </article>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
+function userMatchesSearch(user, term) {
+  if (!term) return true;
+  return [user.name, user.email, user.id, user.role].some((value) =>
+    String(value || "")
+      .toLowerCase()
+      .includes(term),
+  );
+}
+
+export function renderMemberPicker({
+  users,
+  selectedIds,
+  search,
+  disabledIds = new Set(),
+  searchId,
+  optionAttribute,
+  removeAttribute,
+  submitId = "",
+  emptyLabel,
+}) {
+  const selectedSet = selectedIds instanceof Set ? selectedIds : new Set(selectedIds || []);
+  const term = search.trim().toLowerCase();
+  const visibleUsers = users.filter((user) => userMatchesSearch(user, term));
+  const selectedUsers = users.filter((user) => selectedSet.has(user.id));
+  const submitButton = submitId
+    ? `<button id="${submitId}" class="primary-action" type="button" ${selectedUsers.length === 0 ? "disabled" : ""}>Add ${selectedUsers.length || ""} Member${selectedUsers.length === 1 ? "" : "s"}</button>`
+    : "";
+
+  return `
+    <div class="member-picker">
+      <div class="member-picker-grid">
+        <div class="member-picker-list">
+          <div class="member-picker-list-head">
+            <div class="member-picker-search">
+              <input id="${searchId}" type="search" value="${escapeHtml(search)}" placeholder="Search name or email" autocomplete="off" />
+            </div>
+          </div>
+          <div class="member-picker-options">
+            ${visibleUsers.length
+              ? visibleUsers
+                  .map((user) => {
+                    const disabled = disabledIds.has(user.id);
+                    const checked = selectedSet.has(user.id) || disabled;
+                    return `
+                      <label class="member-picker-option ${disabled ? "disabled" : ""}">
+                        <input
+                          type="checkbox"
+                          ${optionAttribute}
+                          value="${escapeHtml(user.id)}"
+                          ${checked ? "checked" : ""}
+                          ${disabled ? "disabled" : ""}
+                        />
+                        <span>
+                          <strong>${escapeHtml(user.name || user.id || "Unknown user")}</strong>
+                          <small>${escapeHtml(disabled ? "Already member" : user.email || user.id || "")}</small>
+                        </span>
+                      </label>
+                    `;
+                  })
+                  .join("")
+              : `<p class="project-meta">${emptyLabel}</p>`}
+          </div>
+        </div>
+        <aside class="member-picker-selected">
+          ${selectedUsers.length ? `
+            <div class="member-picker-selected-head">
+              <span>Selected</span>
+              <strong>${selectedUsers.length}</strong>
+            </div>
+          ` : ""}
+          <div class="selected-member-list">
+            ${selectedUsers.length
+              ? selectedUsers
+                  .map(
+                    (user) => `
+                      <button class="selected-member-chip" type="button" ${removeAttribute}="${escapeHtml(user.id)}">
+                        <span>${escapeHtml(user.name || user.id || "Unknown user")}</span>
+                        <span class="remove-chip-icon" style="color: #a1a1a6;" aria-hidden="true">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        </span>
+                      </button>
+                    `,
+                  )
+                  .join("")
+              : '<div class="empty-selection-placeholder" style="text-align: center; color: #86868b; margin-top: 40px;"><svg aria-hidden="true" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 12px; opacity: 0.3;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg><br>No members selected</div>'}
+          </div>
+          <div class="member-picker-actions" style="margin-top: auto; display: flex; justify-content: flex-end; padding-top: 16px;">
+            ${submitButton}
+          </div>
+        </aside>
+      </div>
+    </div>
+  `;
+}
+
+export function renderGroupCreateMemberPicker() {
+  const target = $("#groupCreateMemberPicker");
+  if (!target) return;
+  target.innerHTML = renderMemberPicker({
+    users: state.users,
+    selectedIds: state.groupCreateMemberSelection,
+    search: state.groupCreateMemberSearch,
+    searchId: "groupCreateMemberSearch",
+    optionAttribute: "data-group-create-member-option",
+    removeAttribute: "data-remove-selected-create-member",
+    emptyLabel: "No users found.",
+  });
+}
+
+export function renderGroupMemberPicker() {
+  const target = $("#groupMemberTools");
+  if (!target) return;
+  const members = groupMembers();
+  const memberIds = new Set(members.map((member) => member.id || member.userId));
+  target.classList.toggle("hidden", !canEditGroupMembers() || !state.groupMemberPickerOpen);
+  target.innerHTML = state.groupMemberPickerOpen
+    ? `
+      <div class="group-member-picker-header" style="display: flex; gap: 8px; align-items: center; margin-bottom: 24px; margin-top: 4px; margin-left: -4px;">
+        <button type="button" id="closeGroupMemberPicker" style="background: none; border: none; padding: 4px; margin: 0; cursor: pointer; color: #86868b; display: flex; align-items: center;" aria-label="Go back">
+          <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+        </button>
+        <h2 style="margin:0; font-size: 20px; font-weight: 600;">Add Members</h2>
+      </div>
+      ${renderMemberPicker({
+        users: state.users,
+        selectedIds: state.groupMemberSelection,
+        search: state.groupMemberSearch,
+        disabledIds: memberIds,
+        searchId: "groupMemberSearch",
+        optionAttribute: "data-group-member-option",
+        removeAttribute: "data-remove-selected-group-member",
+        submitId: "addGroupMember",
+        emptyLabel: "No users found.",
+      })}
+    `
+    : "";
+}
+
+export function renderGroupModal() {
+  const modal = $("#groupModal");
+  if (!modal) return;
+  modal.classList.toggle("hidden", !state.groupModalOpen);
+  if (!state.groupModalOpen) return;
+
+  const mode = roleMode();
+  const createAllowed = canCreateGroup();
+  const editAllowed = canEditGroupMembers();
+  const activeGroup = state.activeGroup || state.groups.find((group) => group.id === state.activeGroupId);
+  const members = groupMembers();
+  const modeCopy = {
+    system: {
+      title: "Group",
+      listTitle: "All Groups",
+      empty: "No groups yet. Create the first group to start assigning members.",
+    },
+    user: {
+      title: "Group",
+      listTitle: "My Groups",
+      empty: "No groups available yet.",
+    },
+  }[mode];
+
+  const creatingGroup = createAllowed && state.groupCreateOpen;
+  modal.querySelector(".group-layout")?.classList.toggle("group-create-layout", creatingGroup);
+  modal.querySelector(".group-detail")?.classList.toggle("group-create-detail", creatingGroup);
+  modal.querySelector(".group-sidebar")?.classList.toggle("hidden", creatingGroup);
+  $("#groupModalTitle").textContent = creatingGroup ? "New Group" : modeCopy.title;
+  $("#groupListTitle").textContent = modeCopy.listTitle;
+  $("#groupModalMeta").innerHTML = `
+    <span>${creatingGroup ? "Add a name and initial members" : mode === "system" ? "Manage all groups" : "Groups you belong to"}</span>
+  `;
+  $("#groupCount").textContent = String(state.groups.length);
+  $("#openGroupCreate").classList.toggle("hidden", !createAllowed || creatingGroup);
+  $("#groupForm").classList.toggle("hidden", !creatingGroup);
+  if (createAllowed) {
+    renderGroupCreateMemberPicker();
+  }
+
+  const error = $("#groupError");
+  error.classList.toggle("hidden", !state.groupError);
+  error.textContent = state.groupError || "";
+
+  if (creatingGroup) {
+    $("#groupList").innerHTML = "";
+    $("#groupDetailHeader").innerHTML = "";
+    $("#groupProjectScope").innerHTML = "";
+    $("#groupMembers").innerHTML = "";
+    $("#groupMemberTools").innerHTML = "";
+    $("#groupMemberTools").classList.add("hidden");
+    return;
+  }
+
+  if (state.groupLoading) {
+    $("#groupList").innerHTML = '<p class="project-meta">Loading groups...</p>';
+    $("#groupDetailHeader").innerHTML = '<p class="project-meta">Loading group detail...</p>';
+    $("#groupProjectScope").innerHTML = "";
+    $("#groupMembers").innerHTML = "";
+    $("#groupMemberTools").innerHTML = "";
+    $("#groupMemberTools").classList.add("hidden");
+    return;
+  }
+
+  $("#groupList").innerHTML = state.groups.length
+    ? state.groups
+        .map(
+          (group) => `
+        <button class="group-list-item ${group.id === state.activeGroupId ? "active" : ""}" type="button" data-select-group="${escapeHtml(group.id)}">
+          <strong>${escapeHtml(group.name || "Untitled group")}</strong>
+          <span>${group.memberCount ?? group.members?.length ?? 0}</span>
+        </button>
+      `,
+        )
+        .join("")
+    : `<p class="project-meta">${modeCopy.empty}</p>`;
+
+  if (!activeGroup) {
+    $("#groupDetailHeader").innerHTML = "";
+    $("#groupProjectScope").innerHTML = "";
+    $("#groupMembers").innerHTML = "";
+    $("#groupMemberTools").innerHTML = "";
+    $("#groupMemberTools").classList.add("hidden");
+    return;
+  }
+
+  $("#groupDetailHeader").innerHTML = `
+    <div>
+      <h3>${escapeHtml(activeGroup.name || "Untitled group")}</h3>
+    </div>
+    <div class="group-tabs" role="tablist">
+      ${groupTabButton("members", "Members")}
+      ${groupTabButton("projects", "Projects")}
+    </div>
+  `;
+
+  const projects = groupProjects(activeGroup);
+  const activeTab = state.groupDetailTab || "members";
+  const showMemberTools = activeTab === "members" && state.groupMemberPickerOpen;
+  $("#groupMemberTools").classList.toggle("hidden", !showMemberTools || !editAllowed);
+  if (showMemberTools) {
+    renderGroupMemberPicker();
+  } else {
+    $("#groupMemberTools").innerHTML = "";
+  }
+
+  if (activeTab === "members") {
+    if (state.groupMemberPickerOpen) {
+      $("#groupProjectScope").innerHTML = "";
+      $("#groupMembers").innerHTML = "";
+    } else {
+      $("#groupProjectScope").innerHTML = `
+        <div class="group-pane-actions">
+          <button id="openGroupMemberPicker" class="add-member-button hidden" type="button" aria-label="Add member">
+            <span aria-hidden="true">+</span>
+            Add Member
+          </button>
+        </div>
+      `;
+      $("#openGroupMemberPicker").classList.toggle("hidden", !editAllowed);
+      $("#groupMembers").innerHTML = renderMemberRows(members, editAllowed);
+    }
+    return;
+  }
+
+  $("#groupMemberTools").innerHTML = "";
+  $("#groupMemberTools").classList.add("hidden");
+  $("#groupProjectScope").innerHTML = "";
+  $("#groupMembers").innerHTML = renderPlainList(projects, mode === "system" ? "No projects assigned." : "No project scope returned yet.");
+
+}
+
 export function renderAll() {
   renderUser();
   renderNav();
@@ -765,4 +1175,5 @@ export function renderAll() {
   renderRequests();
   renderVersionHistory();
   renderImportPreview();
+  renderGroupModal();
 }

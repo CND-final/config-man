@@ -56,10 +56,19 @@
             <span aria-hidden="true">N</span>
             <strong id="notificationCount">3</strong>
           </button>
-          <button id="logoutButton" class="user-chip" type="button">
-            <span id="userInitials">--</span>
-            <span id="userName">Not signed in</span>
-          </button>
+          <div class="user-menu-wrap">
+            <button
+              id="userMenuButton"
+              class="user-chip"
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded="false"
+            >
+              <span id="userInitials">--</span>
+              <span id="userName">Not signed in</span>
+            </button>
+            <div id="userMenu" class="user-menu" role="menu"></div>
+          </div>
         </div>
       </header>
 
@@ -74,14 +83,6 @@
               <p class="eyebrow">Dashboard</p>
               <h1>Configuration Control Center</h1>
             </div>
-            <button
-              class="primary-action"
-              type="button"
-              data-jump="projects"
-              data-open-project-form="true"
-            >
-              New Project
-            </button>
           </div>
           <div id="statsGrid" class="stats-grid"></div>
           <div class="dashboard-grid">
@@ -113,7 +114,7 @@
               <h1>Project Registry</h1>
             </div>
             <button id="registerProject" class="primary-action" type="button">
-              Register Project
+              New Project
             </button>
           </div>
           <div id="projectsGrid" class="projects-grid"></div>
@@ -457,7 +458,7 @@
         <div class="modal-header">
           <div>
             <p class="eyebrow">Projects</p>
-            <h2 id="projectModalTitle">Register Project</h2>
+            <h2 id="projectModalTitle">New Project</h2>
           </div>
           <button
             class="icon-button"
@@ -686,6 +687,66 @@
           >
             Cancel
           </button>
+        </div>
+      </section>
+    </div>
+
+
+    <div
+      id="groupModal"
+      class="modal-backdrop hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="groupModalTitle"
+    >
+      <section class="modal-panel group-panel">
+        <div class="modal-header">
+          <div>
+            <h2 id="groupModalTitle">Group</h2>
+            <p id="groupModalMeta" class="project-meta"></p>
+          </div>
+          <div class="modal-header-actions">
+            <button
+              class="icon-button"
+              type="button"
+              aria-label="Close groups"
+              data-close-modal="group"
+            >
+              <span aria-hidden="true">X</span>
+            </button>
+          </div>
+        </div>
+        <div id="groupError" class="group-error hidden"></div>
+        <div class="group-layout">
+          <aside class="group-sidebar">
+            <div class="panel-header group-panel-header">
+              <div>
+                <h3 id="groupListTitle">Groups</h3>
+                <span id="groupCount" class="status-pill neutral">0</span>
+              </div>
+              <button id="openGroupCreate" class="group-new-button hidden" type="button" aria-label="Create group">
+                <span aria-hidden="true">+</span>
+              </button>
+            </div>
+            <div id="groupList" class="group-list"></div>
+          </aside>
+          <section class="group-detail">
+            <form id="groupForm" class="group-create-card hidden">
+              <label>
+                <span>Name</span>
+                <input id="groupName" type="text" autocomplete="off" required minlength="2" />
+              </label>
+              <div id="groupCreateMemberPicker" class="member-picker-wrap"></div>
+              <div class="group-create-actions">
+                <button id="cancelGroupCreate" class="secondary-action" type="button">Cancel</button>
+                <button class="primary-action" type="submit">Create Group</button>
+              </div>
+            </form>
+            <div id="groupDetailHeader" class="group-detail-header"></div>
+            <div id="groupMemberTools" class="group-member-tools hidden"></div>
+            <div id="groupMembers" class="group-members"></div>
+            <div id="groupProjectScope" class="group-scope"></div>
+          </section>
         </div>
       </section>
     </div>

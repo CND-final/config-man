@@ -21,6 +21,20 @@ func New(db *sql.DB) (*Store, error) {
 
 func (s *Store) InitSchema(ctx context.Context) error {
 	statements := []string{
+		`CREATE TABLE IF NOT EXISTS groups (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL UNIQUE
+		)`,
+		`ALTER TABLE groups DROP COLUMN IF EXISTS description`,
+		`ALTER TABLE groups DROP COLUMN IF EXISTS created_at`,
+		`ALTER TABLE groups DROP COLUMN IF EXISTS updated_at`,
+		`CREATE TABLE IF NOT EXISTS group_members (
+			group_id TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+			user_id TEXT NOT NULL,
+			role TEXT NOT NULL DEFAULT 'member',
+			created_at TIMESTAMPTZ NOT NULL,
+			PRIMARY KEY(group_id, user_id)
+		)`,
 		`CREATE TABLE IF NOT EXISTS projects (
 			id TEXT PRIMARY KEY,
 			name TEXT NOT NULL UNIQUE,
