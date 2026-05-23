@@ -11,7 +11,18 @@ config-man/
 └── architecture_design.md
 ```
 
-## Recommended Run
+## Running
+
+This project supports two run modes. Pick one — **they can't run at the same time** (postgres port conflict).
+
+| Situation                                          | Mode |
+|----------------------------------------------------|------|
+| Editing code, want hot reload                      | A    |
+| Demo to teammates / professor                      | B    |
+| Testing production-like setup                      | B    |
+| No Go/Node installed, just want to see it run      | B    |
+
+### Mode A — Run locally (hot reload, recommended for coding)
 
 Start the Go backend on `3000`:
 
@@ -31,6 +42,28 @@ npm run dev
 Open `http://localhost:5173` locally, or `http://<remote-host>:5173` remotely.
 
 The frontend calls relative paths such as `/api/v1/auth/login`; Vite proxies `/api` to `http://127.0.0.1:3000`.
+
+### Mode B — Run with Docker (production-like)
+
+No Go or Node installation required — Docker is the only prerequisite.
+
+```bash
+# First time only: create the environment file
+cp .env.example .env
+
+# From the project root — builds images and starts all three services
+make docker-up
+```
+
+Open `http://localhost`. All three services (PostgreSQL, backend, frontend) start automatically.
+
+To stop:
+
+```bash
+make docker-down
+```
+
+See [docs/DOCKER.md](docs/DOCKER.md) for environment variables, log commands, cleanup, and HTTPS preparation.
 
 ## Backend Test
 

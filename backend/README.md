@@ -53,12 +53,23 @@ backend/
 
 ## Local Development
 
+Two ways to run the backend:
+
+**Option 1: Run on host (recommended for backend development)**
+
 ```bash
 cd backend
 make dev
 ```
 
+This starts PostgreSQL in Docker and the Go backend on the host with hot recompile.
 API base path: `http://localhost:3000/api/v1`
+
+**Option 2: Run inside Docker (production-like)**
+
+From the project root, run `make docker-up` instead. This builds the backend
+as a Linux binary and serves it from a container. See [root README](../README.md)
+and [docs/DOCKER.md](../docs/DOCKER.md) for details.
 
 Environment variables:
 
