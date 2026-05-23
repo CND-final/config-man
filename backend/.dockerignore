@@ -1,0 +1,7 @@
+node_modules/
+.env
+docker-compose.yml
+Makefile
+*.md
+gofmt-output.txt
+test-output.txt
