@@ -108,6 +108,8 @@ Implemented phase 1 APIs:
 - `GET /api/v1/projects`
 - `POST /api/v1/projects`
 - `GET /api/v1/projects/:projectId`
+- `GET /api/v1/projects/:projectId/members`
+- `PUT /api/v1/projects/:projectId/members`
 - `GET /api/v1/projects/:projectId/configs?env=dev`
 - `GET /api/v1/projects/:projectId/config-history?env=dev`
 - `POST /api/v1/projects/:projectId/config-history/rollback`
@@ -147,11 +149,12 @@ Demo users all use password `password`:
 | --- | --- |
 | `admin@config-man.local` | System Admin |
 | `project-admin@config-man.local` | Project Admin |
+| `group-admin@config-man.local` | Group Admin |
 | `developer@config-man.local` | Developer |
 | `reviewer@config-man.local` | Reviewer |
 | `viewer@config-man.local` | Viewer |
 
-Permissions live in `backend/pkg/util/permissions.go`.
+Permissions live in `backend/pkg/util/permissions.go`; project-level membership is persisted in `project_members`, while processors only load the project/member data and map authorization failures to app errors.
 
 ### Processor Layer
 
@@ -184,9 +187,12 @@ Group management is partially implemented for the role architecture discussion. 
 Current behavior:
 
 - `system_admin` can list users, create groups, update/delete groups, and add/remove group members.
+- `group_admin` user-role accounts can list users, create groups, and manage members for groups they belong to; when they create a group they are added as that group's `group_admin` member.
 - Non-system users can list only groups they belong to.
-- A `group_admin` group member is allowed by the model and processor, but the current frontend does not yet expose role selection when adding members.
+- A per-group `group_admin` membership role is exposed in the frontend member role menu.
 - Groups are persisted in `groups`; membership is persisted in `group_members` with `group_id`, `user_id`, and `role`.
+- Project ownership is 1-to-1 through `projects.group_id`; `Group.Projects` is loaded by querying projects with that `group_id`, not by a join table.
+- Project access remains explicit through `project_members`; group ownership does not automatically grant project read/write permissions yet.
 - Demo users still live in the in-memory seed user list, so `group_members.user_id` is not yet a foreign key.
 
 Important files:
@@ -418,7 +424,7 @@ Recommended next steps:
 2. Check all processor files for consistent logger category use.
 3. Add request access logging middleware only if requested; current goal was processor-level trace logs.
 4. Improve DB migrations/schema management if the project moves past phase 1 demo.
-5. Decide how group/project roles should be assigned in the UI. The backend has `group_admin` support, but the current UI adds members as regular group members only.
+5. Decide whether group ownership should grant inherited project permissions. Today `projects.group_id` models ownership, while effective project access is still enforced through `project_members`.
 6. Replace demo auth with JWT + RBAC when core workflows stabilize.
 7. Add more API tests around config import formats and review request requirements. The extract preview endpoint currently has basic non-persistence coverage.
 8. Ensure frontend warnings for sensitive Prod DB password updates align exactly with backend permissions/review request flow.

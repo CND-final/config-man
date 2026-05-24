@@ -9,6 +9,7 @@ import (
 )
 
 type seedData struct {
+	groups    map[string]*model.Group
 	projects  map[string]*model.Project
 	configs   map[string]*model.ConfigEntry
 	reviews   map[string]*model.ReviewRequest
@@ -22,6 +23,7 @@ func (s *Store) seedUsers() {
 	users := []model.User{
 		{ID: "alice", Email: "admin@config-man.local", Name: "Alice Lin", Role: model.RoleSystemAdmin},
 		{ID: "paul", Email: "project-admin@config-man.local", Name: "Paul Wu", Role: model.RoleProjectAdmin},
+		{ID: "grace", Email: "group-admin@config-man.local", Name: "Grace Huang", Role: model.RoleUserGroupAdmin},
 		{ID: "nora", Email: "developer@config-man.local", Name: "Nora Chen", Role: model.RoleDeveloper},
 		{ID: "rachel", Email: "reviewer@config-man.local", Name: "Rachel Kao", Role: model.RoleReviewer},
 		{ID: "vincent", Email: "viewer@config-man.local", Name: "Vincent Lee", Role: model.RoleViewer},
@@ -36,23 +38,39 @@ func (s *Store) seedUsers() {
 func demoSeedData() seedData {
 	now := time.Now().UTC()
 	seed := seedData{
+		groups:    make(map[string]*model.Group),
 		projects:  make(map[string]*model.Project),
 		configs:   make(map[string]*model.ConfigEntry),
 		reviews:   make(map[string]*model.ReviewRequest),
 		templates: make(map[string]*model.Template),
 	}
 
+	group := &model.Group{
+		ID:   "platform-team",
+		Name: "Platform Team",
+		Members: []model.GroupMember{
+			{User: model.User{ID: "paul"}, GroupRole: model.RoleGroupAdmin},
+			{User: model.User{ID: "nora"}, GroupRole: model.RoleGroupMember},
+		},
+	}
+	seed.groups[group.ID] = group
+
 	project := &model.Project{
-		ID:            "customer-portal",
-		Name:          "customer-portal",
-		Description:   "Demo project for config-man phase 1",
-		RepoURL:       "https://git.example.com/platform/customer-portal",
-		OwnerName:     "Platform Team",
-		DefaultFormat: "yaml",
+		ID:          "customer-portal",
+		Name:        "customer-portal",
+		Description: "Demo project for config-man phase 1",
+		RepoURL:     "https://git.example.com/platform/customer-portal",
+		GroupID:     group.ID,
 		Environments: []model.ProjectEnvironment{
 			{ID: "env-customer-dev", Name: "dev", SortOrder: 1},
 			{ID: "env-customer-staging", Name: "staging", SortOrder: 2},
 			{ID: "env-customer-prod", Name: "prod", SortOrder: 3},
+		},
+		Members: []model.ProjectMember{
+			{User: model.User{ID: "paul"}, ProjectRole: model.RoleProjectMemberAdmin},
+			{User: model.User{ID: "nora"}, ProjectRole: model.RoleProjectDeveloper},
+			{User: model.User{ID: "rachel"}, ProjectRole: model.RoleProjectReviewer},
+			{User: model.User{ID: "vincent"}, ProjectRole: model.RoleProjectViewer},
 		},
 		CreatedAt: now,
 		UpdatedAt: now,

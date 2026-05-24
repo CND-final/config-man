@@ -393,7 +393,7 @@ async function handleDocumentClick(event) {
       return;
     }
 
-    if (target.id === "openConfigHistory") {
+    if (target.id === "openConfigHistory" || target.id === "dashboardHistoryAction") {
       await openVersionHistory();
       return;
     }

@@ -43,11 +43,11 @@ export function switchView(viewId) {
 
 
 export function canCreateGroup() {
-  return state.user?.role === "system_admin";
+  return ["system_admin", "group_admin"].includes(state.user?.role);
 }
 
 export function canEditGroupMembers() {
-  return state.user?.role === "system_admin";
+  return ["system_admin", "group_admin"].includes(state.user?.role);
 }
 
 function clearGroupMemberPicker() {
@@ -348,19 +348,17 @@ export function chooseProjectTemplate(templateId) {
     showToast("This template cannot be applied to a project");
     return;
   }
-  state.templateApplyFormat =
-    state.projectDraft?.defaultFormat || template.format || "yaml";
+  state.templateApplyFormat = template.format || "yaml";
   setTemplateModal(true, templateId);
 }
 
 function readProjectDraft() {
   return {
     name: $("#projectName").value,
-    ownerName: $("#projectOwner").value,
     repoUrl: $("#projectRepo").value,
-    defaultFormat: $("#projectFormat").value,
     environments: $("#projectEnvironments").value,
     description: $("#projectDescription").value,
+    groupId: $("#projectGroup")?.value || "",
   };
 }
 
@@ -368,11 +366,11 @@ function restoreProjectDraft() {
   const draft = state.projectDraft;
   if (!draft) return;
   $("#projectName").value = draft.name || "";
-  $("#projectOwner").value = draft.ownerName || "";
   $("#projectRepo").value = draft.repoUrl || "";
-  $("#projectFormat").value = draft.defaultFormat || "yaml";
   $("#projectEnvironments").value = draft.environments || "dev, staging, prod";
   $("#projectDescription").value = draft.description || "";
+  const groupSelect = $("#projectGroup");
+  if (groupSelect) groupSelect.value = draft.groupId || groupSelect.value || "";
 }
 
 export function setTemplateCreateModal(open) {
@@ -546,7 +544,7 @@ export function setExportModal(open) {
   const project = activeProject();
   state.exportModalOpen = open;
   if (open) {
-    state.exportFormat = project?.defaultFormat || "yaml";
+    state.exportFormat = "yaml";
   }
   renderExportModal();
   if (open) {
@@ -588,21 +586,19 @@ export async function createProject(event) {
   event.preventDefault();
   const templateSelection = state.projectTemplateSelection;
   const templateId = templateSelection?.templateId || "";
-  const defaultFormat = $("#projectFormat").value;
   const created = await api("/projects", {
     method: "POST",
     body: JSON.stringify({
       name: $("#projectName").value,
-      ownerName: $("#projectOwner").value,
       repoUrl: $("#projectRepo").value,
-      defaultFormat,
       templateId,
+      groupId: $("#projectGroup")?.value || "",
       environments: parseEnvironmentInput($("#projectEnvironments").value),
       description: $("#projectDescription").value,
     }),
   });
 
-  await reloadProjects();
+  await Promise.all([reloadProjects(), reloadGroups({ silent: true })]);
   state.activeProjectId = created.id;
   const project = activeProject();
   if (project) {
@@ -881,7 +877,6 @@ export async function exportCurrentConfig() {
   const format =
     $("#exportFormat").value ||
     state.exportFormat ||
-    project.defaultFormat ||
     "yaml";
   state.exportFormat = format;
 

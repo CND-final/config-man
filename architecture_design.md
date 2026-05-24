@@ -360,11 +360,11 @@
 │ id           │     │ id               │     │              │
 │ name         │     │ project_id (FK)  │     │ id           │
 │ description  │     │ environment      │     │ config_id(FK)│
-│ owner_id     │     │ key              │     │ version      │
-│ created_at   │     │ value            │     │ value        │
-│ updated_at   │     │ value_type       │     │ changed_by   │
-└──────────────┘     │ is_sensitive     │     │ change_reason│
-                     │ is_inherited     │     │ created_at   │
+│ template_id  │     │ key              │     │ version      │
+│ group_id     │     │ value            │     │ value        │
+│ created_at   │     │ value_type       │     │ changed_by   │
+│ updated_at   │     │ is_sensitive     │     │ change_reason│
+└──────────────┘     │ is_inherited     │     │ created_at   │
                      │ source_config_id │     └──────────────┘
                      │ format (json/    │
                      │  yaml/properties)│
@@ -403,8 +403,8 @@
 | Table | 主要欄位 | 用途 |
 |-------|----------|------|
 | `users` | `id`, `username`, `email`, `password_hash`, `system_role`, `created_at` | 使用者與系統角色 |
-| `projects` | `id`, `name`, `repo_url`, `description`, `owner_id`, `default_format`, `created_at` | 專案註冊資料 |
-| `project_members` | `project_id`, `user_id`, `project_role` | 專案層級 RBAC |
+| `projects` | `id`, `name`, `repo_url`, `description`, `template_id`, `group_id`, `created_at` | 專案註冊資料；`group_id` 表示 1 對 1 所屬 group |
+| `project_members` | `project_id`, `user_id`, `role`, `created_at` | 專案層級成員與角色 |
 | `project_environments` | `id`, `project_id`, `name`, `sort_order` | dev/staging/prod 等環境 |
 | `templates` | `id`, `name`, `description`, `format`, `created_by`, `created_at` | Config 模板主檔 |
 | `template_items` | `id`, `template_id`, `key`, `default_value`, `value_type`, `required`, `is_sensitive`, `description` | 模板中的 Key 定義 |

@@ -11,8 +11,8 @@ import (
 )
 
 func (p *Processor) ListUsers(ctx appctx.RequestContext) ([]model.User, *model.ErrorDetail) {
-	if ctx.Actor.Role != model.RoleSystemAdmin {
-		return nil, model.Forbidden("Only system_admin can list users")
+	if ctx.Actor.Role != model.RoleSystemAdmin && ctx.Actor.Role != model.RoleUserGroupAdmin {
+		return nil, model.Forbidden("Only system_admin or group_admin can list users")
 	}
 	return p.store.ListUsers(), nil
 }
@@ -46,8 +46,8 @@ func (p *Processor) GetGroup(ctx appctx.RequestContext, groupID string) (model.G
 }
 
 func (p *Processor) CreateGroup(ctx appctx.RequestContext, name string, memberIDs []string) (model.Group, *model.ErrorDetail) {
-	if ctx.Actor.Role != model.RoleSystemAdmin {
-		return model.Group{}, model.Forbidden("Only system_admin can create groups")
+	if ctx.Actor.Role != model.RoleSystemAdmin && ctx.Actor.Role != model.RoleUserGroupAdmin {
+		return model.Group{}, model.Forbidden("Only system_admin or group_admin can create groups")
 	}
 
 	name = strings.TrimSpace(name)
@@ -61,6 +61,9 @@ func (p *Processor) CreateGroup(ctx appctx.RequestContext, name string, memberID
 	members, err := p.membersFromIDs(memberIDs, model.RoleGroupMember)
 	if err != nil {
 		return model.Group{}, err
+	}
+	if ctx.Actor.Role == model.RoleUserGroupAdmin && !groupMemberExists(members, ctx.Actor.ID) {
+		members = append(members, model.GroupMember{User: ctx.Actor, GroupRole: model.RoleGroupAdmin})
 	}
 
 	group := model.Group{
@@ -177,7 +180,10 @@ func (p *Processor) canManageGroup(ctx appctx.RequestContext, group model.Group)
 		return true
 	}
 	for _, member := range group.Members {
-		if member.ID == ctx.Actor.ID && member.GroupRole == model.RoleGroupAdmin {
+		if member.ID != ctx.Actor.ID {
+			continue
+		}
+		if member.GroupRole == model.RoleGroupAdmin || ctx.Actor.Role == model.RoleUserGroupAdmin {
 			return true
 		}
 	}
@@ -185,7 +191,11 @@ func (p *Processor) canManageGroup(ctx appctx.RequestContext, group model.Group)
 }
 
 func groupHasMember(group model.Group, userID string) bool {
-	for _, member := range group.Members {
+	return groupMemberExists(group.Members, userID)
+}
+
+func groupMemberExists(members []model.GroupMember, userID string) bool {
+	for _, member := range members {
 		if member.ID == userID {
 			return true
 		}

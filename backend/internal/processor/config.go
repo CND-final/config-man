@@ -21,7 +21,12 @@ func (p *Processor) ListConfigs(ctx appctx.RequestContext, projectID, environmen
 		logger.Config.Warn("list configs invalid")
 		return nil, model.InvalidInput(`Query parameter "env" is required`)
 	}
-	if revealSensitive && !util.CanRevealSensitive(ctx.Actor) {
+	project, err := p.requireReadableProject(ctx, projectID)
+	if err != nil {
+		logger.Config.Warn("list configs failed")
+		return nil, err
+	}
+	if revealSensitive && !util.CanRevealProjectSensitive(ctx.Actor, project.Members) {
 		logger.Config.Warn("list configs denied")
 		return nil, model.Forbidden("Role cannot reveal sensitive values")
 	}
@@ -57,9 +62,9 @@ func (p *Processor) CreateConfig(ctx appctx.RequestContext, projectID string, re
 		logger.Config.Warn("create config invalid")
 		return model.ConfigEntry{}, model.InvalidInput("environment and key are required")
 	}
-	if !util.CanWriteEnvironment(ctx.Actor, environment) {
+	if _, err := p.requireWritableProjectEnvironment(ctx, projectID, environment); err != nil {
 		logger.Config.Warn("create config denied")
-		return model.ConfigEntry{}, model.Forbidden(fmt.Sprintf("Role %q cannot modify %q config", ctx.Actor.Role, environment))
+		return model.ConfigEntry{}, err
 	}
 	if err := p.requireEnvironment(projectID, environment); err != nil {
 		logger.Config.Warn("create config failed")
@@ -117,9 +122,9 @@ func (p *Processor) UpdateConfig(ctx appctx.RequestContext, projectID, configID 
 		logger.Config.Warn("update config not found")
 		return model.ConfigEntry{}, model.NotFound(fmt.Sprintf("Config %q not found for project %q", configID, projectID))
 	}
-	if !util.CanWriteEnvironment(ctx.Actor, entry.Environment) {
+	if _, err := p.requireWritableProjectEnvironment(ctx, projectID, entry.Environment); err != nil {
 		logger.Config.Warn("update config denied")
-		return model.ConfigEntry{}, model.Forbidden(fmt.Sprintf("Role %q cannot modify %q config", ctx.Actor.Role, entry.Environment))
+		return model.ConfigEntry{}, err
 	}
 
 	oldValue := entry.Value
@@ -178,9 +183,9 @@ func (p *Processor) DeleteConfig(ctx appctx.RequestContext, projectID, configID 
 		logger.Config.Warn("delete config not found")
 		return nil, model.NotFound(fmt.Sprintf("Config %q not found for project %q", configID, projectID))
 	}
-	if !util.CanWriteEnvironment(ctx.Actor, entry.Environment) {
+	if _, err := p.requireWritableProjectEnvironment(ctx, projectID, entry.Environment); err != nil {
 		logger.Config.Warn("delete config denied")
-		return nil, model.Forbidden(fmt.Sprintf("Role %q cannot modify %q config", ctx.Actor.Role, entry.Environment))
+		return nil, err
 	}
 
 	audit := newAudit(ctx.ActorName(), "config.delete", "config_entry", configID, projectID, map[string]any{
@@ -209,7 +214,12 @@ func (p *Processor) ListConfigVersions(ctx appctx.RequestContext, projectID, con
 		logger.Config.Warn("list config versions not found")
 		return nil, model.NotFound(fmt.Sprintf("Config %q not found for project %q", configID, projectID))
 	}
-	if revealSensitive && !util.CanRevealSensitive(ctx.Actor) {
+	project, err := p.requireReadableProject(ctx, projectID)
+	if err != nil {
+		logger.Config.Warn("list config versions denied")
+		return nil, err
+	}
+	if revealSensitive && !util.CanRevealProjectSensitive(ctx.Actor, project.Members) {
 		logger.Config.Warn("list config versions denied")
 		return nil, model.Forbidden("Role cannot reveal sensitive values")
 	}
@@ -241,9 +251,9 @@ func (p *Processor) RollbackConfig(ctx appctx.RequestContext, projectID, configI
 		logger.Config.Warn("rollback config not found")
 		return model.ConfigEntry{}, model.NotFound(fmt.Sprintf("Config %q not found for project %q", configID, projectID))
 	}
-	if !util.CanWriteEnvironment(ctx.Actor, entry.Environment) {
+	if _, err := p.requireWritableProjectEnvironment(ctx, projectID, entry.Environment); err != nil {
 		logger.Config.Warn("rollback config denied")
-		return model.ConfigEntry{}, model.Forbidden(fmt.Sprintf("Role %q cannot modify %q config", ctx.Actor.Role, entry.Environment))
+		return model.ConfigEntry{}, err
 	}
 
 	versions := p.store.ListConfigVersions(configID)
@@ -286,7 +296,12 @@ func (p *Processor) ListConfigHistory(ctx appctx.RequestContext, projectID, envi
 		logger.Config.Warn("list config history invalid")
 		return nil, model.InvalidInput(`Query parameter "env" is required`)
 	}
-	if revealSensitive && !util.CanRevealSensitive(ctx.Actor) {
+	project, err := p.requireReadableProject(ctx, projectID)
+	if err != nil {
+		logger.Config.Warn("list config history failed")
+		return nil, err
+	}
+	if revealSensitive && !util.CanRevealProjectSensitive(ctx.Actor, project.Members) {
 		logger.Config.Warn("list config history denied")
 		return nil, model.Forbidden("Role cannot reveal sensitive values")
 	}
@@ -320,9 +335,9 @@ func (p *Processor) RollbackConfigRevision(ctx appctx.RequestContext, projectID 
 		logger.Config.Warn("rollback config revision invalid")
 		return nil, model.InvalidInput("environment and revisionId are required")
 	}
-	if !util.CanWriteEnvironment(ctx.Actor, environment) {
+	if _, err := p.requireWritableProjectEnvironment(ctx, projectID, environment); err != nil {
 		logger.Config.Warn("rollback config revision denied")
-		return nil, model.Forbidden(fmt.Sprintf("Role %q cannot modify %q config", ctx.Actor.Role, environment))
+		return nil, err
 	}
 	if err := p.requireEnvironment(projectID, environment); err != nil {
 		logger.Config.Warn("rollback config revision failed")
@@ -408,9 +423,9 @@ func (p *Processor) ExtractConfigs(ctx appctx.RequestContext, projectID string, 
 		logger.Config.Warn("extract configs invalid")
 		return nil, model.InvalidInput("environment is required")
 	}
-	if !util.CanWriteEnvironment(ctx.Actor, environment) {
+	if _, err := p.requireWritableProjectEnvironment(ctx, projectID, environment); err != nil {
 		logger.Config.Warn("extract configs denied")
-		return nil, model.Forbidden(fmt.Sprintf("Role %q cannot modify %q config", ctx.Actor.Role, environment))
+		return nil, err
 	}
 	if !util.IsSupportedConfigFormat(req.Format) {
 		logger.Config.Warn("extract configs invalid")
@@ -479,9 +494,9 @@ func (p *Processor) ImportConfigs(ctx appctx.RequestContext, projectID string, r
 		logger.Config.Warn("import configs invalid")
 		return nil, model.InvalidInput("environment is required")
 	}
-	if !util.CanWriteEnvironment(ctx.Actor, environment) {
+	if _, err := p.requireWritableProjectEnvironment(ctx, projectID, environment); err != nil {
 		logger.Config.Warn("import configs denied")
-		return nil, model.Forbidden(fmt.Sprintf("Role %q cannot modify %q config", ctx.Actor.Role, environment))
+		return nil, err
 	}
 	if !util.IsSupportedConfigFormat(req.Format) {
 		logger.Config.Warn("import configs invalid")

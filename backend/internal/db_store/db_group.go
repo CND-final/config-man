@@ -25,6 +25,11 @@ func (s *Store) ListGroups(ctx context.Context) ([]model.Group, error) {
 		if err != nil {
 			return nil, err
 		}
+		group.Projects, err = s.listGroupProjects(ctx, group.ID)
+		if err != nil {
+			return nil, err
+		}
+		group.ProjectCount = len(group.Projects)
 		group.MemberCount = len(group.Members)
 		groups = append(groups, group)
 	}
@@ -44,6 +49,11 @@ func (s *Store) FindGroup(ctx context.Context, groupID string) (model.Group, boo
 	if err != nil {
 		return model.Group{}, false, err
 	}
+	group.Projects, err = s.listGroupProjects(ctx, group.ID)
+	if err != nil {
+		return model.Group{}, false, err
+	}
+	group.ProjectCount = len(group.Projects)
 	group.MemberCount = len(group.Members)
 	return group, true, nil
 }
@@ -123,4 +133,35 @@ func (s *Store) listGroupMembers(ctx context.Context, groupID string) ([]model.G
 		members = append(members, member)
 	}
 	return members, rows.Err()
+}
+
+func (s *Store) listGroupProjects(ctx context.Context, groupID string) ([]model.Project, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, description, repo_url, template_id, group_id, created_at, updated_at FROM projects WHERE group_id = $1 ORDER BY created_at DESC`, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	projects := make([]model.Project, 0)
+	for rows.Next() {
+		project := model.Project{}
+		if err := rows.Scan(&project.ID, &project.Name, &project.Description, &project.RepoURL, &project.TemplateID, &project.GroupID, &project.CreatedAt, &project.UpdatedAt); err != nil {
+			return nil, err
+		}
+		project.Environments, err = s.listProjectEnvironments(ctx, project.ID)
+		if err != nil {
+			return nil, err
+		}
+		project.Members, err = s.listProjectMembers(ctx, project.ID)
+		if err != nil {
+			return nil, err
+		}
+		project.MemberCount = len(project.Members)
+		project.ConfigCount, err = s.configCount(ctx, project.ID)
+		if err != nil {
+			return nil, err
+		}
+		projects = append(projects, project)
+	}
+	return projects, rows.Err()
 }

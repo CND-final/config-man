@@ -28,6 +28,18 @@ func (s *Server) getProjectRoutes() Routes {
 			Pattern: "/projects/:projectId",
 			APIFunc: s.handleGetProject,
 		},
+		{
+			Name:    "ListProjectMembers",
+			Method:  http.MethodGet,
+			Pattern: "/projects/:projectId/members",
+			APIFunc: s.handleListProjectMembers,
+		},
+		{
+			Name:    "UpdateProjectMembers",
+			Method:  http.MethodPut,
+			Pattern: "/projects/:projectId/members",
+			APIFunc: s.handleUpdateProjectMembers,
+		},
 	}
 }
 
@@ -61,4 +73,31 @@ func (s *Server) handleGetProject(c *gin.Context) {
 		return
 	}
 	response.WriteJSON(c, http.StatusOK, project)
+}
+
+func (s *Server) handleListProjectMembers(c *gin.Context) {
+	reqCtx := requestContextFromGin(c)
+	members, appErr := s.processor.ListProjectMembers(reqCtx, c.Param("projectId"))
+	if appErr != nil {
+		response.WriteError(c, appErr)
+		return
+	}
+	response.WriteJSON(c, http.StatusOK, gin.H{"members": members})
+}
+
+func (s *Server) handleUpdateProjectMembers(c *gin.Context) {
+	reqCtx := requestContextFromGin(c)
+
+	var req model.UpdateProjectMembersRequest
+	if err := response.DecodeJSON(c, &req); err != nil {
+		response.WriteError(c, err)
+		return
+	}
+
+	members, appErr := s.processor.UpdateProjectMembers(reqCtx, c.Param("projectId"), req)
+	if appErr != nil {
+		response.WriteError(c, appErr)
+		return
+	}
+	response.WriteJSON(c, http.StatusOK, gin.H{"members": members})
 }

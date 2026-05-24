@@ -47,9 +47,12 @@ All demo accounts use password `password`.
 |-------|------|
 | `admin@config-man.local` | System Admin |
 | `project-admin@config-man.local` | Project Admin |
+| `group-admin@config-man.local` | Group Admin |
 | `developer@config-man.local` | Developer |
 | `reviewer@config-man.local` | Reviewer |
 | `viewer@config-man.local` | Viewer |
+
+Each project belongs to exactly one group through `groupId`. Project access is enforced separately through project memberships with project-level roles: `project_admin`, `developer`, `reviewer`, and `viewer`. `system_admin` keeps global access.
 
 ## Config Import
 

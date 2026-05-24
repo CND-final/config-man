@@ -73,6 +73,7 @@ func resetServerTestDB(t *testing.T, db *sql.DB) {
 			config_revisions,
 			config_versions,
 			config_entries,
+			project_members,
 			project_environments,
 			projects,
 			custom_templates,
@@ -141,7 +142,7 @@ func TestProtectedRoutesRequireAuthentication(t *testing.T) {
 
 func TestCreateProjectCreatesDefaultEnvironments(t *testing.T) {
 	handler := newTestHandler(t)
-	res := request(t, handler, http.MethodPost, "/api/v1/projects", "alice", map[string]any{"name": "billing-service", "ownerName": "Billing Team"})
+	res := request(t, handler, http.MethodPost, "/api/v1/projects", "alice", map[string]any{"name": "billing-service", "groupId": "platform-team"})
 	if res.Code != http.StatusCreated {
 		t.Fatalf("create project status = %d body=%s", res.Code, res.Body.String())
 	}
@@ -210,6 +211,80 @@ func TestCreateGroupAndManageMembers(t *testing.T) {
 	}
 }
 
+func TestProjectMembershipControlsProjectAccess(t *testing.T) {
+	handler := newTestHandler(t)
+
+	res := request(t, handler, http.MethodGet, "/api/v1/projects", "vincent", nil)
+	if res.Code != http.StatusOK {
+		t.Fatalf("list projects as viewer status = %d body=%s", res.Code, res.Body.String())
+	}
+	viewerProjects := decodeBody[[]model.Project](t, res)
+	if !projectListHasID(viewerProjects, "customer-portal") {
+		t.Fatalf("viewer should see member project: %#v", viewerProjects)
+	}
+
+	res = request(t, handler, http.MethodGet, "/api/v1/projects", "grace", nil)
+	if res.Code != http.StatusOK {
+		t.Fatalf("list projects as unassigned group-admin status = %d body=%s", res.Code, res.Body.String())
+	}
+	groupAdminProjects := decodeBody[[]model.Project](t, res)
+	if len(groupAdminProjects) != 0 {
+		t.Fatalf("unassigned group-admin should not see projects: %#v", groupAdminProjects)
+	}
+
+	res = request(t, handler, http.MethodGet, "/api/v1/projects/customer-portal/members", "nora", nil)
+	if res.Code != http.StatusOK {
+		t.Fatalf("list members as developer status = %d body=%s", res.Code, res.Body.String())
+	}
+	membersPayload := decodeBody[struct {
+		Members []model.ProjectMember `json:"members"`
+	}](t, res)
+	if !projectMembersHaveRole(membersPayload.Members, "paul", model.RoleProjectMemberAdmin) {
+		t.Fatalf("seeded project_admin missing: %#v", membersPayload.Members)
+	}
+
+	res = request(t, handler, http.MethodPut, "/api/v1/projects/customer-portal/members", "nora", map[string]any{
+		"members": []map[string]any{{"userId": "paul", "projectRole": "project_admin"}},
+	})
+	if res.Code != http.StatusForbidden {
+		t.Fatalf("developer updated project members status = %d body=%s", res.Code, res.Body.String())
+	}
+
+	res = request(t, handler, http.MethodPut, "/api/v1/projects/customer-portal/members", "paul", map[string]any{
+		"members": []map[string]any{
+			{"userId": "paul", "projectRole": "project_admin"},
+			{"userId": "grace", "projectRole": "viewer"},
+		},
+	})
+	if res.Code != http.StatusOK {
+		t.Fatalf("project admin updated members status = %d body=%s", res.Code, res.Body.String())
+	}
+	membersPayload = decodeBody[struct {
+		Members []model.ProjectMember `json:"members"`
+	}](t, res)
+	if !projectMembersHaveRole(membersPayload.Members, "grace", model.RoleProjectViewer) {
+		t.Fatalf("grace viewer membership missing after update: %#v", membersPayload.Members)
+	}
+}
+
+func projectListHasID(projects []model.Project, projectID string) bool {
+	for _, project := range projects {
+		if project.ID == projectID {
+			return true
+		}
+	}
+	return false
+}
+
+func projectMembersHaveRole(members []model.ProjectMember, userID string, role model.ProjectRole) bool {
+	for _, member := range members {
+		if member.ID == userID && member.ProjectRole == role {
+			return true
+		}
+	}
+	return false
+}
+
 func TestListTemplatesIncludesBaseInfrastructureTemplates(t *testing.T) {
 	handler := newTestHandler(t)
 	res := request(t, handler, http.MethodGet, "/api/v1/templates", "alice", nil)
@@ -271,8 +346,8 @@ func TestCreateTemplateIsPrivateToActor(t *testing.T) {
 
 	res = request(t, handler, http.MethodPost, "/api/v1/projects", "alice", map[string]any{
 		"name":       "templated-service",
-		"ownerName":  "Platform Team",
 		"templateId": created.ID,
+		"groupId":    "platform-team",
 	})
 	if res.Code != http.StatusCreated {
 		t.Fatalf("create project with own template status = %d body=%s", res.Code, res.Body.String())
@@ -284,8 +359,8 @@ func TestCreateTemplateIsPrivateToActor(t *testing.T) {
 
 	res = request(t, handler, http.MethodPost, "/api/v1/projects", "paul", map[string]any{
 		"name":       "forbidden-template-service",
-		"ownerName":  "Platform Team",
 		"templateId": created.ID,
+		"groupId":    "platform-team",
 	})
 	if res.Code != http.StatusNotFound {
 		t.Fatalf("create project with another user template status = %d body=%s", res.Code, res.Body.String())

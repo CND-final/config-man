@@ -21,20 +21,66 @@ function includesSearch(values, term = searchTerm()) {
   );
 }
 
+function isSystemView() {
+  return state.user?.role === "system_admin";
+}
+
+function isReadOnlyView() {
+  return state.user?.role === "viewer";
+}
+
+function isWorkspaceView() {
+  return !isSystemView() && !isReadOnlyView();
+}
+
+function userDisplayName() {
+  return state.user?.name || "";
+}
+
+function scopedProjectIds() {
+  if (!isWorkspaceView()) return new Set(state.projects.map((project) => project.id));
+
+  const actor = userDisplayName();
+  const ids = new Set(state.projects.map((project) => project.id));
+  state.projects.forEach((project) => {
+  });
+  state.requests.forEach((request) => {
+    if (request.requester === actor || request.reviewer === actor) {
+      ids.add(request.projectId);
+    }
+  });
+  state.configs.forEach((config) => {
+    if (config.updatedBy === actor || config.updated === actor) {
+      ids.add(config.projectId);
+    }
+  });
+  state.groups.forEach((group) => {
+    (group.projects || group.managedProjects || []).forEach((project) => {
+      ids.add(typeof project === "string" ? project : project.id);
+    });
+  });
+  return ids;
+}
+
+function projectInScope(project, scope = scopedProjectIds()) {
+  return scope.has(project.id);
+}
+
 function filteredProjects() {
   const term = searchTerm();
-  return state.projects.filter((project) =>
-    includesSearch(
-      [
-        project.name,
-        project.owner,
-        project.repoUrl,
-        project.defaultFormat,
-        projectTemplateName(project.templateId),
-        ...project.environments,
-      ],
-      term,
-    ),
+  const scope = scopedProjectIds();
+  return state.projects.filter(
+    (project) =>
+      projectInScope(project, scope) &&
+      includesSearch(
+        [
+          project.name,
+          project.repoUrl,
+          projectTemplateName(project.templateId),
+          ...project.environments,
+        ],
+        term,
+      ),
   );
 }
 
@@ -55,20 +101,24 @@ function filteredTemplates() {
 }
 
 function filteredRequests() {
+  if (isReadOnlyView()) return [];
   const term = searchTerm();
-  return state.requests.filter((request) =>
-    includesSearch(
-      [
-        request.id,
-        request.projectName,
-        request.requester,
-        request.environment,
-        request.configKey,
-        request.reason,
-        request.status,
-      ],
-      term,
-    ),
+  const scope = scopedProjectIds();
+  return state.requests.filter(
+    (request) =>
+      scope.has(request.projectId) &&
+      includesSearch(
+        [
+          request.id,
+          request.projectName,
+          request.requester,
+          request.environment,
+          request.configKey,
+          request.reason,
+          request.status,
+        ],
+        term,
+      ),
   );
 }
 
@@ -88,7 +138,10 @@ function matchesConfigSearch(config) {
 }
 
 export function renderNav() {
-  $("#navList").innerHTML = navItems
+  const visibleItems = navItems.filter(
+    (item) => !(isReadOnlyView() && item.id === "requests"),
+  );
+  $("#navList").innerHTML = visibleItems
     .map(
       (item) => `
         <button class="nav-item ${state.activeView === item.id ? "active" : ""}" type="button" data-view-target="${item.id}">
@@ -118,39 +171,140 @@ export function renderUserMenu() {
   `;
 }
 
+
+function pendingReviewRequests() {
+  return filteredRequests().filter((request) => request.status === "pending");
+}
+
+function prodPendingRequests(requests) {
+  return requests.filter((request) => request.environment === "prod");
+}
+
+function configsInScope() {
+  const scope = scopedProjectIds();
+  return state.configs.filter((config) => scope.has(config.projectId));
+}
+
+function sensitiveConfigs() {
+  return configsInScope().filter((config) => config.isSensitive);
+}
+
+function sensitiveRevealKey(config) {
+  return `${config.projectId}:${config.environment}:${config.key}`;
+}
+
+function keyLooksSensitive(key) {
+  return /(password|secret|token|credential|database\.url|db\.url|database.*url|db.*url)/i.test(key);
+}
+
+function exposedSensitiveConfigs() {
+  return configsInScope().filter((config) => {
+    if (config.environment !== "prod") return false;
+    const revealedSensitiveValue =
+      config.isSensitive && state.revealedKeys.has(sensitiveRevealKey(config));
+    const untaggedSensitiveKey = !config.isSensitive && keyLooksSensitive(config.key);
+    return revealedSensitiveValue || untaggedSensitiveKey;
+  });
+}
+
+function templatedProjectCount(projects = filteredProjects()) {
+  return projects.filter((project) => project.templateId).length;
+}
+
+function myRecentChangeCount() {
+  const actor = userDisplayName();
+  return state.configHistory.filter((revision) => revision.changedBy === actor).length;
+}
+
+function dashboardButtonAttrs(attrs) {
+  return Object.entries(attrs)
+    .filter(([, value]) => value !== undefined && value !== "")
+    .map(([key, value]) => `${key}="${escapeHtml(value)}"`)
+    .join(" ");
+}
+
+function renderAttentionRow({ title, meta, tone = "neutral", status, attrs }) {
+  return `
+    <button class="dashboard-row attention-row ${tone}" type="button" ${dashboardButtonAttrs(attrs)}>
+      <span class="attention-marker" aria-hidden="true"></span>
+      <div>
+        <h3>${escapeHtml(title)}</h3>
+        <p class="project-meta">${meta.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</p>
+      </div>
+      <span class="status-pill ${tone === "danger" ? "danger" : tone === "warning" ? "warning" : "neutral"}">${escapeHtml(status)}</span>
+    </button>
+  `;
+}
+
 export function renderStats() {
-  const pendingCount = state.requests.filter(
-    (request) => request.status === "pending",
-  ).length;
-  const sensitiveCount = state.configs.filter(
-    (config) => config.isSensitive,
-  ).length;
-  const stats = [
-    {
+  const projects = filteredProjects();
+  const pending = pendingReviewRequests();
+  const prodPending = prodPendingRequests(pending).length;
+  const sensitiveCount = sensitiveConfigs().length;
+  const exposedSensitiveCount = exposedSensitiveConfigs().length;
+  const templatedCount = templatedProjectCount(projects);
+  const stats = [];
+
+  if (!isReadOnlyView()) {
+    stats.push({
+      label: isSystemView() ? "Global Pending Reviews" : "My Pending Reviews",
+      value: pending.length,
+      change: prodPending ? `${prodPending} prod guarded` : "Queue clear",
+      tone: pending.length ? "warning" : "success",
+    });
+  }
+
+  stats.push({
+    label: "Sensitive Keys",
+    value: sensitiveCount,
+    change: exposedSensitiveCount
+      ? `${exposedSensitiveCount} exposed in prod`
+      : "All masked",
+    tone: exposedSensitiveCount && !isReadOnlyView() ? "danger" : "info",
+  });
+
+  if (isSystemView()) {
+    stats.push({
+      label: "Template Coverage",
+      value: `${templatedCount}/${projects.length || 0}`,
+      change: projects.length === templatedCount ? "Standardized" : "Needs review",
+      tone: projects.length === templatedCount ? "success" : "neutral",
+    });
+  } else if (isReadOnlyView()) {
+    stats.push({
       label: "Projects",
-      value: state.projects.length,
-      change: "Live from API",
-    },
-    {
-      label: "Active Keys",
-      value: state.configs.length,
-      change: state.activeEnvironment,
-    },
-    { label: "Pending Reviews", value: pendingCount, change: "Prod guarded" },
-    {
-      label: "Sensitive Keys",
-      value: sensitiveCount,
-      change: "Masked by default",
-    },
-  ];
+      value: projects.length,
+      change: "Read only",
+      tone: "neutral",
+    });
+    stats.push({
+      label: "Recent Changes",
+      value: state.configHistory.length,
+      change: "Current project",
+      tone: "neutral",
+    });
+  } else {
+    stats.push({
+      label: "My Projects",
+      value: projects.length,
+      change: "Workspace scope",
+      tone: "neutral",
+    });
+    stats.push({
+      label: "My Recent Changes",
+      value: myRecentChangeCount(),
+      change: "Current project",
+      tone: "neutral",
+    });
+  }
 
   $("#statsGrid").innerHTML = stats
     .map(
       (stat) => `
-        <article class="stat-card">
-          <p>${stat.label}</p>
-          <strong>${stat.value}</strong>
-          <span class="metric-change">${stat.change}</span>
+        <article class="stat-card ${stat.tone}">
+          <p>${escapeHtml(stat.label)}</p>
+          <strong>${escapeHtml(stat.value)}</strong>
+          <span class="metric-change">${escapeHtml(stat.change)}</span>
         </article>
       `,
     )
@@ -159,44 +313,178 @@ export function renderStats() {
 
 export function renderDashboard() {
   renderStats();
-  const dashboardProjects = filteredProjects().slice(0, 3);
-  $("#dashboardProjects").innerHTML =
-    dashboardProjects
-      .map(
-        (project) => `
-        <article class="project-row">
+  const attentionPanel = document.querySelector(".attention-panel");
+  if (attentionPanel) {
+    attentionPanel.classList.toggle("hidden", isReadOnlyView());
+  }
+  renderDashboardAttention();
+  renderDashboardActivity();
+  renderDashboardCoverage();
+}
+
+function renderDashboardAttention() {
+  if (isReadOnlyView()) {
+    const attention = $("#dashboardAttention");
+    if (attention) attention.innerHTML = "";
+    return;
+  }
+  const project = filteredProjects().find((item) => item.id === activeProject()?.id) || filteredProjects()[0];
+  const pending = pendingReviewRequests();
+  const exposedSensitive = exposedSensitiveConfigs();
+  const rows = pending.slice(0, 3).map((request) =>
+    renderAttentionRow({
+      title: request.reason || `Review ${request.id.slice(0, 8)}`,
+      meta: [request.projectName, request.environment, request.requester],
+      tone: request.environment === "prod" ? "warning" : "neutral",
+      status: request.environment === "prod" ? "prod" : "review",
+      attrs: { "data-jump": "requests" },
+    }),
+  );
+
+  if (project && state.pendingReviewChanges.length) {
+    rows.unshift(
+      renderAttentionRow({
+        title: "Unsaved review draft",
+        meta: [project.name, state.activeEnvironment, `${state.pendingReviewChanges.length} local changes`],
+        tone: state.activeEnvironment === "prod" ? "warning" : "neutral",
+        status: "draft",
+        attrs: { "data-open-config": project.id },
+      }),
+    );
+  }
+
+  if (project && exposedSensitive.length) {
+    rows.push(
+      renderAttentionRow({
+        title: `${exposedSensitive.length} sensitive string${exposedSensitive.length === 1 ? "" : "s"} exposed in Prod`,
+        meta: [project.name, "prod", "unmasked or unlabeled secret"],
+        tone: "danger",
+        status: "exposed",
+        attrs: { "data-open-config": project.id },
+      }),
+    );
+  }
+
+  $("#dashboardAttention").innerHTML = rows.join("") || `
+    <article class="dashboard-empty">
+      <h3>No urgent config actions</h3>
+      <p class="project-meta"><span>Reviews clear</span><span>Sensitive values masked</span></p>
+    </article>
+  `;
+}
+
+function renderDashboardActivity() {
+  const project = filteredProjects().find((item) => item.id === activeProject()?.id);
+  const revisions = project ? state.configHistory : [];
+  const action = $("#dashboardHistoryAction");
+  if (action) {
+    action.disabled = !project || !revisions.length;
+  }
+
+  $("#dashboardActivity").innerHTML = revisions.length
+    ? revisions
+        .slice(0, 5)
+        .map(
+          (revision, index) => `
+            <article class="dashboard-row activity-row">
+              <div class="activity-version">
+                <span>${index === 0 ? "Current" : "Version"}</span>
+                <code>${escapeHtml(formatRevisionVersion(revision.id))}</code>
+              </div>
+              <div>
+                <h3>${escapeHtml(revision.changeReason || "Config revision")}</h3>
+                <p class="project-meta">
+                  <span>${escapeHtml(revision.changedBy)}</span>
+                  <span>${revision.entries.length} keys</span>
+                  <span>${escapeHtml(formatDateTime(revision.createdAt))}</span>
+                </p>
+              </div>
+            </article>
+          `,
+        )
+        .join("")
+    : `
+      <article class="dashboard-empty">
+        <h3>No revision history yet</h3>
+        <p class="project-meta"><span>${escapeHtml(project?.name || "Select a project")}</span><span>${escapeHtml(state.activeEnvironment)}</span></p>
+      </article>
+    `;
+}
+
+function renderDashboardCoverage() {
+  const projects = filteredProjects().slice(0, 4);
+  const scopedProjects = filteredProjects();
+  const sharedTemplates = state.templates.filter((template) => !template.isCustom).length;
+  const personalTemplates = state.templates.filter((template) => template.isCustom).length;
+  const templatedCount = templatedProjectCount(scopedProjects);
+  const untemplatedCount = Math.max(scopedProjects.length - templatedCount, 0);
+  const pending = pendingReviewRequests().length;
+
+  const summary = isSystemView()
+    ? `
+      <div class="coverage-summary">
+        <div>
+          <span>Projects</span>
+          <strong>${scopedProjects.length}</strong>
+        </div>
+        <div>
+          <span>Templates</span>
+          <strong>${sharedTemplates}+${personalTemplates}</strong>
+        </div>
+        <div>
+          <span>Groups</span>
+          <strong>${state.groups.length}</strong>
+        </div>
+        <div>
+          <span>Unstandardized</span>
+          <strong>${untemplatedCount}</strong>
+        </div>
+      </div>
+    `
+    : `
+      <div class="coverage-summary">
+        <div>
+          <span>${isReadOnlyView() ? "Readable Projects" : "My Projects"}</span>
+          <strong>${scopedProjects.length}</strong>
+        </div>
+        <div>
+          <span>${isReadOnlyView() ? "Visible Keys" : "Pending Reviews"}</span>
+          <strong>${isReadOnlyView() ? configsInScope().length : pending}</strong>
+        </div>
+        <div>
+          <span>Groups</span>
+          <strong>${state.groups.length}</strong>
+        </div>
+        <div>
+          <span>Recent Changes</span>
+          <strong>${isWorkspaceView() ? myRecentChangeCount() : state.configHistory.length}</strong>
+        </div>
+      </div>
+    `;
+
+  const projectRows = projects
+    .map((project) => {
+      const hasProd = project.environments.includes("prod");
+      const templateName = projectTemplateName(project.templateId);
+      return `
+        <button class="dashboard-row coverage-row" type="button" data-open-config="${escapeHtml(project.id)}">
           <div>
             <h3>${escapeHtml(project.name)}</h3>
             <p class="project-meta">
-              <span>${escapeHtml(project.owner)}</span>
               <span>${project.configCount} keys</span>
-              <span>${escapeHtml(project.lastChanged)}</span>
+              <span>${escapeHtml(templateName || "No template")}</span>
             </p>
           </div>
-        </article>
-      `,
-      )
-      .join("") || '<p class="project-meta">No matching projects.</p>';
+          <div class="environment-strip compact-env-strip">
+            ${project.environments.map((environment) => `<span>${escapeHtml(environment)}</span>`).join("")}
+          </div>
+          <span class="status-pill ${hasProd ? "success" : "warning"}">${hasProd ? "prod" : "no prod"}</span>
+        </button>
+      `;
+    })
+    .join("") || '<p class="project-meta">No matching projects.</p>';
 
-  $("#dashboardRequests").innerHTML =
-    filteredRequests()
-      .filter((request) => request.status === "pending")
-      .slice(0, 4)
-      .map(
-        (request) => `
-          <article class="project-row">
-            <div>
-              <h3>${escapeHtml(request.id.slice(0, 8))}</h3>
-              <p class="project-meta">
-                <span>${escapeHtml(request.projectName)}</span>
-                <span>${escapeHtml(request.requester)}</span>
-              </p>
-            </div>
-            <span class="status-pill warning">pending</span>
-          </article>
-        `,
-      )
-      .join("") || '<p class="project-meta">No pending review requests.</p>';
+  $("#dashboardCoverage").innerHTML = `${summary}<div class="coverage-projects">${projectRows}</div>`;
 }
 
 export function renderProjects() {
@@ -212,9 +500,7 @@ export function renderProjects() {
               </div>
             </div>
             <p class="project-meta">
-              <span>${escapeHtml(project.owner)}</span>
               <span>${project.configCount} config keys</span>
-              <span>${escapeHtml(project.defaultFormat)}</span>
               ${projectTemplateName(project.templateId) ? `<span>${escapeHtml(projectTemplateName(project.templateId))}</span>` : ""}
             </p>
             <div class="environment-strip">
@@ -333,6 +619,7 @@ export function renderEnvironmentTabs() {
 export function renderProjectTemplateOptions() {
   const summary = $("#projectTemplateSelection");
   const clearButton = $("#clearProjectTemplate");
+  const groupSelect = $("#projectGroup");
   if (!summary) return;
 
   const selection = state.projectTemplateSelection;
@@ -341,6 +628,20 @@ export function renderProjectTemplateOptions() {
     : "No template selected.";
   if (clearButton) {
     clearButton.classList.toggle("hidden", !selection);
+  }
+  if (groupSelect) {
+    const current = groupSelect.value || state.projectDraft?.groupId || "";
+    groupSelect.innerHTML = [
+      `<option value="" disabled ${current ? "" : "selected"}>Select group</option>`,
+      ...state.groups.map(
+        (group) => `<option value="${escapeHtml(group.id)}" ${group.id === current ? "selected" : ""}>${escapeHtml(group.name || group.id)}</option>`,
+      ),
+    ].join("");
+    if (current && state.groups.some((group) => group.id === current)) {
+      groupSelect.value = current;
+    } else if (!current && state.groups.length === 1) {
+      groupSelect.value = state.groups[0].id;
+    }
   }
 }
 
@@ -657,8 +958,7 @@ export function renderExportModal() {
   $("#exportModalMeta").innerHTML = project
     ? `<span>${escapeHtml(project.name)}</span><span>${escapeHtml(state.activeEnvironment)}</span>`
     : "";
-  $("#exportFormat").value =
-    state.exportFormat || project?.defaultFormat || "yaml";
+  $("#exportFormat").value = state.exportFormat || "yaml";
 }
 
 export function renderReviewModal() {
@@ -763,11 +1063,11 @@ export function renderImportPreview() {
 
 
 function canCreateGroup() {
-  return state.user?.role === "system_admin";
+  return ["system_admin", "group_admin"].includes(state.user?.role);
 }
 
 function canEditGroupMembers() {
-  return state.user?.role === "system_admin";
+  return ["system_admin", "group_admin"].includes(state.user?.role);
 }
 
 function groupMembers() {

@@ -40,13 +40,15 @@ func (s *Store) InitSchema(ctx context.Context) error {
 			name TEXT NOT NULL UNIQUE,
 			description TEXT NOT NULL DEFAULT '',
 			repo_url TEXT NOT NULL DEFAULT '',
-			owner_name TEXT NOT NULL,
-			default_format TEXT NOT NULL DEFAULT 'yaml',
 			template_id TEXT NOT NULL DEFAULT '',
+			group_id TEXT NOT NULL DEFAULT '',
 			created_at TIMESTAMPTZ NOT NULL,
 			updated_at TIMESTAMPTZ NOT NULL
 		)`,
 		`ALTER TABLE projects ADD COLUMN IF NOT EXISTS template_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE projects ADD COLUMN IF NOT EXISTS group_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE projects DROP COLUMN IF EXISTS owner_name`,
+		`ALTER TABLE projects DROP COLUMN IF EXISTS default_format`,
 		`CREATE TABLE IF NOT EXISTS custom_templates (
 			id TEXT PRIMARY KEY,
 			owner_user_id TEXT NOT NULL,
@@ -65,6 +67,14 @@ func (s *Store) InitSchema(ctx context.Context) error {
 			sort_order INTEGER NOT NULL,
 			UNIQUE(project_id, name)
 		)`,
+		`CREATE TABLE IF NOT EXISTS project_members (
+			project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+			user_id TEXT NOT NULL,
+			role TEXT NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL,
+			PRIMARY KEY(project_id, user_id)
+		)`,
+		`DROP TABLE IF EXISTS group_projects`,
 		`CREATE TABLE IF NOT EXISTS config_entries (
 			id TEXT PRIMARY KEY,
 			project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,

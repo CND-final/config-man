@@ -89,6 +89,7 @@ All demo users use password `password`.
 |-------|------|
 | `admin@config-man.local` | System Admin |
 | `project-admin@config-man.local` | Project Admin |
+| `group-admin@config-man.local` | Group Admin |
 | `developer@config-man.local` | Developer |
 | `reviewer@config-man.local` | Reviewer |
 | `viewer@config-man.local` | Viewer |
@@ -104,6 +105,8 @@ All demo users use password `password`.
 - `GET /api/v1/projects`
 - `POST /api/v1/projects`
 - `GET /api/v1/projects/:projectId`
+- `GET /api/v1/projects/:projectId/members`
+- `PUT /api/v1/projects/:projectId/members`
 - `GET /api/v1/projects/:projectId/configs?env=dev`
 - `POST /api/v1/projects/:projectId/configs`
 - `POST /api/v1/projects/:projectId/configs/import`

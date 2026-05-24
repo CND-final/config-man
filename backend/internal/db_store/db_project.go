@@ -3,6 +3,7 @@ package dbstore
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"config-man/backend/model"
 )
@@ -17,8 +18,8 @@ func (s *Store) SaveProject(ctx context.Context, project model.Project, audit mo
 }
 
 func upsertProjectTx(ctx context.Context, tx *sql.Tx, project model.Project) error {
-	if _, err := tx.ExecContext(ctx, `INSERT INTO projects (id, name, description, repo_url, owner_name, default_format, template_id, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-		ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, repo_url = EXCLUDED.repo_url, owner_name = EXCLUDED.owner_name, default_format = EXCLUDED.default_format, template_id = EXCLUDED.template_id, updated_at = EXCLUDED.updated_at`, project.ID, project.Name, project.Description, project.RepoURL, project.OwnerName, project.DefaultFormat, project.TemplateID, project.CreatedAt, project.UpdatedAt); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO projects (id, name, description, repo_url, template_id, group_id, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+		ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, repo_url = EXCLUDED.repo_url, template_id = EXCLUDED.template_id, group_id = EXCLUDED.group_id, updated_at = EXCLUDED.updated_at`, project.ID, project.Name, project.Description, project.RepoURL, project.TemplateID, project.GroupID, project.CreatedAt, project.UpdatedAt); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM project_environments WHERE project_id = $1`, project.ID); err != nil {
@@ -26,6 +27,28 @@ func upsertProjectTx(ctx context.Context, tx *sql.Tx, project model.Project) err
 	}
 	for _, env := range project.Environments {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO project_environments (id, project_id, name, sort_order) VALUES ($1,$2,$3,$4)`, env.ID, project.ID, env.Name, env.SortOrder); err != nil {
+			return err
+		}
+	}
+	if project.Members != nil {
+		if err := replaceProjectMembersTx(ctx, tx, project.ID, project.Members); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func replaceProjectMembersTx(ctx context.Context, tx *sql.Tx, projectID string, members []model.ProjectMember) error {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM project_members WHERE project_id = $1`, projectID); err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	for _, member := range members {
+		role := member.ProjectRole
+		if role == "" {
+			role = model.RoleProjectViewer
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO project_members (project_id, user_id, role, created_at) VALUES ($1,$2,$3,$4)`, projectID, member.ID, string(role), now); err != nil {
 			return err
 		}
 	}
@@ -41,7 +64,7 @@ func (s *Store) HasProjects(ctx context.Context) (bool, error) {
 }
 
 func (s *Store) ListProjects(ctx context.Context) ([]model.Project, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, name, description, repo_url, owner_name, default_format, template_id, created_at, updated_at FROM projects ORDER BY created_at DESC`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, description, repo_url, template_id, group_id, created_at, updated_at FROM projects ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -50,13 +73,18 @@ func (s *Store) ListProjects(ctx context.Context) ([]model.Project, error) {
 	projects := make([]model.Project, 0)
 	for rows.Next() {
 		project := model.Project{}
-		if err := rows.Scan(&project.ID, &project.Name, &project.Description, &project.RepoURL, &project.OwnerName, &project.DefaultFormat, &project.TemplateID, &project.CreatedAt, &project.UpdatedAt); err != nil {
+		if err := rows.Scan(&project.ID, &project.Name, &project.Description, &project.RepoURL, &project.TemplateID, &project.GroupID, &project.CreatedAt, &project.UpdatedAt); err != nil {
 			return nil, err
 		}
 		project.Environments, err = s.listProjectEnvironments(ctx, project.ID)
 		if err != nil {
 			return nil, err
 		}
+		project.Members, err = s.listProjectMembers(ctx, project.ID)
+		if err != nil {
+			return nil, err
+		}
+		project.MemberCount = len(project.Members)
 		project.ConfigCount, err = s.configCount(ctx, project.ID)
 		if err != nil {
 			return nil, err
@@ -68,7 +96,7 @@ func (s *Store) ListProjects(ctx context.Context) ([]model.Project, error) {
 
 func (s *Store) FindProject(ctx context.Context, projectID string) (model.Project, bool, error) {
 	project := model.Project{}
-	err := s.db.QueryRowContext(ctx, `SELECT id, name, description, repo_url, owner_name, default_format, template_id, created_at, updated_at FROM projects WHERE id = $1`, projectID).Scan(&project.ID, &project.Name, &project.Description, &project.RepoURL, &project.OwnerName, &project.DefaultFormat, &project.TemplateID, &project.CreatedAt, &project.UpdatedAt)
+	err := s.db.QueryRowContext(ctx, `SELECT id, name, description, repo_url, template_id, group_id, created_at, updated_at FROM projects WHERE id = $1`, projectID).Scan(&project.ID, &project.Name, &project.Description, &project.RepoURL, &project.TemplateID, &project.GroupID, &project.CreatedAt, &project.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return model.Project{}, false, nil
 	}
@@ -79,6 +107,11 @@ func (s *Store) FindProject(ctx context.Context, projectID string) (model.Projec
 	if err != nil {
 		return model.Project{}, false, err
 	}
+	project.Members, err = s.listProjectMembers(ctx, project.ID)
+	if err != nil {
+		return model.Project{}, false, err
+	}
+	project.MemberCount = len(project.Members)
 	project.ConfigCount, err = s.configCount(ctx, project.ID)
 	if err != nil {
 		return model.Project{}, false, err
@@ -108,6 +141,33 @@ func (s *Store) listProjectEnvironments(ctx context.Context, projectID string) (
 		envs = append(envs, env)
 	}
 	return envs, rows.Err()
+}
+
+func (s *Store) listProjectMembers(ctx context.Context, projectID string) ([]model.ProjectMember, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT user_id, role FROM project_members WHERE project_id = $1 ORDER BY created_at ASC`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	members := make([]model.ProjectMember, 0)
+	for rows.Next() {
+		member := model.ProjectMember{}
+		if err := rows.Scan(&member.ID, &member.ProjectRole); err != nil {
+			return nil, err
+		}
+		members = append(members, member)
+	}
+	return members, rows.Err()
+}
+
+func (s *Store) SaveProjectMembers(ctx context.Context, projectID string, members []model.ProjectMember, audit model.AuditLog) error {
+	return s.withTx(ctx, func(tx *sql.Tx) error {
+		if err := replaceProjectMembersTx(ctx, tx, projectID, members); err != nil {
+			return err
+		}
+		return insertAuditTx(ctx, tx, audit)
+	})
 }
 
 func (s *Store) configCount(ctx context.Context, projectID string) (int, error) {

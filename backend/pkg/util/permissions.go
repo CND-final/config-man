@@ -32,6 +32,76 @@ func CanReview(user model.User) bool {
 	return user.Role == model.RoleSystemAdmin || user.Role == model.RoleReviewer
 }
 
+func ProjectRoleForUser(user model.User, members []model.ProjectMember) (model.ProjectRole, bool) {
+	for _, member := range members {
+		if member.ID == user.ID {
+			return member.ProjectRole, true
+		}
+	}
+	return "", false
+}
+
+func CanReadProject(user model.User, members []model.ProjectMember) bool {
+	if user.Role == model.RoleSystemAdmin {
+		return true
+	}
+	_, ok := ProjectRoleForUser(user, members)
+	return ok
+}
+
+func CanRevealProjectSensitive(user model.User, members []model.ProjectMember) bool {
+	if user.Role == model.RoleSystemAdmin {
+		return true
+	}
+	role, ok := ProjectRoleForUser(user, members)
+	if !ok {
+		return false
+	}
+	return role == model.RoleProjectMemberAdmin || role == model.RoleProjectDeveloper
+}
+
+func CanWriteProjectEnvironment(user model.User, members []model.ProjectMember, environment string) bool {
+	if user.Role == model.RoleSystemAdmin {
+		return true
+	}
+	role, ok := ProjectRoleForUser(user, members)
+	if !ok {
+		return false
+	}
+	if role == model.RoleProjectMemberAdmin {
+		return true
+	}
+	return role == model.RoleProjectDeveloper && strings.ToLower(environment) != "prod"
+}
+
+func CanCreateProjectReview(user model.User, members []model.ProjectMember) bool {
+	if user.Role == model.RoleSystemAdmin {
+		return true
+	}
+	role, ok := ProjectRoleForUser(user, members)
+	if !ok {
+		return false
+	}
+	return role == model.RoleProjectMemberAdmin || role == model.RoleProjectDeveloper || role == model.RoleProjectReviewer
+}
+
+func CanReviewProject(user model.User, members []model.ProjectMember) bool {
+	if user.Role == model.RoleSystemAdmin {
+		return true
+	}
+	role, ok := ProjectRoleForUser(user, members)
+	return ok && role == model.RoleProjectReviewer
+}
+
+func ValidProjectRole(role model.ProjectRole) bool {
+	switch role {
+	case model.RoleProjectMemberAdmin, model.RoleProjectDeveloper, model.RoleProjectReviewer, model.RoleProjectViewer:
+		return true
+	default:
+		return false
+	}
+}
+
 func NormalizeValueType(valueType string) string {
 	switch strings.ToLower(strings.TrimSpace(valueType)) {
 	case "", "string":

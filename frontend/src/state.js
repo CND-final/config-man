@@ -71,10 +71,13 @@ export function activeProject() {
 }
 
 export function normalizeProject(project) {
+  const environments = project.environments || project.Environments || [];
   return {
     ...project,
-    owner: project.ownerName,
-    environments: project.environments.map((environment) =>
+    id: project.id || project.ID,
+    name: project.name || project.Name,
+    groupId: project.groupId || project.GroupID || "",
+    environments: environments.map((environment) =>
       typeof environment === "string" ? environment : environment.name,
     ),
     lastChanged: "live API",

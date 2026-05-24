@@ -12,7 +12,7 @@ func (s *Store) ListGroups() []model.Group {
 		return nil
 	}
 	for index := range groups {
-		s.hydrateGroupMembers(&groups[index])
+		s.hydrateGroup(&groups[index])
 	}
 	return groups
 }
@@ -22,7 +22,7 @@ func (s *Store) FindGroup(groupID string) (model.Group, bool) {
 	if err != nil || !ok {
 		return model.Group{}, false
 	}
-	s.hydrateGroupMembers(&group)
+	s.hydrateGroup(&group)
 	return group, true
 }
 
@@ -46,7 +46,7 @@ func (s *Store) RemoveGroupMember(groupID, userID string, audit model.AuditLog) 
 	return s.db.RemoveGroupMember(context.Background(), groupID, userID, audit)
 }
 
-func (s *Store) hydrateGroupMembers(group *model.Group) {
+func (s *Store) hydrateGroup(group *model.Group) {
 	for index := range group.Members {
 		member := &group.Members[index]
 		user, ok := s.FindUserByID(member.ID)
@@ -55,5 +55,9 @@ func (s *Store) hydrateGroupMembers(group *model.Group) {
 		}
 		member.User = user
 	}
+	for index := range group.Projects {
+		s.hydrateProjectMembers(&group.Projects[index])
+	}
 	group.MemberCount = len(group.Members)
+	group.ProjectCount = len(group.Projects)
 }

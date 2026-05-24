@@ -8,10 +8,12 @@ const (
 )
 
 type Group struct {
-	ID          string        `json:"id"`
-	Name        string        `json:"name"`
-	Members     []GroupMember `json:"members"`
-	MemberCount int           `json:"memberCount"`
+	ID           string        `json:"id"`
+	Name         string        `json:"name"`
+	Members      []GroupMember `json:"members"`
+	Projects     []Project     `json:"projects"`
+	MemberCount  int           `json:"memberCount"`
+	ProjectCount int           `json:"projectCount"`
 }
 
 type GroupMember struct {

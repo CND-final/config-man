@@ -6,13 +6,12 @@ type LoginRequest struct {
 }
 
 type CreateProjectRequest struct {
-	Name          string   `json:"name"`
-	Description   string   `json:"description"`
-	RepoURL       string   `json:"repoUrl"`
-	OwnerName     string   `json:"ownerName"`
-	DefaultFormat string   `json:"defaultFormat"`
-	TemplateID    string   `json:"templateId"`
-	Environments  []string `json:"environments"`
+	Name         string   `json:"name"`
+	Description  string   `json:"description"`
+	RepoURL      string   `json:"repoUrl"`
+	TemplateID   string   `json:"templateId"`
+	GroupID      string   `json:"groupId"`
+	Environments []string `json:"environments"`
 }
 
 type CreateTemplateRequest struct {
@@ -65,6 +64,15 @@ type CreateGroupRequest struct {
 type GroupMemberRequest struct {
 	UserID    string    `json:"userId"`
 	GroupRole GroupRole `json:"groupRole"`
+}
+
+type ProjectMemberRequest struct {
+	UserID      string      `json:"userId"`
+	ProjectRole ProjectRole `json:"projectRole"`
+}
+
+type UpdateProjectMembersRequest struct {
+	Members []ProjectMemberRequest `json:"members"`
 }
 
 type CreateReviewRequest struct {

@@ -110,12 +110,18 @@ function listFromPayload(payload, key) {
 
 export function normalizeGroup(group) {
   const members = group.members || group.groupMembers || group.GroupMembers || [];
+  const rawProjects = group.projects || group.managedProjects || group.Projects || [];
+  const projects = rawProjects.map((project) =>
+    typeof project === "string" ? { id: project, name: project, environments: [] } : normalizeProject(project),
+  );
   return {
     ...group,
     id: group.id || group.groupId || group.ID,
     name: group.name || group.groupName || group.Name,
     memberCount: group.memberCount ?? members.length ?? 0,
+    projectCount: group.projectCount ?? projects.length ?? 0,
     members,
+    projects,
   };
 }
 

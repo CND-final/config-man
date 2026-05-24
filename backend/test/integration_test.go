@@ -133,8 +133,8 @@ func TestIntegrationProjectPersistsAfterReload(t *testing.T) {
 
 	handler := newIntegrationHandler(t, db)
 	res := request(t, handler, http.MethodPost, "/api/v1/projects", "alice", map[string]any{
-		"name":      "integration-billing",
-		"ownerName": "Billing Team",
+		"name":    "integration-billing",
+		"groupId": "platform-team",
 	})
 	if res.Code != http.StatusCreated {
 		t.Fatalf("create project status = %d body=%s", res.Code, res.Body.String())

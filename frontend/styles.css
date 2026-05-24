@@ -539,22 +539,59 @@ button:disabled {
 
 .panel-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
   margin-bottom: 16px;
 }
 
+.panel-header .text-button {
+  flex: 0 0 auto;
+}
+
+.panel-subtitle {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
   margin-bottom: 18px;
 }
 
 .stat-card {
-  min-height: 124px;
+  position: relative;
+  overflow: hidden;
+  min-height: 116px;
   padding: 18px;
+}
+
+.stat-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--line);
+}
+
+.stat-card.success::before {
+  background: var(--green);
+}
+
+.stat-card.info::before {
+  background: var(--blue);
+}
+
+.stat-card.warning::before {
+  background: var(--amber);
+}
+
+.stat-card.danger::before {
+  background: var(--red);
 }
 
 .stat-card p {
@@ -567,21 +604,173 @@ button:disabled {
 .stat-card strong {
   display: block;
   margin-bottom: 12px;
-  font-size: 34px;
+  font-size: 32px;
   line-height: 1;
 }
 
 .metric-change {
   gap: 6px;
-  color: var(--green);
+  color: var(--muted);
   font-size: 12px;
   font-weight: 750;
 }
 
+.stat-card.success .metric-change {
+  color: var(--green);
+}
+
+.stat-card.info .metric-change {
+  color: var(--blue);
+}
+
+.stat-card.warning .metric-change {
+  color: var(--amber);
+}
+
+.stat-card.danger .metric-change {
+  color: var(--red);
+}
+
 .dashboard-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.85fr);
+  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.95fr);
   gap: 18px;
+}
+
+.coverage-panel {
+  grid-column: 1 / -1;
+}
+
+.attention-list,
+.activity-list,
+.coverage-projects {
+  display: grid;
+  gap: 10px;
+}
+
+.dashboard-row,
+.dashboard-empty {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  border-radius: 8px;
+  padding: 12px;
+  color: inherit;
+  background: rgba(245, 245, 247, 0.76);
+  text-align: left;
+}
+
+.dashboard-row {
+  display: grid;
+  align-items: center;
+  gap: 12px;
+  transition:
+    background 150ms ease,
+    transform 150ms ease;
+}
+
+button.dashboard-row:hover,
+button.dashboard-row:focus-visible {
+  transform: translateY(-1px);
+  background: #fff;
+  outline: none;
+}
+
+.dashboard-row h3,
+.dashboard-empty h3 {
+  overflow: hidden;
+  margin: 0 0 5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attention-row {
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  min-height: 68px;
+}
+
+.attention-marker {
+  width: 10px;
+  height: 34px;
+  border-radius: 999px;
+  background: var(--line);
+}
+
+.attention-row.warning .attention-marker {
+  background: var(--amber);
+}
+
+.attention-row.danger .attention-marker {
+  background: var(--red);
+}
+
+.activity-row {
+  grid-template-columns: 82px minmax(0, 1fr);
+  min-height: 70px;
+}
+
+.activity-version {
+  display: grid;
+  gap: 5px;
+  align-content: center;
+}
+
+.activity-version span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.activity-version code {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.coverage-layout {
+  display: grid;
+  grid-template-columns: 0.8fr 1.2fr;
+  gap: 14px;
+  align-items: start;
+}
+
+.coverage-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.coverage-summary div {
+  min-height: 82px;
+  border-radius: 8px;
+  padding: 13px;
+  background: rgba(245, 245, 247, 0.76);
+}
+
+.coverage-summary span {
+  display: block;
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.coverage-summary strong {
+  font-size: 25px;
+  line-height: 1;
+}
+
+.coverage-row {
+  grid-template-columns: minmax(0, 1fr) minmax(150px, auto) auto;
+  min-height: 70px;
+}
+
+.compact-env-strip {
+  justify-content: flex-end;
+}
+
+.compact-env-strip span {
+  padding: 4px 8px;
 }
 
 .project-stack,
@@ -2029,6 +2218,7 @@ td {
   }
 
   .dashboard-grid,
+  .coverage-layout,
   .editor-layout {
     grid-template-columns: 1fr;
   }
@@ -2080,6 +2270,9 @@ td {
   .editor-toolbar,
   .import-toolbar,
   .request-item,
+  .attention-row,
+  .activity-row,
+  .coverage-row,
   .form-grid,
   .history-summary,
   .version-record,
@@ -2100,8 +2293,13 @@ td {
 
   .stats-grid,
   .projects-grid,
-  .templates-grid {
+  .templates-grid,
+  .coverage-summary {
     grid-template-columns: 1fr;
+  }
+
+  .compact-env-strip {
+    justify-content: flex-start;
   }
 
   .version-record-meta {

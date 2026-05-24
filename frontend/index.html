@@ -48,7 +48,7 @@
           <input
             id="globalSearch"
             type="search"
-            placeholder="Project, key, owner"
+            placeholder="Project, key, environment"
           />
         </label>
         <div class="topbar-actions">
@@ -81,28 +81,42 @@
           <div class="page-header">
             <div>
               <p class="eyebrow">Dashboard</p>
-              <h1>Configuration Control Center</h1>
+              <h1>Config Action Center</h1>
             </div>
           </div>
           <div id="statsGrid" class="stats-grid"></div>
-          <div class="dashboard-grid">
-            <section class="panel wide-panel">
+          <div class="dashboard-grid action-dashboard">
+            <section class="panel attention-panel">
               <div class="panel-header">
-                <h2>Projects</h2>
-                <button class="text-button" type="button" data-jump="projects">
-                  View all
-                </button>
+                <div>
+                  <h2>Needs Attention</h2>
+                  <p class="panel-subtitle">Pending decisions and guarded changes</p>
+                </div>
+                <button class="text-button" type="button" data-jump="requests">Open Requests</button>
               </div>
-              <div id="dashboardProjects" class="project-stack"></div>
+              <div id="dashboardAttention" class="attention-list"></div>
             </section>
-            <section class="panel">
+
+            <section class="panel activity-panel">
               <div class="panel-header">
-                <h2>Pending Reviews</h2>
-                <button class="text-button" type="button" data-jump="requests">
-                  Open
-                </button>
+                <div>
+                  <h2>Recent Config Activity</h2>
+                  <p class="panel-subtitle">Current project revision trail</p>
+                </div>
+                <button id="dashboardHistoryAction" class="text-button" type="button">History</button>
               </div>
-              <div id="dashboardRequests" class="review-stack"></div>
+              <div id="dashboardActivity" class="activity-list"></div>
+            </section>
+
+            <section class="panel coverage-panel">
+              <div class="panel-header">
+                <div>
+                  <h2>Coverage</h2>
+                  <p class="panel-subtitle">Projects, templates, and environments</p>
+                </div>
+                <button class="text-button" type="button" data-jump="projects">Projects</button>
+              </div>
+              <div id="dashboardCoverage" class="coverage-layout"></div>
             </section>
           </div>
         </section>
@@ -481,16 +495,6 @@
             />
           </label>
           <label>
-            <span>Owner</span>
-            <input
-              id="projectOwner"
-              type="text"
-              autocomplete="off"
-              required
-              minlength="2"
-            />
-          </label>
-          <label>
             <span>Repository URL</span>
             <input
               id="projectRepo"
@@ -500,12 +504,8 @@
             />
           </label>
           <label>
-            <span>Default Format</span>
-            <select id="projectFormat">
-              <option value="yaml">yaml</option>
-              <option value="json">json</option>
-              <option value="properties">properties</option>
-            </select>
+            <span>Owning Group</span>
+            <select id="projectGroup" required></select>
           </label>
           <div class="form-wide template-picker-field">
             <span>Apply Template</span>
