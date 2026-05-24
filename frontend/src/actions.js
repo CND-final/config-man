@@ -1,16 +1,21 @@
 import { api } from "./api.js";
+import { loadCustomConfigFiles, newCustomConfigFile, saveCustomConfigFiles } from "./configFiles.js";
 import { $, $all, showToast } from "./dom.js";
 import {
+  loadCompareConfigs,
   loadConfigHistory,
   loadConfigsAndHistory,
   reloadGroupDetail,
   reloadGroups,
   reloadProjects,
   reloadTemplates,
+  reloadSharedConfigs,
+  reloadNotifications,
   reloadUsers,
 } from "./data.js";
 import {
   renderAll,
+  renderConfigCreateDrawer,
   renderConfigRow,
   renderConfigRows,
   renderDashboard,
@@ -25,6 +30,8 @@ import {
   renderReviewModal,
   renderReviewDock,
   renderTemplateCreateModal,
+  renderSharedConfigCreateModal,
+  renderSharedConfigEditModal,
   renderTemplateModal,
   renderUserMenu,
   renderVersionHistory,
@@ -38,6 +45,12 @@ export function switchView(viewId) {
     view.classList.toggle("active", view.dataset.view === viewId);
   });
   renderNav();
+}
+
+export function setLibraryTab(tab) {
+  if (!["templates", "shared-config"].includes(tab)) return;
+  state.libraryTab = tab;
+  renderAll();
 }
 
 
@@ -92,6 +105,164 @@ export function setUserMenu(open) {
   state.userMenuOpen = open;
   renderUserMenu();
 }
+
+export function setConfigFileCreate(open) {
+  state.configFileCreateOpen = open;
+  if (open) {
+    state.configFileSourceType = "blank";
+    state.configFileSourceId = "";
+    state.configFileDraftName = "";
+  }
+  renderConfigRows();
+  if (open) {
+    window.setTimeout(() => $("#newConfigFileName")?.focus(), 0);
+  }
+}
+
+export function updateConfigFileDraftName(name) {
+  state.configFileDraftName = name || "";
+}
+
+export function updateConfigFileSourceType(sourceType) {
+  state.configFileDraftName = $("#newConfigFileName")?.value || state.configFileDraftName || "";
+  state.configFileSourceType = sourceType || "blank";
+  state.configFileSourceId = "";
+  renderConfigRows();
+}
+
+export function updateConfigFileSourceId(sourceId) {
+  state.configFileSourceId = sourceId || "";
+}
+
+export function createConfigFile(event) {
+  event.preventDefault();
+  const name = $("#newConfigFileName")?.value || "";
+  const sourceType = state.configFileSourceType || "blank";
+  const sourceId = state.configFileSourceId || $("#configFileSourceId")?.value || "";
+  const source = configFileSource(sourceType, sourceId);
+  const file = newCustomConfigFile(name, source);
+  if (!file.name) {
+    showToast("Config file name is required");
+    return;
+  }
+  loadCustomConfigFiles(state);
+  if (state.customConfigFiles.some((item) => item.id === file.id)) {
+    showToast(`${file.name} already exists`);
+    return;
+  }
+  state.customConfigFiles = [...state.customConfigFiles, file];
+  saveCustomConfigFiles(state);
+  state.activeConfigFile = file.id;
+  state.configFileCreateOpen = false;
+  state.configFileDraftName = "";
+  renderAll();
+  showToast(`${file.name} created`);
+}
+
+function configFileSource(sourceType, sourceId) {
+  if (sourceType === "template") {
+    const template = state.templates.find((item) => item.id === sourceId);
+    return { type: sourceType, id: sourceId, label: template ? `Template: ${template.name}` : "Template source" };
+  }
+  if (sourceType === "shared-config") {
+    const sharedConfig = state.sharedConfigs.find((item) => item.id === sourceId);
+    return { type: sourceType, id: sourceId, label: sharedConfig ? `Shared: ${sharedConfig.name}` : "Shared config source" };
+  }
+  return { type: "blank", id: "", label: "Custom config file" };
+}
+
+export async function setConfigMode(mode) {
+  if (!["view", "compare"].includes(mode)) return;
+  state.configMode = mode;
+  state.inlineEdit = null;
+  if (mode === "compare") {
+    await loadCompareConfigs();
+  }
+  renderConfigRows();
+}
+
+export async function setCompareEnvironment(side, environment) {
+  if (!environment || !["source", "target"].includes(side)) return;
+  if (side === "source") {
+    state.compareSourceEnv = environment;
+  } else {
+    state.compareTargetEnv = environment;
+  }
+  await loadCompareConfigs();
+  renderConfigRows();
+}
+
+export function setConfigCreateDrawer(open) {
+  state.configCreateDrawerOpen = open;
+  if (open) {
+    state.newConfigValueType = "string";
+    renderConfigCreateDrawer();
+    window.setTimeout(() => $("#newConfigKey")?.focus(), 0);
+    return;
+  }
+  $("#configCreateForm")?.reset();
+  state.newConfigValueType = "string";
+  renderConfigCreateDrawer();
+}
+
+export function updateNewConfigValueType(valueType) {
+  state.newConfigValueType = valueType || "string";
+  renderConfigCreateDrawer();
+}
+
+export async function createConfigKey(event) {
+  event.preventDefault();
+  const project = activeProject();
+  if (!project) {
+    showToast("Choose a project first");
+    return;
+  }
+
+  const key = $("#newConfigKey").value.trim();
+  const reason = $("#newConfigReason").value.trim();
+  if (!key) {
+    showToast("Config key is required");
+    $("#newConfigKey").focus();
+    return;
+  }
+  if (!reason) {
+    showToast("Change Reason is required");
+    $("#newConfigReason").focus();
+    return;
+  }
+
+  const requests = Array.from(document.querySelectorAll("[data-new-config-value]"))
+    .map((input) => ({ environment: input.dataset.newConfigValue, value: input.value }))
+    .filter(({ environment, value }) => environment && value.trim() !== "");
+
+  if (!requests.length) {
+    showToast("Enter at least one environment value");
+    return;
+  }
+
+  const bodyBase = {
+    key,
+    valueType: $("#newConfigValueType").value,
+    isSensitive: $("#newConfigSensitive").checked,
+    changeReason: reason,
+  };
+
+  for (const request of requests) {
+    await api(`/projects/${project.id}/configs`, {
+      method: "POST",
+      body: JSON.stringify({ ...bodyBase, ...request }),
+    });
+  }
+
+  await loadConfigsAndHistory();
+  if (state.configMode === "compare") {
+    await loadCompareConfigs();
+  }
+  setConfigCreateDrawer(false);
+  renderAll();
+  showToast(`${key} created in ${requests.length} environment${requests.length === 1 ? "" : "s"}`);
+}
+
 
 export async function openGroupPanel() {
   state.userMenuOpen = false;
@@ -371,6 +542,158 @@ function restoreProjectDraft() {
   $("#projectDescription").value = draft.description || "";
   const groupSelect = $("#projectGroup");
   if (groupSelect) groupSelect.value = draft.groupId || groupSelect.value || "";
+}
+
+
+
+function sharedConfigById(id) {
+  return state.sharedConfigs.find((config) => config.id === id);
+}
+
+function sharedConfigEntriesForTextarea(item) {
+  return JSON.stringify(item?.entries || [], null, 2);
+}
+
+export function openSharedConfigEdit(id) {
+  const item = sharedConfigById(id);
+  if (!item) return;
+  state.activeSharedConfigId = id;
+  state.sharedConfigEditModalOpen = true;
+  renderSharedConfigEditModal();
+  $("#sharedConfigEditName").value = item.name || "";
+  $("#sharedConfigEditDescription").value = item.description || "";
+  $("#sharedConfigEditFormat").value = item.format || "yaml";
+  $("#sharedConfigEditEntries").value = sharedConfigEntriesForTextarea(item);
+  $("#sharedConfigChangeReason").value = "";
+  window.setTimeout(() => $("#sharedConfigEditName")?.focus(), 0);
+}
+
+export function setSharedConfigEditModal(open) {
+  state.sharedConfigEditModalOpen = open;
+  if (!open) {
+    state.activeSharedConfigId = "";
+    $("#sharedConfigEditForm")?.reset();
+  }
+  renderSharedConfigEditModal();
+}
+
+function readSharedConfigEditEntries() {
+  try {
+    const parsed = JSON.parse($("#sharedConfigEditEntries").value || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    throw new Error("Entries JSON is invalid");
+  }
+}
+
+export async function updateSharedConfig(event) {
+  event.preventDefault();
+  const id = state.activeSharedConfigId;
+  const item = sharedConfigById(id);
+  if (!item) return;
+  const changeReason = $("#sharedConfigChangeReason").value.trim();
+  if (!changeReason) {
+    showToast("Change Reason is required");
+    return;
+  }
+  const affected = item.inheritedBy || item.affectedProjects?.length || 0;
+  const prod = item.prodEnvironmentCount || 0;
+  const confirmed = window.confirm(`This change will affect ${affected} projects and ${prod} production environments. Apply it now?`);
+  if (!confirmed) return;
+  const updated = await api(`/shared-configs/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      name: $("#sharedConfigEditName").value,
+      description: $("#sharedConfigEditDescription").value,
+      format: $("#sharedConfigEditFormat").value,
+      entries: readSharedConfigEditEntries(),
+      changeReason,
+    }),
+  });
+  await Promise.all([reloadSharedConfigs(), reloadNotifications()]);
+  setSharedConfigEditModal(false);
+  renderAll();
+  showToast(`${updated.name} updated`);
+}
+
+export function setSharedConfigCreateModal(open) {
+  state.sharedConfigCreateModalOpen = open;
+  renderSharedConfigCreateModal();
+  if (open) {
+    const textarea = $("#sharedConfigEntries");
+    if (textarea && !textarea.value.trim()) {
+      textarea.value = JSON.stringify(
+        [
+          {
+            key: "logging.level.root",
+            value: "INFO",
+            valueType: "string",
+            environment: "prod",
+            isSensitive: false,
+          },
+        ],
+        null,
+        2,
+      );
+    }
+    window.setTimeout(() => $("#sharedConfigName")?.focus(), 0);
+  } else {
+    $("#sharedConfigCreateForm")?.reset();
+  }
+}
+
+function readSharedConfigEntries() {
+  try {
+    const parsed = JSON.parse($("#sharedConfigEntries").value || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    throw new Error("Entries JSON is invalid");
+  }
+}
+
+export async function createSharedConfig(event) {
+  event.preventDefault();
+  const created = await api("/shared-configs", {
+    method: "POST",
+    body: JSON.stringify({
+      name: $("#sharedConfigName").value,
+      description: $("#sharedConfigDescription").value,
+      format: $("#sharedConfigFormat").value,
+      entries: readSharedConfigEntries(),
+    }),
+  });
+  await reloadSharedConfigs();
+  setSharedConfigCreateModal(false);
+  renderAll();
+  showToast(`${created.name} created`);
+}
+
+export async function deleteSharedConfig(id) {
+  const item = state.sharedConfigs.find((config) => config.id === id);
+  if (!item) return;
+  if (!window.confirm(`Delete global shared config ${item.name}?`)) return;
+  await api(`/shared-configs/${encodeURIComponent(id)}`, { method: "DELETE" });
+  await reloadSharedConfigs();
+  renderAll();
+  showToast(`${item.name} deleted`);
+}
+
+export async function submitSharedConfigUpdate(id) {
+  const item = state.sharedConfigs.find((config) => config.id === id);
+  if (!item) return;
+  const reason = window.prompt(`Submit update request for ${item.name}`, "Update shared config");
+  if (!reason || !reason.trim()) return;
+  await api(`/shared-configs/${encodeURIComponent(id)}/submit-update`, {
+    method: "POST",
+    body: JSON.stringify({
+      name: item.name,
+      description: item.description,
+      format: item.format,
+      entries: item.entries,
+      reason,
+    }),
+  });
+  showToast("Shared config update submitted");
 }
 
 export function setTemplateCreateModal(open) {

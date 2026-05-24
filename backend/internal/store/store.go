@@ -37,7 +37,7 @@ func NewStoreWithDB(ctx context.Context, db *sql.DB) (*Store, error) {
 			return nil, err
 		}
 	}
-	store.ensureDefaultProjectMembers()
+	store.ensureDefaultSharedConfigs()
 	return store, nil
 }
 

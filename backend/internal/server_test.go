@@ -69,6 +69,10 @@ func resetServerTestDB(t *testing.T, db *sql.DB) {
 	_, err := db.ExecContext(context.Background(), `
 		TRUNCATE TABLE
 			audit_logs,
+			app_notifications,
+			shared_config_update_requests,
+			shared_config_entries,
+			shared_configs,
 			review_requests,
 			config_revisions,
 			config_versions,
@@ -607,6 +611,110 @@ func TestExtractConfigDoesNotPersist(t *testing.T) {
 		if entry.Key == "feature.preview" || entry.Key == "limit" {
 			t.Fatalf("extract persisted config unexpectedly: %#v", entry)
 		}
+	}
+}
+
+func TestGlobalSharedConfigPermissions(t *testing.T) {
+	handler := newTestHandler(t)
+
+	res := request(t, handler, http.MethodGet, "/api/v1/shared-configs", "nora", nil)
+	if res.Code != http.StatusOK {
+		t.Fatalf("list shared configs status = %d body=%s", res.Code, res.Body.String())
+	}
+	items := decodeBody[[]model.SharedConfig](t, res)
+	if len(items) == 0 {
+		t.Fatalf("expected seeded shared configs")
+	}
+
+	body := map[string]any{
+		"name":        "Global Test Defaults",
+		"description": "test shared config",
+		"format":      "yaml",
+		"entries": []map[string]any{{
+			"key":         "feature.test",
+			"value":       "true",
+			"valueType":   "boolean",
+			"environment": "prod",
+		}},
+	}
+	res = request(t, handler, http.MethodPost, "/api/v1/shared-configs", "nora", body)
+	if res.Code != http.StatusForbidden {
+		t.Fatalf("developer create shared config status = %d body=%s", res.Code, res.Body.String())
+	}
+
+	res = request(t, handler, http.MethodPost, "/api/v1/shared-configs", "alice", body)
+	if res.Code != http.StatusCreated {
+		t.Fatalf("system_admin create shared config status = %d body=%s", res.Code, res.Body.String())
+	}
+	created := decodeBody[model.SharedConfig](t, res)
+	if created.Scope != model.ScopeGlobal {
+		t.Fatalf("created scope = %q", created.Scope)
+	}
+
+	res = request(t, handler, http.MethodPost, "/api/v1/shared-configs/"+created.ID+"/submit-update", "nora", map[string]any{
+		"reason": "request safer default",
+		"entries": []map[string]any{{
+			"key":         "feature.test",
+			"value":       "false",
+			"valueType":   "boolean",
+			"environment": "prod",
+		}},
+	})
+	if res.Code != http.StatusCreated {
+		t.Fatalf("submit shared config update status = %d body=%s", res.Code, res.Body.String())
+	}
+	updateRequest := decodeBody[model.SharedConfigUpdateRequest](t, res)
+	if updateRequest.Status != "pending" || updateRequest.SharedConfigID != created.ID {
+		t.Fatalf("unexpected update request: %#v", updateRequest)
+	}
+
+	res = request(t, handler, http.MethodPut, "/api/v1/shared-configs/"+created.ID, "nora", map[string]any{
+		"name":         created.Name,
+		"format":       created.Format,
+		"changeReason": "apply directly",
+		"entries":      body["entries"],
+	})
+	if res.Code != http.StatusForbidden {
+		t.Fatalf("developer update shared config status = %d body=%s", res.Code, res.Body.String())
+	}
+
+	res = request(t, handler, http.MethodPut, "/api/v1/shared-configs/global-runtime-defaults", "alice", map[string]any{
+		"name":         "Global Runtime Defaults",
+		"description":  "Updated defaults",
+		"format":       "yaml",
+		"changeReason": "tighten global runtime defaults",
+		"entries": []map[string]any{{
+			"key":         "logging.level.root",
+			"value":       "WARN",
+			"valueType":   "string",
+			"environment": "prod",
+		}},
+	})
+	if res.Code != http.StatusOK {
+		t.Fatalf("system_admin update seeded shared config status = %d body=%s", res.Code, res.Body.String())
+	}
+	updated := decodeBody[model.SharedConfig](t, res)
+	if updated.ProdEnvironmentCount != 1 {
+		t.Fatalf("prod impact = %d", updated.ProdEnvironmentCount)
+	}
+
+	res = request(t, handler, http.MethodGet, "/api/v1/notifications", "nora", nil)
+	if res.Code != http.StatusOK {
+		t.Fatalf("list notifications status = %d body=%s", res.Code, res.Body.String())
+	}
+	notifications := decodeBody[[]model.Notification](t, res)
+	if len(notifications) == 0 {
+		t.Fatalf("expected notification for affected project member")
+	}
+
+	res = request(t, handler, http.MethodDelete, "/api/v1/shared-configs/"+created.ID, "nora", nil)
+	if res.Code != http.StatusForbidden {
+		t.Fatalf("developer delete shared config status = %d body=%s", res.Code, res.Body.String())
+	}
+
+	res = request(t, handler, http.MethodDelete, "/api/v1/shared-configs/"+created.ID, "alice", nil)
+	if res.Code != http.StatusNoContent {
+		t.Fatalf("system_admin delete shared config status = %d body=%s", res.Code, res.Body.String())
 	}
 }
 

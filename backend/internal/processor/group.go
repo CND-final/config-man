@@ -26,7 +26,7 @@ func (p *Processor) ListGroups(ctx appctx.RequestContext) ([]model.Group, *model
 
 	visible := make([]model.Group, 0)
 	for _, group := range groups {
-		if groupHasMember(group, ctx.Actor.ID) {
+		if util.GroupHasMember(group, ctx.Actor.ID) {
 			visible = append(visible, group)
 		}
 	}
@@ -39,7 +39,7 @@ func (p *Processor) GetGroup(ctx appctx.RequestContext, groupID string) (model.G
 	if err != nil {
 		return model.Group{}, err
 	}
-	if !p.canReadGroup(ctx, group) {
+	if !util.CanReadGroup(ctx.Actor, group) {
 		return model.Group{}, model.Forbidden("You cannot view this group")
 	}
 	return group, nil
@@ -62,7 +62,7 @@ func (p *Processor) CreateGroup(ctx appctx.RequestContext, name string, memberID
 	if err != nil {
 		return model.Group{}, err
 	}
-	if ctx.Actor.Role == model.RoleUserGroupAdmin && !groupMemberExists(members, ctx.Actor.ID) {
+	if ctx.Actor.Role == model.RoleUserGroupAdmin && !util.GroupMemberExists(members, ctx.Actor.ID) {
 		members = append(members, model.GroupMember{User: ctx.Actor, GroupRole: model.RoleGroupAdmin})
 	}
 
@@ -102,7 +102,7 @@ func (p *Processor) AddGroupMember(ctx appctx.RequestContext, groupID, userID st
 	if err != nil {
 		return model.Group{}, err
 	}
-	if !p.canManageGroup(ctx, group) {
+	if !util.CanManageGroup(ctx.Actor, group) {
 		return model.Group{}, model.Forbidden("You cannot edit group members")
 	}
 	userID = strings.TrimSpace(userID)
@@ -115,7 +115,7 @@ func (p *Processor) AddGroupMember(ctx appctx.RequestContext, groupID, userID st
 	if role == "" {
 		role = model.RoleGroupMember
 	}
-	if !validGroupRole(role) {
+	if !util.ValidGroupRole(role) {
 		return model.Group{}, model.InvalidInput("groupRole must be group_admin or member")
 	}
 	if err := p.store.AddGroupMember(group.ID, userID, role, newAudit(ctx.ActorName(), "group_member.add", "group", group.ID, "", map[string]any{"userId": userID, "groupRole": role})); err != nil {
@@ -130,7 +130,7 @@ func (p *Processor) RemoveGroupMember(ctx appctx.RequestContext, groupID, userID
 	if err != nil {
 		return model.Group{}, err
 	}
-	if !p.canManageGroup(ctx, group) {
+	if !util.CanManageGroup(ctx.Actor, group) {
 		return model.Group{}, model.Forbidden("You cannot edit group members")
 	}
 	userID = strings.TrimSpace(userID)
@@ -169,40 +169,4 @@ func (p *Processor) membersFromIDs(userIDs []string, role model.GroupRole) ([]mo
 		members = append(members, model.GroupMember{User: user, GroupRole: role})
 	}
 	return members, nil
-}
-
-func (p *Processor) canReadGroup(ctx appctx.RequestContext, group model.Group) bool {
-	return ctx.Actor.Role == model.RoleSystemAdmin || groupHasMember(group, ctx.Actor.ID)
-}
-
-func (p *Processor) canManageGroup(ctx appctx.RequestContext, group model.Group) bool {
-	if ctx.Actor.Role == model.RoleSystemAdmin {
-		return true
-	}
-	for _, member := range group.Members {
-		if member.ID != ctx.Actor.ID {
-			continue
-		}
-		if member.GroupRole == model.RoleGroupAdmin || ctx.Actor.Role == model.RoleUserGroupAdmin {
-			return true
-		}
-	}
-	return false
-}
-
-func groupHasMember(group model.Group, userID string) bool {
-	return groupMemberExists(group.Members, userID)
-}
-
-func groupMemberExists(members []model.GroupMember, userID string) bool {
-	for _, member := range members {
-		if member.ID == userID {
-			return true
-		}
-	}
-	return false
-}
-
-func validGroupRole(role model.GroupRole) bool {
-	return role == model.RoleGroupAdmin || role == model.RoleGroupMember
 }

@@ -112,7 +112,7 @@
               <div class="panel-header">
                 <div>
                   <h2>Coverage</h2>
-                  <p class="panel-subtitle">Projects, templates, and environments</p>
+                  <p class="panel-subtitle">Projects, library, and environments</p>
                 </div>
                 <button class="text-button" type="button" data-jump="projects">Projects</button>
               </div>
@@ -137,8 +137,8 @@
         <section id="templatesView" class="view" data-view="templates">
           <div class="page-header">
             <div>
-              <p class="eyebrow">Templates</p>
-              <h1>Template Library</h1>
+              <p class="eyebrow">Library</p>
+              <h1>Config Library</h1>
             </div>
             <button
               id="openTemplateCreate"
@@ -189,26 +189,36 @@
           </div>
           <section class="editor-layout">
             <aside class="panel project-rail">
-              <div class="panel-header">
+              <div class="panel-header config-files-header">
                 <h2>Config Files</h2>
+                <button id="openConfigFileCreate" class="config-file-add-button" type="button" aria-label="Add config file">+</button>
               </div>
               <div id="configProjectList" class="compact-list"></div>
             </aside>
             <section class="panel editor-panel">
               <div class="editor-toolbar">
-                <div id="environmentTabs" class="segmented-control"></div>
-                <label class="local-search">
-                  <span>Filter</span>
-                  <input
-                    id="configSearch"
-                    type="search"
-                    placeholder="Key or value"
-                  />
-                </label>
+                <div class="editor-mode-tools">
+                  <div id="configModeTabs" class="segmented-control mode-switcher"></div>
+                  <div id="environmentTabs" class="segmented-control"></div>
+                  <div id="compareControls" class="compare-controls hidden"></div>
+                </div>
+                <div class="editor-action-tools">
+                  <label class="local-search config-search-field">
+                    <span class="visually-hidden">Search</span>
+                    <input
+                      id="configSearch"
+                      type="search"
+                      placeholder="🔍 Search keys..."
+                    />
+                  </label>
+                  <button id="openConfigCreate" class="primary-action add-key-action" type="button">
+                    + Add Key
+                  </button>
+                </div>
               </div>
               <div class="table-wrap">
                 <table>
-                  <thead>
+                  <thead id="configTableHead">
                     <tr>
                       <th>Key</th>
                       <th>Value</th>
@@ -241,6 +251,62 @@
         <span>Submit Review</span>
         <strong id="reviewChangeCount">0 changes</strong>
       </button>
+    </div>
+
+    <div
+      id="configCreateDrawer"
+      class="drawer-backdrop hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="configCreateTitle"
+    >
+      <form id="configCreateForm" class="drawer-panel config-create-panel">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Config Editor</p>
+            <h2 id="configCreateTitle">Add Key</h2>
+            <p class="project-meta">Create values for dev, staging, and prod in one pass.</p>
+          </div>
+          <button class="icon-button" type="button" aria-label="Close add key" data-close-drawer="config-create">
+            <span aria-hidden="true">X</span>
+          </button>
+        </div>
+        <div class="form-grid drawer-form-grid">
+          <label class="form-wide">
+            <span>Key Name</span>
+            <input id="newConfigKey" type="text" autocomplete="off" required placeholder="app.feature.enabled" />
+          </label>
+          <label>
+            <span>Value Type</span>
+            <select id="newConfigValueType">
+              <option value="string">string</option>
+              <option value="number">number</option>
+              <option value="boolean">boolean</option>
+              <option value="json">json</option>
+              <option value="yaml">yaml</option>
+            </select>
+          </label>
+          <label class="checkbox-field">
+            <input id="newConfigSensitive" type="checkbox" />
+            <span>Sensitive value</span>
+          </label>
+          <section class="form-wide environment-value-group">
+            <div class="environment-value-header">
+              <h3>Environment Values</h3>
+              <span>dev, staging, prod</span>
+            </div>
+            <div id="newConfigEnvironmentValues" class="environment-value-fields"></div>
+          </section>
+          <label class="form-wide">
+            <span>Change Reason</span>
+            <textarea id="newConfigReason" rows="3" required placeholder="Why is this key being added?"></textarea>
+          </label>
+        </div>
+        <div class="modal-actions drawer-actions">
+          <button class="secondary-action" type="button" data-close-drawer="config-create">Cancel</button>
+          <button class="primary-action" type="submit">Create Key</button>
+        </div>
+      </form>
     </div>
 
     <div
@@ -309,6 +375,112 @@
             Cancel
           </button>
           <button class="primary-action" type="submit">Create Template</button>
+        </div>
+      </form>
+    </div>
+
+
+
+    <div
+      id="sharedConfigCreateModal"
+      class="modal-backdrop hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="sharedConfigCreateTitle"
+    >
+      <form id="sharedConfigCreateForm" class="modal-panel template-create-panel">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Global Shared Config</p>
+            <h2 id="sharedConfigCreateTitle">New Shared Config</h2>
+          </div>
+          <button
+            class="icon-button"
+            type="button"
+            aria-label="Close shared config form"
+            data-close-modal="shared-config-create"
+          >
+            <span aria-hidden="true">X</span>
+          </button>
+        </div>
+        <div class="form-grid">
+          <label>
+            <span>Name</span>
+            <input id="sharedConfigName" type="text" autocomplete="off" required minlength="2" />
+          </label>
+          <label>
+            <span>Format</span>
+            <select id="sharedConfigFormat">
+              <option value="yaml">yaml</option>
+              <option value="json">json</option>
+              <option value="properties">properties</option>
+            </select>
+          </label>
+          <label class="form-wide">
+            <span>Description</span>
+            <input id="sharedConfigDescription" type="text" autocomplete="off" />
+          </label>
+          <label class="form-wide">
+            <span>Entries JSON</span>
+            <textarea id="sharedConfigEntries" class="template-body-input" rows="10" required></textarea>
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button class="secondary-action" type="button" data-close-modal="shared-config-create">Cancel</button>
+          <button class="primary-action" type="submit">Create Shared Config</button>
+        </div>
+      </form>
+    </div>
+
+
+
+    <div
+      id="sharedConfigEditModal"
+      class="modal-backdrop hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="sharedConfigEditTitle"
+    >
+      <form id="sharedConfigEditForm" class="modal-panel template-create-panel">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Global Shared Config</p>
+            <h2 id="sharedConfigEditTitle">Edit Shared Config</h2>
+          </div>
+          <button class="icon-button" type="button" aria-label="Close shared config edit" data-close-modal="shared-config-edit">
+            <span aria-hidden="true">X</span>
+          </button>
+        </div>
+        <div id="sharedConfigImpact" class="impact-warning"></div>
+        <div class="form-grid">
+          <label>
+            <span>Name</span>
+            <input id="sharedConfigEditName" type="text" autocomplete="off" required minlength="2" />
+          </label>
+          <label>
+            <span>Format</span>
+            <select id="sharedConfigEditFormat">
+              <option value="yaml">yaml</option>
+              <option value="json">json</option>
+              <option value="properties">properties</option>
+            </select>
+          </label>
+          <label class="form-wide">
+            <span>Description</span>
+            <input id="sharedConfigEditDescription" type="text" autocomplete="off" />
+          </label>
+          <label class="form-wide">
+            <span>Entries JSON</span>
+            <textarea id="sharedConfigEditEntries" class="template-body-input" rows="10" required></textarea>
+          </label>
+          <label class="form-wide">
+            <span>Change Reason</span>
+            <textarea id="sharedConfigChangeReason" rows="3" required></textarea>
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button class="secondary-action" type="button" data-close-modal="shared-config-edit">Cancel</button>
+          <button class="primary-action" type="submit">Apply Change</button>
         </div>
       </form>
     </div>
@@ -515,7 +687,7 @@
                 class="secondary-action"
                 type="button"
               >
-                Choose from Template Library
+                Choose from Library
               </button>
               <button
                 id="clearProjectTemplate"

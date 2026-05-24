@@ -1,10 +1,14 @@
 import {
   cancelInlineEdit,
   commitInlineEdit,
+  createConfigFile,
+  createConfigKey,
   createGroup,
   createProject,
   createTemplate,
   createReviewRequest,
+  createSharedConfig,
+  updateSharedConfig,
   exportCurrentConfig,
   handleReviewDecision,
   extractConfigFile,
@@ -19,6 +23,10 @@ import {
   openProjectTemplatePicker,
   openVersionHistory,
   rollbackLatestVersion,
+  setConfigCreateDrawer,
+  setCompareEnvironment,
+  setConfigFileCreate,
+  setConfigMode,
   setExportModal,
   removeGroupMember,
   removeSelectedCreateMember,
@@ -27,11 +35,14 @@ import {
   setGroupDetailTab,
   setGroupModal,
   setHistoryModal,
+  setLibraryTab,
   setImportModal,
   setImportPreviewModal,
   setProjectModal,
   setReviewModal,
   setTemplateCreateModal,
+  setSharedConfigCreateModal,
+  setSharedConfigEditModal,
   setTemplateModal,
   startInlineEdit,
   toggleGroupCreate,
@@ -41,13 +52,21 @@ import {
   submitReviewChanges,
   switchView,
   updateGroupCreateMemberSearch,
+  updateConfigFileDraftName,
+  updateConfigFileSourceId,
+  updateConfigFileSourceType,
   updateGroupMemberRole,
   updateGroupMemberSearch,
+  updateNewConfigValueType,
   updateTemplateValue,
   toggleSensitiveReveal,
+  deleteSharedConfig,
+  submitSharedConfigUpdate,
+  openSharedConfigEdit,
 } from "./actions.js";
 import { api } from "./api.js";
-import { loadConfigsAndHistory, loadInitialData } from "./data.js";
+import { loadCompareConfigs, loadConfigsAndHistory, loadInitialData } from "./data.js";
+import { loadCustomConfigFiles } from "./configFiles.js";
 import { $, setAuthenticated, showToast } from "./dom.js";
 import { renderAll, renderConfigRows } from "./render.js";
 import { activeProject, state } from "./state.js";
@@ -69,6 +88,12 @@ export function bindEvents() {
   });
 
   document.addEventListener("input", (event) => {
+    const configFileName = event.target.closest("#newConfigFileName");
+    if (configFileName) {
+      updateConfigFileDraftName(configFileName.value);
+      return;
+    }
+
     const groupCreateSearch = event.target.closest("#groupCreateMemberSearch");
     if (groupCreateSearch) {
       updateGroupCreateMemberSearch(groupCreateSearch.value);
@@ -96,6 +121,32 @@ export function bindEvents() {
     const member = event.target.closest("[data-group-member-option]");
     if (member) {
       toggleGroupMemberSelection(member.value, member.checked);
+      return;
+    }
+
+    const configFileSourceType = event.target.closest("#configFileSourceType");
+    if (configFileSourceType) {
+      updateConfigFileSourceType(configFileSourceType.value);
+      return;
+    }
+
+    const configFileSourceId = event.target.closest("#configFileSourceId");
+    if (configFileSourceId) {
+      updateConfigFileSourceId(configFileSourceId.value);
+      return;
+    }
+
+    const compareEnv = event.target.closest("[data-compare-env]");
+    if (compareEnv) {
+      setCompareEnvironment(compareEnv.dataset.compareEnv, compareEnv.value).catch((error) =>
+        showToast(error.message),
+      );
+      return;
+    }
+
+    const newConfigValueType = event.target.closest("#newConfigValueType");
+    if (newConfigValueType) {
+      updateNewConfigValueType(newConfigValueType.value);
       return;
     }
 
@@ -130,6 +181,25 @@ export function bindEvents() {
 
   $("#templateCreateForm").addEventListener("submit", (event) => {
     createTemplate(event).catch((error) => showToast(error.message));
+  });
+
+  $("#sharedConfigCreateForm").addEventListener("submit", (event) => {
+    createSharedConfig(event).catch((error) => showToast(error.message));
+  });
+
+  $("#sharedConfigEditForm").addEventListener("submit", (event) => {
+    updateSharedConfig(event).catch((error) => showToast(error.message));
+  });
+
+  $("#configCreateForm").addEventListener("submit", (event) => {
+    createConfigKey(event).catch((error) => showToast(error.message));
+  });
+
+  document.addEventListener("submit", (event) => {
+    const configFileForm = event.target.closest("#configFileCreateForm");
+    if (configFileForm) {
+      createConfigFile(event);
+    }
   });
 
   $("#groupForm").addEventListener("submit", (event) => {
@@ -184,6 +254,11 @@ async function handleDocumentClick(event) {
       return;
     }
 
+    if (target.dataset.closeDrawer === "config-create") {
+      setConfigCreateDrawer(false);
+      return;
+    }
+
     if (target.dataset.selectGroup) {
       await selectGroup(target.dataset.selectGroup);
       return;
@@ -191,6 +266,11 @@ async function handleDocumentClick(event) {
 
     if (target.dataset.groupTab) {
       setGroupDetailTab(target.dataset.groupTab);
+      return;
+    }
+
+    if (target.dataset.libraryTab) {
+      setLibraryTab(target.dataset.libraryTab);
       return;
     }
 
@@ -281,8 +361,33 @@ async function handleDocumentClick(event) {
       return;
     }
 
+    if (target.dataset.closeModal === "shared-config-create") {
+      setSharedConfigCreateModal(false);
+      return;
+    }
+
+    if (target.dataset.closeModal === "shared-config-edit") {
+      setSharedConfigEditModal(false);
+      return;
+    }
+
     if (target.id === "registerProject") {
       setProjectModal(true);
+      return;
+    }
+
+    if (target.id === "openConfigCreate") {
+      setConfigCreateDrawer(true);
+      return;
+    }
+
+    if (target.id === "openConfigFileCreate") {
+      setConfigFileCreate(true);
+      return;
+    }
+
+    if (target.dataset.configMode) {
+      await setConfigMode(target.dataset.configMode);
       return;
     }
 
@@ -303,11 +408,30 @@ async function handleDocumentClick(event) {
     }
 
     if (target.id === "openTemplateCreate") {
+      if (state.libraryTab === "shared-config") {
+        setSharedConfigCreateModal(true);
+        return;
+      }
       if (state.templatePickerActive) {
         cancelProjectTemplatePicker();
         return;
       }
       setTemplateCreateModal(true);
+      return;
+    }
+
+    if (target.dataset.editSharedConfig) {
+      openSharedConfigEdit(target.dataset.editSharedConfig);
+      return;
+    }
+
+    if (target.dataset.deleteSharedConfig) {
+      await deleteSharedConfig(target.dataset.deleteSharedConfig);
+      return;
+    }
+
+    if (target.dataset.submitSharedConfig) {
+      await submitSharedConfigUpdate(target.dataset.submitSharedConfig);
       return;
     }
 
@@ -370,12 +494,17 @@ async function handleDocumentClick(event) {
     const projectId = target.dataset.openConfig ?? target.dataset.selectProject;
     if (projectId) {
       state.activeProjectId = projectId;
+      loadCustomConfigFiles(state);
       state.activeConfigFile = "application.yaml";
       const project = activeProject();
       state.activeEnvironment = project.environments.includes("prod")
         ? "prod"
         : project.environments[0];
       await loadConfigsAndHistory();
+      state.compareConfigs = {};
+      if (state.configMode === "compare") {
+        await loadCompareConfigs();
+      }
       switchView("config");
       renderAll();
       return;
@@ -417,6 +546,12 @@ async function handleDocumentClick(event) {
 }
 
 async function handleDocumentKeydown(event) {
+  if (event.key === "Escape" && event.target.closest("#configFileCreateForm")) {
+    event.preventDefault();
+    setConfigFileCreate(false);
+    return;
+  }
+
   const input = event.target.closest("[data-inline-input]");
   if (!input) return;
 

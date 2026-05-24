@@ -75,6 +75,29 @@ type UpdateProjectMembersRequest struct {
 	Members []ProjectMemberRequest `json:"members"`
 }
 
+type CreateSharedConfigRequest struct {
+	Name        string              `json:"name"`
+	Description string              `json:"description"`
+	Format      string              `json:"format"`
+	Entries     []SharedConfigEntry `json:"entries"`
+}
+
+type UpdateSharedConfigRequest struct {
+	Name         string              `json:"name"`
+	Description  string              `json:"description"`
+	Format       string              `json:"format"`
+	Entries      []SharedConfigEntry `json:"entries"`
+	ChangeReason string              `json:"changeReason"`
+}
+
+type SubmitSharedConfigUpdateRequest struct {
+	Name        string              `json:"name"`
+	Description string              `json:"description"`
+	Format      string              `json:"format"`
+	Entries     []SharedConfigEntry `json:"entries"`
+	Reason      string              `json:"reason"`
+}
+
 type CreateReviewRequest struct {
 	ProjectID   string `json:"projectId"`
 	Environment string `json:"environment"`

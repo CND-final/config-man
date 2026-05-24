@@ -1,21 +1,27 @@
 import { api } from "./api.js";
+import { loadCustomConfigFiles } from "./configFiles.js";
 import { activeProject, normalizeProject, state } from "./state.js";
 
 export async function loadInitialData() {
-  const [projects, templates, requests] = await Promise.all([
+  const [projects, templates, sharedConfigs, notifications, requests] = await Promise.all([
     api("/projects"),
     api("/templates"),
+    api("/shared-configs"),
+    api("/notifications"),
     api("/review-requests"),
   ]);
 
   state.projects = projects.map(normalizeProject);
   state.templates = normalizeTemplates(templates);
+  state.sharedConfigs = normalizeSharedConfigs(sharedConfigs);
+  state.notifications = notifications;
   state.requests = requests;
   await reloadGroups({ silent: true });
 
   if (!state.activeProjectId && state.projects[0]) {
     state.activeProjectId = state.projects[0].id;
   }
+  loadCustomConfigFiles(state);
 
   const project = activeProject();
   if (project && !project.environments.includes(state.activeEnvironment)) {
@@ -28,10 +34,27 @@ export async function loadInitialData() {
 function normalizeTemplates(templates) {
   return templates.map((template) => ({
     ...template,
+    itemType: "template",
     format: template.format || "base",
     keys: template.entries?.map((entry) => entry.key) || [],
     variables: template.variables || [],
   }));
+}
+
+function normalizeSharedConfigs(items) {
+  return items.map((item) => ({
+    ...item,
+    itemType: "shared_config",
+    format: item.format || "yaml",
+    entries: item.entries || [],
+    keys: (item.entries || []).map((entry) => entry.key),
+    affectedProjects: item.affectedProjects || [],
+  }));
+}
+
+
+export async function reloadNotifications() {
+  state.notifications = await api("/notifications");
 }
 
 export async function reloadProjects() {
@@ -42,6 +65,11 @@ export async function reloadProjects() {
 export async function reloadTemplates() {
   const templates = await api("/templates");
   state.templates = normalizeTemplates(templates);
+}
+
+export async function reloadSharedConfigs() {
+  const sharedConfigs = await api("/shared-configs");
+  state.sharedConfigs = normalizeSharedConfigs(sharedConfigs);
 }
 
 export async function loadConfigs(revealSensitive = false) {
@@ -86,6 +114,46 @@ function baselineConfig(entry) {
 
 export async function loadConfigsAndHistory(revealSensitive = false) {
   await Promise.all([loadConfigs(revealSensitive), loadConfigHistory()]);
+}
+
+export async function loadCompareConfigs() {
+  const project = activeProject();
+  if (!project) {
+    state.compareConfigs = {};
+    return;
+  }
+
+  const environments = Array.from(
+    new Set([state.compareSourceEnv, state.compareTargetEnv].filter(Boolean)),
+  );
+  if (!environments.length) {
+    state.compareConfigs = {};
+    return;
+  }
+
+  state.compareLoading = true;
+  try {
+    const results = await Promise.all(
+      environments.map(async (environment) => {
+        const data = await api(
+          "/projects/" +
+            project.id +
+            "/configs?env=" +
+            encodeURIComponent(environment),
+        );
+        return [
+          environment,
+          data.entries.map((entry) => ({
+            ...entry,
+            updated: entry.updatedBy,
+          })),
+        ];
+      }),
+    );
+    state.compareConfigs = Object.fromEntries(results);
+  } finally {
+    state.compareLoading = false;
+  }
 }
 
 export async function loadConfigHistory() {

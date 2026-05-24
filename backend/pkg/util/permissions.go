@@ -32,6 +32,42 @@ func CanReview(user model.User) bool {
 	return user.Role == model.RoleSystemAdmin || user.Role == model.RoleReviewer
 }
 
+func GroupMemberExists(members []model.GroupMember, userID string) bool {
+	for _, member := range members {
+		if member.ID == userID {
+			return true
+		}
+	}
+	return false
+}
+
+func GroupHasMember(group model.Group, userID string) bool {
+	return GroupMemberExists(group.Members, userID)
+}
+
+func CanReadGroup(user model.User, group model.Group) bool {
+	return user.Role == model.RoleSystemAdmin || GroupHasMember(group, user.ID)
+}
+
+func CanManageGroup(user model.User, group model.Group) bool {
+	if user.Role == model.RoleSystemAdmin {
+		return true
+	}
+	for _, member := range group.Members {
+		if member.ID != user.ID {
+			continue
+		}
+		if member.GroupRole == model.RoleGroupAdmin || user.Role == model.RoleUserGroupAdmin {
+			return true
+		}
+	}
+	return false
+}
+
+func ValidGroupRole(role model.GroupRole) bool {
+	return role == model.RoleGroupAdmin || role == model.RoleGroupMember
+}
+
 func ProjectRoleForUser(user model.User, members []model.ProjectMember) (model.ProjectRole, bool) {
 	for _, member := range members {
 		if member.ID == user.ID {
@@ -112,6 +148,8 @@ func NormalizeValueType(valueType string) string {
 		return "boolean"
 	case "json":
 		return "json"
+	case "yaml", "yml":
+		return "yaml"
 	default:
 		return ""
 	}

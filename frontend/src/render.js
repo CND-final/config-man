@@ -92,8 +92,26 @@ function filteredTemplates() {
         template.name,
         template.description,
         template.format,
-        template.isCustom ? "personal" : "shared",
+        template.isCustom ? "project" : "global",
         ...template.keys,
+      ],
+      term,
+    ),
+  );
+}
+
+function filteredSharedConfigs() {
+  const term = searchTerm();
+  return state.sharedConfigs.filter((item) =>
+    includesSearch(
+      [
+        item.name,
+        item.description,
+        item.scope,
+        item.scopeName,
+        item.format,
+        item.updatedBy,
+        ...item.keys,
       ],
       term,
     ),
@@ -125,7 +143,7 @@ function filteredRequests() {
 function matchesConfigSearch(config) {
   const local = state.configSearch.trim().toLowerCase();
   const global = searchTerm();
-  const file = configFileForEntry(config);
+  const file = configFileForEntry(config, state);
   const values = [
     config.key,
     config.value,
@@ -428,7 +446,7 @@ function renderDashboardCoverage() {
           <strong>${scopedProjects.length}</strong>
         </div>
         <div>
-          <span>Templates</span>
+          <span>Library</span>
           <strong>${sharedTemplates}+${personalTemplates}</strong>
         </div>
         <div>
@@ -519,11 +537,25 @@ export function renderTemplates() {
     action.className = state.templatePickerActive
       ? "secondary-action"
       : "primary-action";
+    const canCreateSharedConfig = state.libraryTab === "shared-config" && isSystemView();
+    action.textContent = canCreateSharedConfig ? "New Global Shared Config" : action.textContent;
+    action.className = canCreateSharedConfig ? "primary-action" : action.className;
+    action.classList.toggle("hidden", state.libraryTab === "shared-config" && !isSystemView());
   }
 
-  $("#templatesGrid").innerHTML =
-    filteredTemplates().map(renderTemplateCard).join("") ||
-    '<p class="project-meta">No matching templates.</p>';
+  const isSharedTab = state.libraryTab === "shared-config";
+  const items = isSharedTab ? filteredSharedConfigs() : filteredTemplates();
+  $("#templatesGrid").innerHTML = `
+    <div class="library-toolbar">
+      <div class="segmented-control library-tabs" role="tablist">
+        <button class="${!isSharedTab ? "active" : ""}" type="button" data-library-tab="templates">Templates</button>
+        <button class="${isSharedTab ? "active" : ""}" type="button" data-library-tab="shared-config">Shared Config</button>
+      </div>
+    </div>
+    <div class="library-grid">
+      ${items.map(isSharedTab ? renderSharedConfigCard : renderTemplateCard).join("") || `<p class="project-meta">No matching ${isSharedTab ? "shared configs" : "templates"}.</p>`}
+    </div>
+  `;
   renderTemplateModal();
   renderTemplateCreateModal();
 }
@@ -535,6 +567,7 @@ function renderTemplateCard(template) {
   const pickAttr = canPick
     ? ` data-pick-template="${escapeHtml(template.id)}"`
     : "";
+  const scope = libraryScopeLabel(template);
   return `
     <${tag} class="template-card ${canPick ? "template-card-button" : ""}"${typeAttr}${pickAttr}>
       <div class="card-top">
@@ -543,7 +576,8 @@ function renderTemplateCard(template) {
           <p>${escapeHtml(template.description || "Reusable configuration template")}</p>
         </div>
         <div class="template-badges">
-          <span class="status-pill neutral">${template.isCustom ? "personal" : "shared"}</span>
+          <span class="library-pill type">Template</span>
+          ${renderLibraryScopePill(scope)}
         </div>
       </div>
       <pre class="template-body-preview">${escapeHtml(template.body || template.entries?.map((entry) => `${entry.key}=${entry.defaultValue}`).join("\n") || "")}</pre>
@@ -552,6 +586,49 @@ function renderTemplateCard(template) {
       </div>
     </${tag}>
   `;
+}
+
+function renderSharedConfigCard(item) {
+  const scope = libraryScopeLabel(item);
+  return `
+    <article class="template-card shared-config-card">
+      <div class="card-top">
+        <div class="card-title">
+          <h3>${escapeHtml(item.name)}</h3>
+          <p>${escapeHtml(item.description || "Config inherited by projects")}</p>
+        </div>
+        <div class="template-badges shared-card-tools">
+          ${isSystemView() && scope === "Global" ? `<button class="icon-button small-icon-button" type="button" aria-label="Edit ${escapeHtml(item.name)}" title="Edit" data-edit-shared-config="${escapeHtml(item.id)}"><span aria-hidden="true">✎</span></button>` : ""}
+          <span class="library-pill type">Shared Config</span>
+          ${renderLibraryScopePill(scope)}
+        </div>
+      </div>
+      <div class="shared-config-summary">
+        <span>${item.entries.length} keys</span>
+        <span>${escapeHtml(item.scopeName || scope)}</span>
+        <span>${item.inheritedBy || 0} projects</span>
+      </div>
+      <div class="template-list">
+        ${renderTemplateKeys(item)}
+      </div>
+      <p class="project-meta"><span>Updated by ${escapeHtml(item.updatedBy || "System")}</span></p>
+      <div class="template-card-actions">
+        ${isSystemView() && scope === "Global" ? `<button class="ghost-action danger-action" type="button" data-delete-shared-config="${escapeHtml(item.id)}">Delete</button>` : ""}
+      </div>
+    </article>
+  `;
+}
+
+function libraryScopeLabel(item) {
+  const rawScope = String(item.scope || item.scopeType || "").toLowerCase();
+  if (rawScope === "global") return "Global";
+  if (rawScope === "group") return "Group";
+  if (rawScope === "project") return "Project";
+  return item.isCustom ? "Project" : "Global";
+}
+
+function renderLibraryScopePill(scope) {
+  return `<span class="library-pill scope ${escapeHtml(scope.toLowerCase())}">${escapeHtml(scope)}</span>`;
 }
 
 function renderTemplateKeys(template) {
@@ -578,7 +655,8 @@ function projectTemplateName(templateId) {
 
 export function renderConfigFileList() {
   ensureActiveConfigFile(state);
-  $("#configProjectList").innerHTML = configFilesForEntries(state.configs)
+  const createForm = state.configFileCreateOpen ? renderConfigFileCreateForm() : "";
+  const files = configFilesForEntries(configEntriesForFileList(), state)
     .map(
       (file) => `
         <button class="compact-item config-file-item ${file.id === state.activeConfigFile ? "active" : ""}" type="button" data-select-config-file="${escapeHtml(file.id)}">
@@ -593,25 +671,116 @@ export function renderConfigFileList() {
       `,
     )
     .join("");
+  $("#configProjectList").innerHTML = `${createForm}${files}`;
+}
+
+function renderConfigFileCreateForm() {
+  const sourceType = state.configFileSourceType || "blank";
+  return `
+    <form id="configFileCreateForm" class="config-file-create-form">
+      <input id="newConfigFileName" type="text" autocomplete="off" placeholder="database.yaml" value="${escapeHtml(state.configFileDraftName || "")}" required />
+      <select id="configFileSourceType" aria-label="Config file source">
+        <option value="blank" ${sourceType === "blank" ? "selected" : ""}>Blank</option>
+        <option value="template" ${sourceType === "template" ? "selected" : ""}>Template</option>
+        <option value="shared-config" ${sourceType === "shared-config" ? "selected" : ""}>Shared Config</option>
+      </select>
+      ${renderConfigFileSourcePicker(sourceType)}
+    </form>
+  `;
+}
+
+function renderConfigFileSourcePicker(sourceType) {
+  const items = sourceType === "template" ? state.templates : sourceType === "shared-config" ? state.sharedConfigs : [];
+  if (!items.length) return "";
+  return `
+    <select id="configFileSourceId" aria-label="Source item">
+      <option value="">No source selected</option>
+      ${items
+        .map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === state.configFileSourceId ? "selected" : ""}>${escapeHtml(item.name || item.id)}</option>`)
+        .join("")}
+    </select>
+  `;
+}
+
+function configEntriesForFileList() {
+  if (state.configMode !== "compare") return state.configs;
+  return [
+    ...(state.compareConfigs[state.compareSourceEnv] || []),
+    ...(state.compareConfigs[state.compareTargetEnv] || []),
+  ];
 }
 
 export function renderEnvironmentTabs() {
   const project = activeProject();
+  const modeTabs = $("#configModeTabs");
+  const environmentTabs = $("#environmentTabs");
+  const compareControls = $("#compareControls");
   if (!project) {
-    $("#environmentTabs").innerHTML = "";
+    if (modeTabs) modeTabs.innerHTML = "";
+    if (environmentTabs) environmentTabs.innerHTML = "";
+    if (compareControls) compareControls.innerHTML = "";
     return;
   }
   if (!project.environments.includes(state.activeEnvironment)) {
     state.activeEnvironment = project.environments[0];
   }
+  ensureCompareEnvironments(project.environments);
 
-  $("#environmentTabs").innerHTML = project.environments
+  if (modeTabs) {
+    modeTabs.innerHTML = ["view", "compare"]
+      .map(
+        (mode) => `
+          <button class="${state.configMode === mode ? "active" : ""}" type="button" data-config-mode="${mode}">
+            ${mode === "view" ? "View" : "Compare"}
+          </button>
+        `,
+      )
+      .join("");
+  }
+
+  if (state.configMode === "compare") {
+    environmentTabs.classList.add("hidden");
+    compareControls.classList.remove("hidden");
+    compareControls.innerHTML = `
+      <select data-compare-env="source" aria-label="Source environment">
+        ${renderEnvironmentOptions(project.environments, state.compareSourceEnv)}
+      </select>
+      <span>vs</span>
+      <select data-compare-env="target" aria-label="Target environment">
+        ${renderEnvironmentOptions(project.environments, state.compareTargetEnv)}
+      </select>
+    `;
+    return;
+  }
+
+  compareControls.classList.add("hidden");
+  compareControls.innerHTML = "";
+  environmentTabs.classList.remove("hidden");
+  environmentTabs.innerHTML = project.environments
     .map(
       (environment) => `
         <button class="${environment === state.activeEnvironment ? "active" : ""}" type="button" data-env="${environment}">
           ${environment}
         </button>
       `,
+    )
+    .join("");
+}
+
+function ensureCompareEnvironments(environments) {
+  if (!environments.length) return;
+  if (!environments.includes(state.compareSourceEnv)) {
+    state.compareSourceEnv = environments[0];
+  }
+  if (!environments.includes(state.compareTargetEnv)) {
+    state.compareTargetEnv = environments.find((env) => env !== state.compareSourceEnv) || environments[0];
+  }
+}
+
+function renderEnvironmentOptions(environments, selected) {
+  return environments
+    .map(
+      (environment) => `<option value="${escapeHtml(environment)}" ${environment === selected ? "selected" : ""}>${escapeHtml(environment)}</option>`,
     )
     .join("");
 }
@@ -654,15 +823,133 @@ export function renderConfigRows(renderShell = true) {
     renderEnvironmentTabs();
   }
 
+  if (state.configMode === "compare") {
+    renderCompareConfigRows();
+    renderReviewDock();
+    return;
+  }
+
+  renderViewTableHead();
   const rows = configsForActiveFile(
     state.configs,
     state.activeConfigFile,
+    state,
   ).filter(matchesConfigSearch);
 
   $("#configRows").innerHTML =
     rows.map(renderConfigRowMarkup).join("") ||
     `<tr><td colspan="3" class="value-cell">No config keys match this view.</td></tr>`;
   renderReviewDock();
+}
+
+function renderViewTableHead() {
+  const tableHead = $("#configTableHead");
+  if (!tableHead) return;
+  tableHead.innerHTML = `
+    <tr>
+      <th>Key</th>
+      <th>Value</th>
+      <th>Updated</th>
+    </tr>
+  `;
+}
+
+function renderCompareTableHead() {
+  const tableHead = $("#configTableHead");
+  if (!tableHead) return;
+  tableHead.innerHTML = `
+    <tr>
+      <th>Key</th>
+      <th>${escapeHtml(state.compareSourceEnv)} Value</th>
+      <th>${escapeHtml(state.compareTargetEnv)} Value</th>
+      <th>Status</th>
+    </tr>
+  `;
+}
+
+function renderCompareConfigRows() {
+  renderCompareTableHead();
+  if (state.compareLoading) {
+    $("#configRows").innerHTML = `<tr><td colspan="4" class="value-cell">Loading environment comparison.</td></tr>`;
+    return;
+  }
+
+  const rows = compareRowsForActiveFile().filter((row) => matchesCompareSearch(row));
+  $("#configRows").innerHTML =
+    rows.map(renderCompareRowMarkup).join("") ||
+    `<tr><td colspan="4" class="value-cell">No config keys match this comparison.</td></tr>`;
+}
+
+function compareRowsForActiveFile() {
+  const sourceEntries = configsForActiveFile(
+    state.compareConfigs[state.compareSourceEnv] || [],
+    state.activeConfigFile,
+    state,
+  );
+  const targetEntries = configsForActiveFile(
+    state.compareConfigs[state.compareTargetEnv] || [],
+    state.activeConfigFile,
+    state,
+  );
+  const sourceByKey = new Map(sourceEntries.map((entry) => [entry.key, entry]));
+  const targetByKey = new Map(targetEntries.map((entry) => [entry.key, entry]));
+  return Array.from(new Set([...sourceByKey.keys(), ...targetByKey.keys()]))
+    .sort((a, b) => a.localeCompare(b))
+    .map((key) => buildCompareRow(key, sourceByKey.get(key), targetByKey.get(key)));
+}
+
+function buildCompareRow(key, source, target) {
+  if (!source || !target) {
+    return { key, source, target, status: "Missing", tone: "missing" };
+  }
+  if (String(source.value) !== String(target.value)) {
+    return { key, source, target, status: "Modified", tone: "modified" };
+  }
+  return { key, source, target, status: "Same", tone: "same" };
+}
+
+function matchesCompareSearch(row) {
+  const local = state.configSearch.trim().toLowerCase();
+  const global = searchTerm();
+  const values = [
+    row.key,
+    row.source?.value,
+    row.target?.value,
+    row.source?.updatedBy,
+    row.target?.updatedBy,
+    row.status,
+  ];
+  return includesSearch(values, local) && includesSearch(values, global);
+}
+
+function renderCompareRowMarkup(row) {
+  return `
+    <tr class="compare-row ${row.tone === "modified" ? "diff-modified" : ""}" data-compare-row="${escapeHtml(row.key)}">
+      <td class="key-cell">${escapeHtml(row.key)}</td>
+      ${renderCompareValueCell(row.source, row.tone === "missing" && !row.source)}
+      ${renderCompareValueCell(row.target, row.tone === "missing" && !row.target)}
+      <td>${renderCompareStatus(row)}</td>
+    </tr>
+  `;
+}
+
+function renderCompareValueCell(entry, missing) {
+  if (missing) {
+    return `<td class="value-cell missing-value"><span>-</span><span class="status-pill danger">Missing</span></td>`;
+  }
+  if (!entry) return `<td class="value-cell missing-value"><span>-</span></td>`;
+  const value = entry.isSensitive ? "******" : entry.value;
+  return `<td class="value-cell">${escapeHtml(value)}</td>`;
+}
+
+function renderCompareStatus(row) {
+  if (row.status === "Missing") {
+    return `<span class="status-pill danger">Missing</span>`;
+  }
+  if (row.status === "Modified") {
+    return `<span class="diff-status"><span class="diff-dot" aria-hidden="true"></span>Modified</span>`;
+  }
+  return `<span class="status-pill neutral">Same</span>`;
 }
 
 export function renderConfigRow(configId) {
@@ -674,7 +961,7 @@ export function renderConfigRow(configId) {
   if (
     !config ||
     !row ||
-    !configsForActiveFile([config], state.activeConfigFile).length ||
+    !configsForActiveFile([config], state.activeConfigFile, state).length ||
     !matchesConfigSearch(config)
   ) {
     renderConfigRows(false);
@@ -775,7 +1062,7 @@ export function renderReviewDock() {
 
 export function renderRequests() {
   $("#notificationCount").textContent = String(
-    state.requests.filter((request) => request.status === "pending").length,
+    state.notifications.filter((notification) => !notification.read).length,
   );
   $("#requestList").innerHTML =
     filteredRequests()
@@ -881,6 +1168,88 @@ function renderConfigVersionLabel() {
 
   const version = formatRevisionVersion(current.id);
   label.textContent = `${state.activeEnvironment} · Version ${version} · ${formatDateTime(current.createdAt)} · ${current.entries.length} keys`;
+}
+
+
+
+export function renderConfigCreateDrawer() {
+  const drawer = $("#configCreateDrawer");
+  if (!drawer) return;
+  drawer.classList.toggle("hidden", !state.configCreateDrawerOpen);
+  if (!state.configCreateDrawerOpen) return;
+
+  const valueType = state.newConfigValueType || $("#newConfigValueType")?.value || "string";
+  const typeSelect = $("#newConfigValueType");
+  if (typeSelect) typeSelect.value = valueType;
+  renderNewConfigEnvironmentValues(valueType);
+}
+
+function renderNewConfigEnvironmentValues(valueType) {
+  const target = $("#newConfigEnvironmentValues");
+  if (!target) return;
+  const project = activeProject();
+  const environments = project?.environments?.length ? project.environments : ["dev", "staging", "prod"];
+  target.innerHTML = environments
+    .map((environment) => renderNewConfigEnvironmentField(environment, valueType))
+    .join("");
+}
+
+function renderNewConfigEnvironmentField(environment, valueType) {
+  const id = `newConfigValue${environmentFieldSuffix(environment)}`;
+  const label = escapeHtml(`${environment} value`);
+  if (valueType === "boolean") {
+    return `
+      <label class="environment-value-field compact-control">
+        <span>${label}</span>
+        <select id="${escapeHtml(id)}" data-new-config-value="${escapeHtml(environment)}">
+          <option value="true">true</option>
+          <option value="false" selected>false</option>
+        </select>
+      </label>
+    `;
+  }
+  if (["json", "yaml"].includes(valueType)) {
+    return `
+      <label class="environment-value-field">
+        <span>${label}</span>
+        <textarea id="${escapeHtml(id)}" data-new-config-value="${escapeHtml(environment)}" rows="4" spellcheck="false"></textarea>
+      </label>
+    `;
+  }
+  return `
+    <label class="environment-value-field compact-control">
+      <span>${label}</span>
+      <input id="${escapeHtml(id)}" data-new-config-value="${escapeHtml(environment)}" type="text" autocomplete="off" />
+    </label>
+  `;
+}
+
+function environmentFieldSuffix(environment) {
+  return String(environment || "")
+    .split(/[^a-z0-9]+/i)
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join("");
+}
+
+export function renderSharedConfigEditModal() {
+  const modal = $("#sharedConfigEditModal");
+  if (!modal) return;
+  modal.classList.toggle("hidden", !state.sharedConfigEditModalOpen);
+  if (!state.sharedConfigEditModalOpen) return;
+  const item = state.sharedConfigs.find((config) => config.id === state.activeSharedConfigId);
+  const affected = item?.inheritedBy || item?.affectedProjects?.length || 0;
+  const prod = item?.prodEnvironmentCount || 0;
+  const impact = $("#sharedConfigImpact");
+  if (impact) {
+    impact.innerHTML = `<strong>Impact Analysis</strong><span>This change will affect ${affected} projects and ${prod} production environments.</span>`;
+  }
+}
+
+export function renderSharedConfigCreateModal() {
+  const modal = $("#sharedConfigCreateModal");
+  if (!modal) return;
+  modal.classList.toggle("hidden", !state.sharedConfigCreateModalOpen);
 }
 
 export function renderTemplateModal() {
@@ -1468,7 +1837,10 @@ export function renderAll() {
   renderProjectTemplateOptions();
   renderTemplateModal();
   renderTemplateCreateModal();
+  renderSharedConfigCreateModal();
+  renderSharedConfigEditModal();
   renderConfigRows();
+  renderConfigCreateDrawer();
   renderReviewDock();
   renderExportModal();
   renderReviewModal();

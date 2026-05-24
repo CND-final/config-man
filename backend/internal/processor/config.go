@@ -78,7 +78,7 @@ func (p *Processor) CreateConfig(ctx appctx.RequestContext, projectID string, re
 	valueType := util.NormalizeValueType(req.ValueType)
 	if valueType == "" {
 		logger.Config.Warn("create config invalid")
-		return model.ConfigEntry{}, model.InvalidInput("valueType must be string, number, boolean, or json")
+		return model.ConfigEntry{}, model.InvalidInput("valueType must be string, number, boolean, json, or yaml")
 	}
 
 	now := time.Now().UTC()
@@ -149,7 +149,7 @@ func (p *Processor) UpdateConfig(ctx appctx.RequestContext, projectID, configID 
 		valueType := util.NormalizeValueType(*req.ValueType)
 		if valueType == "" {
 			logger.Config.Warn("update config invalid")
-			return model.ConfigEntry{}, model.InvalidInput("valueType must be string, number, boolean, or json")
+			return model.ConfigEntry{}, model.InvalidInput("valueType must be string, number, boolean, json, or yaml")
 		}
 		entry.ValueType = valueType
 	}

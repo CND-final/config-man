@@ -74,7 +74,43 @@ func (s *Store) InitSchema(ctx context.Context) error {
 			created_at TIMESTAMPTZ NOT NULL,
 			PRIMARY KEY(project_id, user_id)
 		)`,
-		`DROP TABLE IF EXISTS group_projects`,
+		`CREATE TABLE IF NOT EXISTS shared_configs (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			description TEXT NOT NULL DEFAULT '',
+			scope TEXT NOT NULL,
+			scope_id TEXT NOT NULL DEFAULT '',
+			scope_name TEXT NOT NULL DEFAULT '',
+			format TEXT NOT NULL DEFAULT 'yaml',
+			inherited_by INTEGER NOT NULL DEFAULT 0,
+			affected_projects JSONB NOT NULL DEFAULT '[]'::jsonb,
+			updated_by TEXT NOT NULL DEFAULT '',
+			created_at TIMESTAMPTZ NOT NULL,
+			updated_at TIMESTAMPTZ NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS shared_config_entries (
+			shared_config_id TEXT NOT NULL REFERENCES shared_configs(id) ON DELETE CASCADE,
+			key TEXT NOT NULL,
+			value TEXT NOT NULL,
+			value_type TEXT NOT NULL DEFAULT 'string',
+			environment TEXT NOT NULL DEFAULT '',
+			is_sensitive BOOLEAN NOT NULL DEFAULT false,
+			sort_order INTEGER NOT NULL,
+			PRIMARY KEY(shared_config_id, key, environment)
+		)`,
+		`CREATE TABLE IF NOT EXISTS shared_config_update_requests (
+			id TEXT PRIMARY KEY,
+			shared_config_id TEXT NOT NULL REFERENCES shared_configs(id) ON DELETE CASCADE,
+			shared_config_name TEXT NOT NULL,
+			scope TEXT NOT NULL,
+			scope_id TEXT NOT NULL DEFAULT '',
+			requester TEXT NOT NULL,
+			status TEXT NOT NULL,
+			reason TEXT NOT NULL,
+			proposed_config JSONB NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL,
+			updated_at TIMESTAMPTZ NOT NULL
+		)`,
 		`CREATE TABLE IF NOT EXISTS config_entries (
 			id TEXT PRIMARY KEY,
 			project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -119,6 +155,14 @@ func (s *Store) InitSchema(ctx context.Context) error {
 			comment TEXT NOT NULL DEFAULT '',
 			created_at TIMESTAMPTZ NOT NULL,
 			updated_at TIMESTAMPTZ NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS app_notifications (
+			id TEXT PRIMARY KEY,
+			user_id TEXT NOT NULL,
+			title TEXT NOT NULL,
+			message TEXT NOT NULL,
+			read BOOLEAN NOT NULL DEFAULT false,
+			created_at TIMESTAMPTZ NOT NULL
 		)`,
 		`CREATE TABLE IF NOT EXISTS audit_logs (
 			id TEXT PRIMARY KEY,

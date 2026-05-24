@@ -62,7 +62,7 @@ func (p *Processor) CreateProject(ctx appctx.RequestContext, req model.CreatePro
 		logger.Project.Warn("create project invalid")
 		return model.Project{}, groupErr
 	}
-	if !p.canManageGroup(ctx, group) && ctx.Actor.Role != model.RoleSystemAdmin {
+	if !util.CanManageGroup(ctx.Actor, group) {
 		logger.Project.Warn("create project denied")
 		return model.Project{}, model.Forbidden("You cannot assign projects to this group")
 	}
