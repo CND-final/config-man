@@ -3,6 +3,7 @@ package dbstore
 import (
 	"context"
 	"database/sql"
+	"log/slog"
 	"time"
 
 	"config-man/backend/model"
@@ -51,6 +52,7 @@ func (s *Store) SaveUser(ctx context.Context, user model.User) error {
 // FindUserByEmail looks up a user by email (case-insensitive) and populates
 // PasswordHash so the caller (Login) can perform bcrypt comparison.
 // Returns (user, true, nil) on success; (zero, false, nil) if not found.
+// Unexpected DB errors are logged and returned to the caller.
 func (s *Store) FindUserByEmail(ctx context.Context, email string) (model.User, bool, error) {
 	var u model.User
 	var hashNull sql.NullString
@@ -63,6 +65,7 @@ func (s *Store) FindUserByEmail(ctx context.Context, email string) (model.User, 
 		return model.User{}, false, nil
 	}
 	if err != nil {
+		slog.Error("db: FindUserByEmail failed", "error", err)
 		return model.User{}, false, err
 	}
 	if hashNull.Valid {
@@ -73,6 +76,7 @@ func (s *Store) FindUserByEmail(ctx context.Context, email string) (model.User, 
 
 // FindUserByID looks up a user by their ID for auth-token validation.
 // Does NOT select password_hash; it is not needed outside of Login.
+// Unexpected DB errors are logged and returned to the caller.
 func (s *Store) FindUserByID(ctx context.Context, id string) (model.User, bool, error) {
 	var u model.User
 	err := s.db.QueryRowContext(ctx,
@@ -83,6 +87,7 @@ func (s *Store) FindUserByID(ctx context.Context, id string) (model.User, bool, 
 		return model.User{}, false, nil
 	}
 	if err != nil {
+		slog.Error("db: FindUserByID failed", "error", err)
 		return model.User{}, false, err
 	}
 	return u, true, nil

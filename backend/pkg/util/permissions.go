@@ -6,6 +6,10 @@ import (
 	"config-man/backend/model"
 )
 
+func CanRegisterUser(user model.User) bool {
+	return user.Role == model.RoleSystemAdmin
+}
+
 func CanRegisterProject(user model.User) bool {
 	return user.Role == model.RoleSystemAdmin || user.Role == model.RoleProjectAdmin
 }

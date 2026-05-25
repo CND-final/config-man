@@ -4,6 +4,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
+
 	appctx "config-man/backend/internal/context"
 	"config-man/backend/internal/logger"
 	"config-man/backend/model"
@@ -17,9 +19,23 @@ func (p *Processor) Login(req model.LoginRequest) (model.AuthResponse, *model.Er
 	logger.Auth.Info("login attempt")
 
 	user, ok := p.store.FindUserByEmail(email)
-	if !ok || req.Password != demoPassword {
+	if !ok {
 		logger.Auth.Warn("login failed")
 		return model.AuthResponse{}, model.Unauthorized("Invalid email or password")
+	}
+
+	if user.PasswordHash != "" {
+		if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+			logger.Auth.Warn("login failed")
+			return model.AuthResponse{}, model.Unauthorized("Invalid email or password")
+		}
+	} else {
+		// TODO(auth-cleanup): remove demo password fallback once all seed
+		// users have migrated to bcrypt hashes.
+		if req.Password != demoPassword {
+			logger.Auth.Warn("login failed")
+			return model.AuthResponse{}, model.Unauthorized("Invalid email or password")
+		}
 	}
 
 	logger.Auth.Info("login succeeded")
