@@ -33,6 +33,12 @@ func (s *Server) getProtectedAuthRoutes() Routes {
 			Pattern: "/users",
 			APIFunc: s.handleListUsers,
 		},
+		{
+			Name:    "RegisterUser",
+			Method:  http.MethodPost,
+			Pattern: "/users",
+			APIFunc: s.handleRegisterUser,
+		},
 	}
 }
 
@@ -63,4 +69,19 @@ func (s *Server) handleListUsers(c *gin.Context) {
 		return
 	}
 	response.WriteJSON(c, http.StatusOK, gin.H{"users": users})
+}
+
+func (s *Server) handleRegisterUser(c *gin.Context) {
+	var req model.CreateUserRequest
+	if err := response.DecodeJSON(c, &req); err != nil {
+		response.WriteError(c, err)
+		return
+	}
+
+	user, err := s.processor.RegisterUser(requestContextFromGin(c), req)
+	if err != nil {
+		response.WriteError(c, err)
+		return
+	}
+	response.WriteJSON(c, http.StatusCreated, user)
 }

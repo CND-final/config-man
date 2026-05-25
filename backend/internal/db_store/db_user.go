@@ -37,16 +37,20 @@ func (s *Store) SaveSeedUsers(ctx context.Context, users []model.User) error {
 	})
 }
 
-// SaveUser inserts a new user with a bcrypt password_hash.
-// Timestamps are computed here; the application layer assembles all other fields.
-func (s *Store) SaveUser(ctx context.Context, user model.User) error {
-	now := time.Now().UTC()
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO users (id, email, name, role, password_hash, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		user.ID, user.Email, user.Name, string(user.Role), user.PasswordHash, now, now,
-	)
-	return err
+// SaveUser inserts a new user with a bcrypt password_hash and records an audit
+// log in the same transaction. Timestamps are computed here.
+func (s *Store) SaveUser(ctx context.Context, user model.User, audit model.AuditLog) error {
+	return s.withTx(ctx, func(tx *sql.Tx) error {
+		now := time.Now().UTC()
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO users (id, email, name, role, password_hash, created_at, updated_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			user.ID, user.Email, user.Name, string(user.Role), user.PasswordHash, now, now,
+		); err != nil {
+			return err
+		}
+		return insertAuditTx(ctx, tx, audit)
+	})
 }
 
 // FindUserByEmail looks up a user by email (case-insensitive) and populates
