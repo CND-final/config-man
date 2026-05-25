@@ -5,6 +5,13 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+type CreateUserRequest struct {
+	Email    string `json:"email"`
+	Name     string `json:"name"`
+	Role     string `json:"role"`
+	Password string `json:"password"`
+}
+
 type CreateProjectRequest struct {
 	Name         string   `json:"name"`
 	Description  string   `json:"description"`
