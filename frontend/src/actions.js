@@ -1,5 +1,9 @@
 import { api } from "./api.js";
-import { loadCustomConfigFiles, newCustomConfigFile, saveCustomConfigFiles } from "./configFiles.js";
+import {
+  loadCustomConfigFiles,
+  newCustomConfigFile,
+  saveCustomConfigFiles,
+} from "./configFiles.js";
 import { $, $all, showToast } from "./dom.js";
 import {
   loadCompareConfigs,
@@ -53,8 +57,6 @@ export function setLibraryTab(tab) {
   renderAll();
 }
 
-
-
 export function canCreateGroup() {
   return ["system_admin", "group_admin"].includes(state.user?.role);
 }
@@ -77,8 +79,10 @@ function clearGroupCreatePicker() {
 
 function renderPreservingMemberPicker(containerId, inputId, renderFn) {
   const container = $(`#${containerId}`);
-  const optionsScrollTop = container?.querySelector(".member-picker-options")?.scrollTop ?? 0;
-  const selectedScrollTop = container?.querySelector(".selected-member-list")?.scrollTop ?? 0;
+  const optionsScrollTop =
+    container?.querySelector(".member-picker-options")?.scrollTop ?? 0;
+  const selectedScrollTop =
+    container?.querySelector(".selected-member-list")?.scrollTop ?? 0;
   const active = document.activeElement;
   const shouldRestoreInput = active?.id === inputId;
   const selectionStart = shouldRestoreInput ? active.selectionStart : null;
@@ -124,7 +128,8 @@ export function updateConfigFileDraftName(name) {
 }
 
 export function updateConfigFileSourceType(sourceType) {
-  state.configFileDraftName = $("#newConfigFileName")?.value || state.configFileDraftName || "";
+  state.configFileDraftName =
+    $("#newConfigFileName")?.value || state.configFileDraftName || "";
   state.configFileSourceType = sourceType || "blank";
   state.configFileSourceId = "";
   renderConfigRows();
@@ -138,7 +143,8 @@ export function createConfigFile(event) {
   event.preventDefault();
   const name = $("#newConfigFileName")?.value || "";
   const sourceType = state.configFileSourceType || "blank";
-  const sourceId = state.configFileSourceId || $("#configFileSourceId")?.value || "";
+  const sourceId =
+    state.configFileSourceId || $("#configFileSourceId")?.value || "";
   const source = configFileSource(sourceType, sourceId);
   const file = newCustomConfigFile(name, source);
   if (!file.name) {
@@ -162,11 +168,23 @@ export function createConfigFile(event) {
 function configFileSource(sourceType, sourceId) {
   if (sourceType === "template") {
     const template = state.templates.find((item) => item.id === sourceId);
-    return { type: sourceType, id: sourceId, label: template ? `Template: ${template.name}` : "Template source" };
+    return {
+      type: sourceType,
+      id: sourceId,
+      label: template ? `Template: ${template.name}` : "Template source",
+    };
   }
   if (sourceType === "shared-config") {
-    const sharedConfig = state.sharedConfigs.find((item) => item.id === sourceId);
-    return { type: sourceType, id: sourceId, label: sharedConfig ? `Shared: ${sharedConfig.name}` : "Shared config source" };
+    const sharedConfig = state.sharedConfigs.find(
+      (item) => item.id === sourceId,
+    );
+    return {
+      type: sourceType,
+      id: sourceId,
+      label: sharedConfig
+        ? `Shared: ${sharedConfig.name}`
+        : "Shared config source",
+    };
   }
   return { type: "blank", id: "", label: "Custom config file" };
 }
@@ -231,8 +249,13 @@ export async function createConfigKey(event) {
     return;
   }
 
-  const requests = Array.from(document.querySelectorAll("[data-new-config-value]"))
-    .map((input) => ({ environment: input.dataset.newConfigValue, value: input.value }))
+  const requests = Array.from(
+    document.querySelectorAll("[data-new-config-value]"),
+  )
+    .map((input) => ({
+      environment: input.dataset.newConfigValue,
+      value: input.value,
+    }))
     .filter(({ environment, value }) => environment && value.trim() !== "");
 
   if (!requests.length) {
@@ -260,9 +283,10 @@ export async function createConfigKey(event) {
   }
   setConfigCreateDrawer(false);
   renderAll();
-  showToast(`${key} created in ${requests.length} environment${requests.length === 1 ? "" : "s"}`);
+  showToast(
+    `${key} created in ${requests.length} environment${requests.length === 1 ? "" : "s"}`,
+  );
 }
-
 
 export async function openGroupPanel() {
   state.userMenuOpen = false;
@@ -333,7 +357,11 @@ export function setGroupDetailTab(tab) {
 
 export function updateGroupCreateMemberSearch(value) {
   state.groupCreateMemberSearch = value;
-  renderPreservingMemberPicker("groupCreateMemberPicker", "groupCreateMemberSearch", renderGroupCreateMemberPicker);
+  renderPreservingMemberPicker(
+    "groupCreateMemberPicker",
+    "groupCreateMemberSearch",
+    renderGroupCreateMemberPicker,
+  );
 }
 
 export function toggleGroupCreateMemberSelection(userId, selected) {
@@ -343,12 +371,20 @@ export function toggleGroupCreateMemberSelection(userId, selected) {
   } else {
     state.groupCreateMemberSelection.delete(userId);
   }
-  renderPreservingMemberPicker("groupCreateMemberPicker", "groupCreateMemberSearch", renderGroupCreateMemberPicker);
+  renderPreservingMemberPicker(
+    "groupCreateMemberPicker",
+    "groupCreateMemberSearch",
+    renderGroupCreateMemberPicker,
+  );
 }
 
 export function removeSelectedCreateMember(userId) {
   state.groupCreateMemberSelection.delete(userId);
-  renderPreservingMemberPicker("groupCreateMemberPicker", "groupCreateMemberSearch", renderGroupCreateMemberPicker);
+  renderPreservingMemberPicker(
+    "groupCreateMemberPicker",
+    "groupCreateMemberSearch",
+    renderGroupCreateMemberPicker,
+  );
 }
 
 export async function createGroup(event) {
@@ -394,13 +430,18 @@ export function toggleGroupMemberPicker(open = !state.groupMemberPickerOpen) {
 }
 
 export function toggleGroupRoleMenu(userId) {
-  state.groupRoleMenuUserId = state.groupRoleMenuUserId === userId ? "" : userId;
+  state.groupRoleMenuUserId =
+    state.groupRoleMenuUserId === userId ? "" : userId;
   renderGroupModal();
 }
 
 export function updateGroupMemberSearch(value) {
   state.groupMemberSearch = value;
-  renderPreservingMemberPicker("groupMemberTools", "groupMemberSearch", renderGroupMemberPicker);
+  renderPreservingMemberPicker(
+    "groupMemberTools",
+    "groupMemberSearch",
+    renderGroupMemberPicker,
+  );
 }
 
 export function toggleGroupMemberSelection(userId, selected) {
@@ -410,12 +451,20 @@ export function toggleGroupMemberSelection(userId, selected) {
   } else {
     state.groupMemberSelection.delete(userId);
   }
-  renderPreservingMemberPicker("groupMemberTools", "groupMemberSearch", renderGroupMemberPicker);
+  renderPreservingMemberPicker(
+    "groupMemberTools",
+    "groupMemberSearch",
+    renderGroupMemberPicker,
+  );
 }
 
 export function removeSelectedGroupMember(userId) {
   state.groupMemberSelection.delete(userId);
-  renderPreservingMemberPicker("groupMemberTools", "groupMemberSearch", renderGroupMemberPicker);
+  renderPreservingMemberPicker(
+    "groupMemberTools",
+    "groupMemberSearch",
+    renderGroupMemberPicker,
+  );
 }
 
 export async function addGroupMember() {
@@ -446,9 +495,12 @@ export async function removeGroupMember(userId) {
   }
   const groupId = state.activeGroupId;
   if (!groupId || !userId) return;
-  await api(`/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(userId)}`, {
-    method: "DELETE",
-  });
+  await api(
+    `/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(userId)}`,
+    {
+      method: "DELETE",
+    },
+  );
   await reloadGroups();
   await reloadGroupDetail(groupId);
   renderGroupModal();
@@ -544,8 +596,6 @@ function restoreProjectDraft() {
   if (groupSelect) groupSelect.value = draft.groupId || groupSelect.value || "";
 }
 
-
-
 function sharedConfigById(id) {
   return state.sharedConfigs.find((config) => config.id === id);
 }
@@ -598,7 +648,9 @@ export async function updateSharedConfig(event) {
   }
   const affected = item.inheritedBy || item.affectedProjects?.length || 0;
   const prod = item.prodEnvironmentCount || 0;
-  const confirmed = window.confirm(`This change will affect ${affected} projects and ${prod} production environments. Apply it now?`);
+  const confirmed = window.confirm(
+    `This change will affect ${affected} projects and ${prod} production environments. Apply it now?`,
+  );
   if (!confirmed) return;
   const updated = await api(`/shared-configs/${encodeURIComponent(id)}`, {
     method: "PUT",
@@ -681,7 +733,10 @@ export async function deleteSharedConfig(id) {
 export async function submitSharedConfigUpdate(id) {
   const item = state.sharedConfigs.find((config) => config.id === id);
   if (!item) return;
-  const reason = window.prompt(`Submit update request for ${item.name}`, "Update shared config");
+  const reason = window.prompt(
+    `Submit update request for ${item.name}`,
+    "Update shared config",
+  );
   if (!reason || !reason.trim()) return;
   await api(`/shared-configs/${encodeURIComponent(id)}/submit-update`, {
     method: "POST",
@@ -1197,10 +1252,7 @@ export async function exportCurrentConfig() {
     return;
   }
 
-  const format =
-    $("#exportFormat").value ||
-    state.exportFormat ||
-    "yaml";
+  const format = $("#exportFormat").value || state.exportFormat || "yaml";
   state.exportFormat = format;
 
   let payload;

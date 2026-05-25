@@ -124,6 +124,8 @@ jobs:
           FORCE_COLOR: 0
           NO_COLOR: true
         run: |
+          # Fix: Prevent 'tee' from swallowing test failures
+          set -o pipefail
           case "$PKG_MANAGER" in
             pnpm) pnpm test --if-present 2>&1 | tee test-output.txt ;;
             yarn) yarn test --if-present 2>&1 | tee test-output.txt ;;

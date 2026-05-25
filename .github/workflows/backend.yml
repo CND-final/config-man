@@ -77,7 +77,10 @@ jobs:
 
       - name: Run unit & integration tests
         if: success() || failure()
-        run: go test -v -race ./... | tee test-output.txt
+        run: |
+          # Fix: Prevent 'tee' from swallowing test failures
+          set -o pipefail
+          go test -v -race ./... | tee test-output.txt
 
       - name: Publish Backend Test Summary
         if: always()

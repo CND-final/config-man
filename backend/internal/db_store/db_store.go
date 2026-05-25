@@ -20,6 +20,16 @@ func New(db *sql.DB) (*Store, error) {
 }
 
 func (s *Store) InitSchema(ctx context.Context) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1)`, int64(742983621)); err != nil {
+		return err
+	}
+
 	statements := []string{
 		`CREATE TABLE IF NOT EXISTS groups (
 			id TEXT PRIMARY KEY,
@@ -177,11 +187,11 @@ func (s *Store) InitSchema(ctx context.Context) error {
 	}
 
 	for _, statement := range statements {
-		if _, err := s.db.ExecContext(ctx, statement); err != nil {
+		if _, err := tx.ExecContext(ctx, statement); err != nil {
 			return err
 		}
 	}
-	return nil
+	return tx.Commit()
 }
 
 func (s *Store) withTx(ctx context.Context, fn func(*sql.Tx) error) error {

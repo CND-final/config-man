@@ -3,13 +3,14 @@ import { loadCustomConfigFiles } from "./configFiles.js";
 import { activeProject, normalizeProject, state } from "./state.js";
 
 export async function loadInitialData() {
-  const [projects, templates, sharedConfigs, notifications, requests] = await Promise.all([
-    api("/projects"),
-    api("/templates"),
-    api("/shared-configs"),
-    api("/notifications"),
-    api("/review-requests"),
-  ]);
+  const [projects, templates, sharedConfigs, notifications, requests] =
+    await Promise.all([
+      api("/projects"),
+      api("/templates"),
+      api("/shared-configs"),
+      api("/notifications"),
+      api("/review-requests"),
+    ]);
 
   state.projects = projects.map(normalizeProject);
   state.templates = normalizeTemplates(templates);
@@ -51,7 +52,6 @@ function normalizeSharedConfigs(items) {
     affectedProjects: item.affectedProjects || [],
   }));
 }
-
 
 export async function reloadNotifications() {
   state.notifications = await api("/notifications");
@@ -169,7 +169,6 @@ export async function loadConfigHistory() {
   state.configHistory = data.revisions || [];
 }
 
-
 function listFromPayload(payload, key) {
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload?.[key])) return payload[key];
@@ -177,10 +176,14 @@ function listFromPayload(payload, key) {
 }
 
 export function normalizeGroup(group) {
-  const members = group.members || group.groupMembers || group.GroupMembers || [];
-  const rawProjects = group.projects || group.managedProjects || group.Projects || [];
+  const members =
+    group.members || group.groupMembers || group.GroupMembers || [];
+  const rawProjects =
+    group.projects || group.managedProjects || group.Projects || [];
   const projects = rawProjects.map((project) =>
-    typeof project === "string" ? { id: project, name: project, environments: [] } : normalizeProject(project),
+    typeof project === "string"
+      ? { id: project, name: project, environments: [] }
+      : normalizeProject(project),
   );
   return {
     ...group,
@@ -219,7 +222,8 @@ export async function reloadGroupDetail(groupId = state.activeGroupId) {
   const payload = await api(`/groups/${encodeURIComponent(groupId)}`);
   const group = payload?.group || payload;
   if (!group?.id && !group?.groupId && !group?.ID) {
-    state.activeGroup = state.groups.find((item) => item.id === groupId) || null;
+    state.activeGroup =
+      state.groups.find((item) => item.id === groupId) || null;
     return;
   }
   state.activeGroup = normalizeGroup(group);

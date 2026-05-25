@@ -5,11 +5,14 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -32,17 +35,48 @@ func openTestDB(t *testing.T) *sql.DB {
 		t.Skip("DATABASE_URL not set; skipping integration tests")
 	}
 
-	db, err := sql.Open("pgx", databaseURL)
+	adminDB, err := sql.Open("pgx", databaseURL)
 	if err != nil {
 		t.Fatalf("open database: %v", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), dbTimeout)
 	defer cancel()
-	if err := db.PingContext(ctx); err != nil {
-		_ = db.Close()
+	if err := adminDB.PingContext(ctx); err != nil {
+		_ = adminDB.Close()
 		t.Fatalf("ping database: %v", err)
 	}
+
+	schemaName := fmt.Sprintf("test_%d_%d", os.Getpid(), time.Now().UnixNano())
+	if _, err := adminDB.ExecContext(ctx, `CREATE SCHEMA `+quoteIdentifier(schemaName)); err != nil {
+		_ = adminDB.Close()
+		t.Fatalf("create isolated schema: %v", err)
+	}
+
+	isolatedURL, err := isolatedDatabaseURL(databaseURL, schemaName)
+	if err != nil {
+		_ = adminDB.Close()
+		t.Fatalf("build isolated database url: %v", err)
+	}
+
+	db, err := sql.Open("pgx", isolatedURL)
+	if err != nil {
+		_ = adminDB.Close()
+		t.Fatalf("open isolated database: %v", err)
+	}
+	if err := db.PingContext(ctx); err != nil {
+		_ = db.Close()
+		_ = adminDB.Close()
+		t.Fatalf("ping isolated database: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = db.Close()
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), dbTimeout)
+		defer cleanupCancel()
+		_, _ = adminDB.ExecContext(cleanupCtx, `DROP SCHEMA IF EXISTS `+quoteIdentifier(schemaName)+` CASCADE`)
+		_ = adminDB.Close()
+	})
 	return db
 }
 
@@ -226,4 +260,20 @@ func versionsContainValue(versions []model.ConfigVersion, value string) bool {
 		}
 	}
 	return false
+}
+
+func isolatedDatabaseURL(baseURL, schemaName string) (string, error) {
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		return "", err
+	}
+
+	query := parsed.Query()
+	query.Set("options", "-c search_path="+schemaName+",public")
+	parsed.RawQuery = query.Encode()
+	return parsed.String(), nil
+}
+
+func quoteIdentifier(value string) string {
+	return `"` + strings.ReplaceAll(value, `"`, `""`) + `"`
 }
