@@ -3,18 +3,14 @@ package store
 import (
 	"context"
 	"database/sql"
-	"strings"
 
 	dbstore "config-man/backend/internal/db_store"
 	"config-man/backend/model"
 )
 
 type Store struct {
-	db           *dbstore.Store
-	users        []model.User
-	usersByID    map[string]model.User
-	usersByEmail map[string]model.User
-	groups       map[string]*model.Group
+	db     *dbstore.Store
+	groups map[string]*model.Group
 }
 
 func NewStoreWithDB(ctx context.Context, db *sql.DB) (*Store, error) {
@@ -27,6 +23,17 @@ func NewStoreWithDB(ctx context.Context, db *sql.DB) (*Store, error) {
 	}
 
 	store := newStoreBase(client)
+
+	hasUsers, err := client.HasUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !hasUsers {
+		if err := client.SaveSeedUsers(ctx, seedUserList()); err != nil {
+			return nil, err
+		}
+	}
+
 	hasProjects, err := client.HasProjects(ctx)
 	if err != nil {
 		return nil, err
@@ -42,22 +49,28 @@ func NewStoreWithDB(ctx context.Context, db *sql.DB) (*Store, error) {
 }
 
 func newStoreBase(db *dbstore.Store) *Store {
-	store := &Store{
-		db:           db,
-		usersByID:    make(map[string]model.User),
-		usersByEmail: make(map[string]model.User),
-		groups:       make(map[string]*model.Group),
+	return &Store{
+		db:     db,
+		groups: make(map[string]*model.Group),
 	}
-	store.seedUsers()
-	return store
 }
 
+// FindUserByEmail looks up a user by email for Login. DB errors are treated
+// as not-found; the caller (Login) will return Unauthorized in both cases.
 func (s *Store) FindUserByEmail(email string) (model.User, bool) {
-	user, ok := s.usersByEmail[strings.ToLower(strings.TrimSpace(email))]
+	user, ok, err := s.db.FindUserByEmail(context.Background(), email)
+	if err != nil {
+		return model.User{}, false
+	}
 	return user, ok
 }
 
+// FindUserByID looks up a user by ID for per-request auth token validation.
+// DB errors are treated as not-found.
 func (s *Store) FindUserByID(id string) (model.User, bool) {
-	user, ok := s.usersByID[id]
+	user, ok, err := s.db.FindUserByID(context.Background(), id)
+	if err != nil {
+		return model.User{}, false
+	}
 	return user, ok
 }

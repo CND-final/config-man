@@ -1,7 +1,6 @@
 package store
 
 import (
-	"strings"
 	"time"
 
 	"config-man/backend/model"
@@ -19,19 +18,17 @@ type seedData struct {
 	audits    []model.AuditLog
 }
 
-func (s *Store) seedUsers() {
-	users := []model.User{
+// seedUserList returns the 6 demo users used to populate the users table on
+// first startup. password_hash is intentionally empty so Login falls back to
+// the demo-password path for these accounts.
+func seedUserList() []model.User {
+	return []model.User{
 		{ID: "alice", Email: "admin@config-man.local", Name: "Alice Lin", Role: model.RoleSystemAdmin},
 		{ID: "paul", Email: "project-admin@config-man.local", Name: "Paul Wu", Role: model.RoleProjectAdmin},
 		{ID: "grace", Email: "group-admin@config-man.local", Name: "Grace Huang", Role: model.RoleUserGroupAdmin},
 		{ID: "nora", Email: "developer@config-man.local", Name: "Nora Chen", Role: model.RoleDeveloper},
 		{ID: "rachel", Email: "reviewer@config-man.local", Name: "Rachel Kao", Role: model.RoleReviewer},
 		{ID: "vincent", Email: "viewer@config-man.local", Name: "Vincent Lee", Role: model.RoleViewer},
-	}
-	for _, user := range users {
-		s.users = append(s.users, user)
-		s.usersByID[user.ID] = user
-		s.usersByEmail[strings.ToLower(user.Email)] = user
 	}
 }
 
