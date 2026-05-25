@@ -38,12 +38,12 @@ function userDisplayName() {
 }
 
 function scopedProjectIds() {
-  if (!isWorkspaceView()) return new Set(state.projects.map((project) => project.id));
+  if (!isWorkspaceView())
+    return new Set(state.projects.map((project) => project.id));
 
   const actor = userDisplayName();
   const ids = new Set(state.projects.map((project) => project.id));
-  state.projects.forEach((project) => {
-  });
+  state.projects.forEach((project) => {});
   state.requests.forEach((request) => {
     if (request.requester === actor || request.reviewer === actor) {
       ids.add(request.projectId);
@@ -189,7 +189,6 @@ export function renderUserMenu() {
   `;
 }
 
-
 function pendingReviewRequests() {
   return filteredRequests().filter((request) => request.status === "pending");
 }
@@ -212,7 +211,9 @@ function sensitiveRevealKey(config) {
 }
 
 function keyLooksSensitive(key) {
-  return /(password|secret|token|credential|database\.url|db\.url|database.*url|db.*url)/i.test(key);
+  return /(password|secret|token|credential|database\.url|db\.url|database.*url|db.*url)/i.test(
+    key,
+  );
 }
 
 function exposedSensitiveConfigs() {
@@ -220,7 +221,8 @@ function exposedSensitiveConfigs() {
     if (config.environment !== "prod") return false;
     const revealedSensitiveValue =
       config.isSensitive && state.revealedKeys.has(sensitiveRevealKey(config));
-    const untaggedSensitiveKey = !config.isSensitive && keyLooksSensitive(config.key);
+    const untaggedSensitiveKey =
+      !config.isSensitive && keyLooksSensitive(config.key);
     return revealedSensitiveValue || untaggedSensitiveKey;
   });
 }
@@ -231,7 +233,8 @@ function templatedProjectCount(projects = filteredProjects()) {
 
 function myRecentChangeCount() {
   const actor = userDisplayName();
-  return state.configHistory.filter((revision) => revision.changedBy === actor).length;
+  return state.configHistory.filter((revision) => revision.changedBy === actor)
+    .length;
 }
 
 function dashboardButtonAttrs(attrs) {
@@ -285,7 +288,8 @@ export function renderStats() {
     stats.push({
       label: "Template Coverage",
       value: `${templatedCount}/${projects.length || 0}`,
-      change: projects.length === templatedCount ? "Standardized" : "Needs review",
+      change:
+        projects.length === templatedCount ? "Standardized" : "Needs review",
       tone: projects.length === templatedCount ? "success" : "neutral",
     });
   } else if (isReadOnlyView()) {
@@ -346,7 +350,9 @@ function renderDashboardAttention() {
     if (attention) attention.innerHTML = "";
     return;
   }
-  const project = filteredProjects().find((item) => item.id === activeProject()?.id) || filteredProjects()[0];
+  const project =
+    filteredProjects().find((item) => item.id === activeProject()?.id) ||
+    filteredProjects()[0];
   const pending = pendingReviewRequests();
   const exposedSensitive = exposedSensitiveConfigs();
   const rows = pending.slice(0, 3).map((request) =>
@@ -363,7 +369,11 @@ function renderDashboardAttention() {
     rows.unshift(
       renderAttentionRow({
         title: "Unsaved review draft",
-        meta: [project.name, state.activeEnvironment, `${state.pendingReviewChanges.length} local changes`],
+        meta: [
+          project.name,
+          state.activeEnvironment,
+          `${state.pendingReviewChanges.length} local changes`,
+        ],
         tone: state.activeEnvironment === "prod" ? "warning" : "neutral",
         status: "draft",
         attrs: { "data-open-config": project.id },
@@ -383,7 +393,9 @@ function renderDashboardAttention() {
     );
   }
 
-  $("#dashboardAttention").innerHTML = rows.join("") || `
+  $("#dashboardAttention").innerHTML =
+    rows.join("") ||
+    `
     <article class="dashboard-empty">
       <h3>No urgent config actions</h3>
       <p class="project-meta"><span>Reviews clear</span><span>Sensitive values masked</span></p>
@@ -392,7 +404,9 @@ function renderDashboardAttention() {
 }
 
 function renderDashboardActivity() {
-  const project = filteredProjects().find((item) => item.id === activeProject()?.id);
+  const project = filteredProjects().find(
+    (item) => item.id === activeProject()?.id,
+  );
   const revisions = project ? state.configHistory : [];
   const action = $("#dashboardHistoryAction");
   if (action) {
@@ -432,8 +446,12 @@ function renderDashboardActivity() {
 function renderDashboardCoverage() {
   const projects = filteredProjects().slice(0, 4);
   const scopedProjects = filteredProjects();
-  const sharedTemplates = state.templates.filter((template) => !template.isCustom).length;
-  const personalTemplates = state.templates.filter((template) => template.isCustom).length;
+  const sharedTemplates = state.templates.filter(
+    (template) => !template.isCustom,
+  ).length;
+  const personalTemplates = state.templates.filter(
+    (template) => template.isCustom,
+  ).length;
   const templatedCount = templatedProjectCount(scopedProjects);
   const untemplatedCount = Math.max(scopedProjects.length - templatedCount, 0);
   const pending = pendingReviewRequests().length;
@@ -480,11 +498,12 @@ function renderDashboardCoverage() {
       </div>
     `;
 
-  const projectRows = projects
-    .map((project) => {
-      const hasProd = project.environments.includes("prod");
-      const templateName = projectTemplateName(project.templateId);
-      return `
+  const projectRows =
+    projects
+      .map((project) => {
+        const hasProd = project.environments.includes("prod");
+        const templateName = projectTemplateName(project.templateId);
+        return `
         <button class="dashboard-row coverage-row" type="button" data-open-config="${escapeHtml(project.id)}">
           <div>
             <h3>${escapeHtml(project.name)}</h3>
@@ -499,10 +518,11 @@ function renderDashboardCoverage() {
           <span class="status-pill ${hasProd ? "success" : "warning"}">${hasProd ? "prod" : "no prod"}</span>
         </button>
       `;
-    })
-    .join("") || '<p class="project-meta">No matching projects.</p>';
+      })
+      .join("") || '<p class="project-meta">No matching projects.</p>';
 
-  $("#dashboardCoverage").innerHTML = `${summary}<div class="coverage-projects">${projectRows}</div>`;
+  $("#dashboardCoverage").innerHTML =
+    `${summary}<div class="coverage-projects">${projectRows}</div>`;
 }
 
 export function renderProjects() {
@@ -537,10 +557,18 @@ export function renderTemplates() {
     action.className = state.templatePickerActive
       ? "secondary-action"
       : "primary-action";
-    const canCreateSharedConfig = state.libraryTab === "shared-config" && isSystemView();
-    action.textContent = canCreateSharedConfig ? "New Global Shared Config" : action.textContent;
-    action.className = canCreateSharedConfig ? "primary-action" : action.className;
-    action.classList.toggle("hidden", state.libraryTab === "shared-config" && !isSystemView());
+    const canCreateSharedConfig =
+      state.libraryTab === "shared-config" && isSystemView();
+    action.textContent = canCreateSharedConfig
+      ? "New Global Shared Config"
+      : action.textContent;
+    action.className = canCreateSharedConfig
+      ? "primary-action"
+      : action.className;
+    action.classList.toggle(
+      "hidden",
+      state.libraryTab === "shared-config" && !isSystemView(),
+    );
   }
 
   const isSharedTab = state.libraryTab === "shared-config";
@@ -655,7 +683,9 @@ function projectTemplateName(templateId) {
 
 export function renderConfigFileList() {
   ensureActiveConfigFile(state);
-  const createForm = state.configFileCreateOpen ? renderConfigFileCreateForm() : "";
+  const createForm = state.configFileCreateOpen
+    ? renderConfigFileCreateForm()
+    : "";
   const files = configFilesForEntries(configEntriesForFileList(), state)
     .map(
       (file) => `
@@ -690,13 +720,21 @@ function renderConfigFileCreateForm() {
 }
 
 function renderConfigFileSourcePicker(sourceType) {
-  const items = sourceType === "template" ? state.templates : sourceType === "shared-config" ? state.sharedConfigs : [];
+  const items =
+    sourceType === "template"
+      ? state.templates
+      : sourceType === "shared-config"
+        ? state.sharedConfigs
+        : [];
   if (!items.length) return "";
   return `
     <select id="configFileSourceId" aria-label="Source item">
       <option value="">No source selected</option>
       ${items
-        .map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === state.configFileSourceId ? "selected" : ""}>${escapeHtml(item.name || item.id)}</option>`)
+        .map(
+          (item) =>
+            `<option value="${escapeHtml(item.id)}" ${item.id === state.configFileSourceId ? "selected" : ""}>${escapeHtml(item.name || item.id)}</option>`,
+        )
         .join("")}
     </select>
   `;
@@ -773,14 +811,17 @@ function ensureCompareEnvironments(environments) {
     state.compareSourceEnv = environments[0];
   }
   if (!environments.includes(state.compareTargetEnv)) {
-    state.compareTargetEnv = environments.find((env) => env !== state.compareSourceEnv) || environments[0];
+    state.compareTargetEnv =
+      environments.find((env) => env !== state.compareSourceEnv) ||
+      environments[0];
   }
 }
 
 function renderEnvironmentOptions(environments, selected) {
   return environments
     .map(
-      (environment) => `<option value="${escapeHtml(environment)}" ${environment === selected ? "selected" : ""}>${escapeHtml(environment)}</option>`,
+      (environment) =>
+        `<option value="${escapeHtml(environment)}" ${environment === selected ? "selected" : ""}>${escapeHtml(environment)}</option>`,
     )
     .join("");
 }
@@ -803,7 +844,8 @@ export function renderProjectTemplateOptions() {
     groupSelect.innerHTML = [
       `<option value="" disabled ${current ? "" : "selected"}>Select group</option>`,
       ...state.groups.map(
-        (group) => `<option value="${escapeHtml(group.id)}" ${group.id === current ? "selected" : ""}>${escapeHtml(group.name || group.id)}</option>`,
+        (group) =>
+          `<option value="${escapeHtml(group.id)}" ${group.id === current ? "selected" : ""}>${escapeHtml(group.name || group.id)}</option>`,
       ),
     ].join("");
     if (current && state.groups.some((group) => group.id === current)) {
@@ -870,11 +912,14 @@ function renderCompareTableHead() {
 function renderCompareConfigRows() {
   renderCompareTableHead();
   if (state.compareLoading) {
-    $("#configRows").innerHTML = `<tr><td colspan="4" class="value-cell">Loading environment comparison.</td></tr>`;
+    $("#configRows").innerHTML =
+      `<tr><td colspan="4" class="value-cell">Loading environment comparison.</td></tr>`;
     return;
   }
 
-  const rows = compareRowsForActiveFile().filter((row) => matchesCompareSearch(row));
+  const rows = compareRowsForActiveFile().filter((row) =>
+    matchesCompareSearch(row),
+  );
   $("#configRows").innerHTML =
     rows.map(renderCompareRowMarkup).join("") ||
     `<tr><td colspan="4" class="value-cell">No config keys match this comparison.</td></tr>`;
@@ -895,7 +940,9 @@ function compareRowsForActiveFile() {
   const targetByKey = new Map(targetEntries.map((entry) => [entry.key, entry]));
   return Array.from(new Set([...sourceByKey.keys(), ...targetByKey.keys()]))
     .sort((a, b) => a.localeCompare(b))
-    .map((key) => buildCompareRow(key, sourceByKey.get(key), targetByKey.get(key)));
+    .map((key) =>
+      buildCompareRow(key, sourceByKey.get(key), targetByKey.get(key)),
+    );
 }
 
 function buildCompareRow(key, source, target) {
@@ -1173,15 +1220,14 @@ function renderConfigVersionLabel() {
   label.textContent = `${state.activeEnvironment} · Version ${version} · ${formatDateTime(current.createdAt)} · ${current.entries.length} keys`;
 }
 
-
-
 export function renderConfigCreateDrawer() {
   const drawer = $("#configCreateDrawer");
   if (!drawer) return;
   drawer.classList.toggle("hidden", !state.configCreateDrawerOpen);
   if (!state.configCreateDrawerOpen) return;
 
-  const valueType = state.newConfigValueType || $("#newConfigValueType")?.value || "string";
+  const valueType =
+    state.newConfigValueType || $("#newConfigValueType")?.value || "string";
   const typeSelect = $("#newConfigValueType");
   if (typeSelect) typeSelect.value = valueType;
   renderNewConfigEnvironmentValues(valueType);
@@ -1191,9 +1237,13 @@ function renderNewConfigEnvironmentValues(valueType) {
   const target = $("#newConfigEnvironmentValues");
   if (!target) return;
   const project = activeProject();
-  const environments = project?.environments?.length ? project.environments : ["dev", "staging", "prod"];
+  const environments = project?.environments?.length
+    ? project.environments
+    : ["dev", "staging", "prod"];
   target.innerHTML = environments
-    .map((environment) => renderNewConfigEnvironmentField(environment, valueType))
+    .map((environment) =>
+      renderNewConfigEnvironmentField(environment, valueType),
+    )
     .join("");
 }
 
@@ -1240,7 +1290,9 @@ export function renderSharedConfigEditModal() {
   if (!modal) return;
   modal.classList.toggle("hidden", !state.sharedConfigEditModalOpen);
   if (!state.sharedConfigEditModalOpen) return;
-  const item = state.sharedConfigs.find((config) => config.id === state.activeSharedConfigId);
+  const item = state.sharedConfigs.find(
+    (config) => config.id === state.activeSharedConfigId,
+  );
   const affected = item?.inheritedBy || item?.affectedProjects?.length || 0;
   const prod = item?.prodEnvironmentCount || 0;
   const impact = $("#sharedConfigImpact");
@@ -1431,7 +1483,6 @@ export function renderImportPreview() {
     .join("");
 }
 
-
 function canCreateGroup() {
   return ["system_admin", "group_admin"].includes(state.user?.role);
 }
@@ -1503,8 +1554,9 @@ function groupRoleLabel(role) {
 function renderGroupRoleControl(member, editAllowed) {
   const id = member.id || member.userId;
   const role = member.groupRole === "group_admin" ? "group_admin" : "member";
-  if (!editAllowed) return `<span class="group-role-text">${groupRoleLabel(role)}</span>`;
-  
+  if (!editAllowed)
+    return `<span class="group-role-text">${groupRoleLabel(role)}</span>`;
+
   const isOpen = state.groupRoleMenuUserId === id;
 
   return `
@@ -1513,25 +1565,30 @@ function renderGroupRoleControl(member, editAllowed) {
         <span>${groupRoleLabel(role)}</span>
         <svg viewBox="0 0 24 24" width="14" height="14" stroke="#86868b" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" class="chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
       </button>
-      ${isOpen ? `
+      ${
+        isOpen
+          ? `
         <div class="apple-menu">
-          <button type="button" class="apple-menu-item ${role === 'member' ? 'active' : ''}" data-set-role="member" data-user-id="${escapeHtml(id)}">
-            <span class="apple-menu-icon" aria-hidden="true">${role === 'member' ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>' : ''}</span>
+          <button type="button" class="apple-menu-item ${role === "member" ? "active" : ""}" data-set-role="member" data-user-id="${escapeHtml(id)}">
+            <span class="apple-menu-icon" aria-hidden="true">${role === "member" ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>' : ""}</span>
             <span>Member</span>
           </button>
           <div class="apple-menu-divider"></div>
-          <button type="button" class="apple-menu-item ${role === 'group_admin' ? 'active' : ''}" data-set-role="group_admin" data-user-id="${escapeHtml(id)}">
-            <span class="apple-menu-icon" aria-hidden="true">${role === 'group_admin' ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>' : ''}</span>
+          <button type="button" class="apple-menu-item ${role === "group_admin" ? "active" : ""}" data-set-role="group_admin" data-user-id="${escapeHtml(id)}">
+            <span class="apple-menu-icon" aria-hidden="true">${role === "group_admin" ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>' : ""}</span>
             <span>Group Admin</span>
           </button>
         </div>
-      ` : ""}
+      `
+          : ""
+      }
     </div>
   `;
 }
 
 function renderMemberRows(members, editAllowed) {
-  if (!members.length) return `<p class="group-empty-state">No members in this group.</p>`;
+  if (!members.length)
+    return `<p class="group-empty-state">No members in this group.</p>`;
   return `
     <div class="group-plain-list group-member-list">
       ${members
@@ -1579,7 +1636,8 @@ export function renderMemberPicker({
   submitId = "",
   emptyLabel,
 }) {
-  const selectedSet = selectedIds instanceof Set ? selectedIds : new Set(selectedIds || []);
+  const selectedSet =
+    selectedIds instanceof Set ? selectedIds : new Set(selectedIds || []);
   const term = search.trim().toLowerCase();
   const visibleUsers = users.filter((user) => userMatchesSearch(user, term));
   const selectedUsers = users.filter((user) => selectedSet.has(user.id));
@@ -1597,12 +1655,13 @@ export function renderMemberPicker({
             </div>
           </div>
           <div class="member-picker-options">
-            ${visibleUsers.length
-              ? visibleUsers
-                  .map((user) => {
-                    const disabled = disabledIds.has(user.id);
-                    const checked = selectedSet.has(user.id) || disabled;
-                    return `
+            ${
+              visibleUsers.length
+                ? visibleUsers
+                    .map((user) => {
+                      const disabled = disabledIds.has(user.id);
+                      const checked = selectedSet.has(user.id) || disabled;
+                      return `
                       <label class="member-picker-option ${disabled ? "disabled" : ""}">
                         <input
                           type="checkbox"
@@ -1617,23 +1676,29 @@ export function renderMemberPicker({
                         </span>
                       </label>
                     `;
-                  })
-                  .join("")
-              : `<p class="project-meta">${emptyLabel}</p>`}
+                    })
+                    .join("")
+                : `<p class="project-meta">${emptyLabel}</p>`
+            }
           </div>
         </div>
         <aside class="member-picker-selected">
-          ${selectedUsers.length ? `
+          ${
+            selectedUsers.length
+              ? `
             <div class="member-picker-selected-head">
               <span>Selected</span>
               <strong>${selectedUsers.length}</strong>
             </div>
-          ` : ""}
+          `
+              : ""
+          }
           <div class="selected-member-list">
-            ${selectedUsers.length
-              ? selectedUsers
-                  .map(
-                    (user) => `
+            ${
+              selectedUsers.length
+                ? selectedUsers
+                    .map(
+                      (user) => `
                       <button class="selected-member-chip" type="button" ${removeAttribute}="${escapeHtml(user.id)}">
                         <span>${escapeHtml(user.name || user.id || "Unknown user")}</span>
                         <span class="remove-chip-icon" style="color: #a1a1a6;" aria-hidden="true">
@@ -1641,9 +1706,10 @@ export function renderMemberPicker({
                         </span>
                       </button>
                     `,
-                  )
-                  .join("")
-              : '<div class="empty-selection-placeholder" style="text-align: center; color: #86868b; margin-top: 40px;"><svg aria-hidden="true" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 12px; opacity: 0.3;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg><br>No members selected</div>'}
+                    )
+                    .join("")
+                : '<div class="empty-selection-placeholder" style="text-align: center; color: #86868b; margin-top: 40px;"><svg aria-hidden="true" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 12px; opacity: 0.3;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg><br>No members selected</div>'
+            }
           </div>
           <div class="member-picker-actions" style="margin-top: auto; display: flex; justify-content: flex-end; padding-top: 16px;">
             ${submitButton}
@@ -1672,8 +1738,13 @@ export function renderGroupMemberPicker() {
   const target = $("#groupMemberTools");
   if (!target) return;
   const members = groupMembers();
-  const memberIds = new Set(members.map((member) => member.id || member.userId));
-  target.classList.toggle("hidden", !canEditGroupMembers() || !state.groupMemberPickerOpen);
+  const memberIds = new Set(
+    members.map((member) => member.id || member.userId),
+  );
+  target.classList.toggle(
+    "hidden",
+    !canEditGroupMembers() || !state.groupMemberPickerOpen,
+  );
   target.innerHTML = state.groupMemberPickerOpen
     ? `
       <div class="group-member-picker-header" style="display: flex; gap: 8px; align-items: center; margin-bottom: 24px; margin-top: 4px; margin-left: -4px;">
@@ -1706,13 +1777,16 @@ export function renderGroupModal() {
   const mode = roleMode();
   const createAllowed = canCreateGroup();
   const editAllowed = canEditGroupMembers();
-  const activeGroup = state.activeGroup || state.groups.find((group) => group.id === state.activeGroupId);
+  const activeGroup =
+    state.activeGroup ||
+    state.groups.find((group) => group.id === state.activeGroupId);
   const members = groupMembers();
   const modeCopy = {
     system: {
       title: "Group",
       listTitle: "All Groups",
-      empty: "No groups yet. Create the first group to start assigning members.",
+      empty:
+        "No groups yet. Create the first group to start assigning members.",
     },
     user: {
       title: "Group",
@@ -1722,16 +1796,27 @@ export function renderGroupModal() {
   }[mode];
 
   const creatingGroup = createAllowed && state.groupCreateOpen;
-  modal.querySelector(".group-layout")?.classList.toggle("group-create-layout", creatingGroup);
-  modal.querySelector(".group-detail")?.classList.toggle("group-create-detail", creatingGroup);
-  modal.querySelector(".group-sidebar")?.classList.toggle("hidden", creatingGroup);
-  $("#groupModalTitle").textContent = creatingGroup ? "New Group" : modeCopy.title;
+  modal
+    .querySelector(".group-layout")
+    ?.classList.toggle("group-create-layout", creatingGroup);
+  modal
+    .querySelector(".group-detail")
+    ?.classList.toggle("group-create-detail", creatingGroup);
+  modal
+    .querySelector(".group-sidebar")
+    ?.classList.toggle("hidden", creatingGroup);
+  $("#groupModalTitle").textContent = creatingGroup
+    ? "New Group"
+    : modeCopy.title;
   $("#groupListTitle").textContent = modeCopy.listTitle;
   $("#groupModalMeta").innerHTML = `
     <span>${creatingGroup ? "Add a name and initial members" : mode === "system" ? "Manage all groups" : "Groups you belong to"}</span>
   `;
   $("#groupCount").textContent = String(state.groups.length);
-  $("#openGroupCreate").classList.toggle("hidden", !createAllowed || creatingGroup);
+  $("#openGroupCreate").classList.toggle(
+    "hidden",
+    !createAllowed || creatingGroup,
+  );
   $("#groupForm").classList.toggle("hidden", !creatingGroup);
   if (createAllowed) {
     renderGroupCreateMemberPicker();
@@ -1753,7 +1838,8 @@ export function renderGroupModal() {
 
   if (state.groupLoading) {
     $("#groupList").innerHTML = '<p class="project-meta">Loading groups...</p>';
-    $("#groupDetailHeader").innerHTML = '<p class="project-meta">Loading group detail...</p>';
+    $("#groupDetailHeader").innerHTML =
+      '<p class="project-meta">Loading group detail...</p>';
     $("#groupProjectScope").innerHTML = "";
     $("#groupMembers").innerHTML = "";
     $("#groupMemberTools").innerHTML = "";
@@ -1795,8 +1881,12 @@ export function renderGroupModal() {
 
   const projects = groupProjects(activeGroup);
   const activeTab = state.groupDetailTab || "members";
-  const showMemberTools = activeTab === "members" && state.groupMemberPickerOpen;
-  $("#groupMemberTools").classList.toggle("hidden", !showMemberTools || !editAllowed);
+  const showMemberTools =
+    activeTab === "members" && state.groupMemberPickerOpen;
+  $("#groupMemberTools").classList.toggle(
+    "hidden",
+    !showMemberTools || !editAllowed,
+  );
   if (showMemberTools) {
     renderGroupMemberPicker();
   } else {
@@ -1825,8 +1915,12 @@ export function renderGroupModal() {
   $("#groupMemberTools").innerHTML = "";
   $("#groupMemberTools").classList.add("hidden");
   $("#groupProjectScope").innerHTML = "";
-  $("#groupMembers").innerHTML = renderPlainList(projects, mode === "system" ? "No projects assigned." : "No project scope returned yet.");
-
+  $("#groupMembers").innerHTML = renderPlainList(
+    projects,
+    mode === "system"
+      ? "No projects assigned."
+      : "No project scope returned yet.",
+  );
 }
 
 export function renderAll() {

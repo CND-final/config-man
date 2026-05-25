@@ -24,33 +24,46 @@ const STANDARD_CONFIG_FILES = [
 export function configFilesForEntries(entries, state = null) {
   return allConfigFiles(state).map((file) => ({
     ...file,
-    count: entries.filter((entry) => configFileForEntry(entry, state).id === file.id).length,
+    count: entries.filter(
+      (entry) => configFileForEntry(entry, state).id === file.id,
+    ).length,
   }));
 }
 
 export function configFileForEntry(entry, state = null) {
-  const customFile = customConfigFiles(state).find((file) => customFileMatches(file, entry));
+  const customFile = customConfigFiles(state).find((file) =>
+    customFileMatches(file, entry),
+  );
   if (customFile) return customFile;
 
-  const standardFile = STANDARD_CONFIG_FILES.find((file) => file.matches?.(entry));
+  const standardFile = STANDARD_CONFIG_FILES.find((file) =>
+    file.matches?.(entry),
+  );
   if (standardFile) return standardFile;
 
   return STANDARD_CONFIG_FILES[0];
 }
 
 export function configsForActiveFile(entries, activeFileId, state = null) {
-  return entries.filter((entry) => configFileForEntry(entry, state).id === activeFileId);
+  return entries.filter(
+    (entry) => configFileForEntry(entry, state).id === activeFileId,
+  );
 }
 
 export function ensureActiveConfigFile(state) {
-  if (!allConfigFiles(state).some((file) => file.id === state.activeConfigFile)) {
+  if (
+    !allConfigFiles(state).some((file) => file.id === state.activeConfigFile)
+  ) {
     state.activeConfigFile = STANDARD_CONFIG_FILES[0].id;
   }
 }
 
 export function saveCustomConfigFiles(state) {
   const projectId = state.activeProjectId || "global";
-  localStorage.setItem(customFileStorageKey(projectId), JSON.stringify(state.customConfigFiles || []));
+  localStorage.setItem(
+    customFileStorageKey(projectId),
+    JSON.stringify(state.customConfigFiles || []),
+  );
 }
 
 export function loadCustomConfigFiles(state) {
@@ -94,10 +107,13 @@ function customConfigFiles(state) {
 
 function customFileMatches(file, entry) {
   const key = normalizedKey(entry);
-  const prefix = String(file.prefix || prefixFromFileName(file.name)).toLowerCase();
+  const prefix = String(
+    file.prefix || prefixFromFileName(file.name),
+  ).toLowerCase();
   if (!prefix) return false;
   if (key === prefix || key.startsWith(`${prefix}.`)) return true;
-  if (prefix === "database" && (key === "db" || key.startsWith("db."))) return true;
+  if (prefix === "database" && (key === "db" || key.startsWith("db.")))
+    return true;
   return false;
 }
 

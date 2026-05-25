@@ -65,7 +65,11 @@ import {
   openSharedConfigEdit,
 } from "./actions.js";
 import { api } from "./api.js";
-import { loadCompareConfigs, loadConfigsAndHistory, loadInitialData } from "./data.js";
+import {
+  loadCompareConfigs,
+  loadConfigsAndHistory,
+  loadInitialData,
+} from "./data.js";
 import { loadCustomConfigFiles } from "./configFiles.js";
 import { $, setAuthenticated, showToast } from "./dom.js";
 import { renderAll, renderConfigRows } from "./render.js";
@@ -112,9 +116,14 @@ export function bindEvents() {
   });
 
   document.addEventListener("change", (event) => {
-    const createMember = event.target.closest("[data-group-create-member-option]");
+    const createMember = event.target.closest(
+      "[data-group-create-member-option]",
+    );
     if (createMember) {
-      toggleGroupCreateMemberSelection(createMember.value, createMember.checked);
+      toggleGroupCreateMemberSelection(
+        createMember.value,
+        createMember.checked,
+      );
       return;
     }
 
@@ -138,9 +147,10 @@ export function bindEvents() {
 
     const compareEnv = event.target.closest("[data-compare-env]");
     if (compareEnv) {
-      setCompareEnvironment(compareEnv.dataset.compareEnv, compareEnv.value).catch((error) =>
-        showToast(error.message),
-      );
+      setCompareEnvironment(
+        compareEnv.dataset.compareEnv,
+        compareEnv.value,
+      ).catch((error) => showToast(error.message));
       return;
     }
 
@@ -226,7 +236,7 @@ export function initApp() {
 
 async function handleDocumentClick(event) {
   const target = event.target.closest("button");
-  
+
   if (!event.target.closest(".group-role-dropdown-container")) {
     const { state } = await import("./state.js");
     if (state.groupRoleMenuUserId) {
@@ -238,7 +248,6 @@ async function handleDocumentClick(event) {
   if (!target) return;
 
   try {
-
     if (target.dataset.userMenuAction === "groups") {
       await openGroupPanel();
       return;
@@ -284,7 +293,10 @@ async function handleDocumentClick(event) {
       return;
     }
 
-    if (target.id === "openGroupMemberPicker" || target.closest("#closeGroupMemberPicker")) {
+    if (
+      target.id === "openGroupMemberPicker" ||
+      target.closest("#closeGroupMemberPicker")
+    ) {
       toggleGroupMemberPicker();
       return;
     }
@@ -317,7 +329,10 @@ async function handleDocumentClick(event) {
 
     if (target.dataset.setRole) {
       const { updateGroupMemberRole } = await import("./actions.js");
-      await updateGroupMemberRole(target.dataset.userId, target.dataset.setRole);
+      await updateGroupMemberRole(
+        target.dataset.userId,
+        target.dataset.setRole,
+      );
       return;
     }
 
@@ -522,7 +537,10 @@ async function handleDocumentClick(event) {
       return;
     }
 
-    if (target.id === "openConfigHistory" || target.id === "dashboardHistoryAction") {
+    if (
+      target.id === "openConfigHistory" ||
+      target.id === "dashboardHistoryAction"
+    ) {
       await openVersionHistory();
       return;
     }
