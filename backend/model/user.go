@@ -12,10 +12,11 @@ const (
 )
 
 type User struct {
-	ID    string   `json:"id"`
-	Email string   `json:"email"`
-	Name  string   `json:"name"`
-	Role  UserRole `json:"role"`
+	ID           string   `json:"id"`
+	Email        string   `json:"email"`
+	Name         string   `json:"name"`
+	Role         UserRole `json:"role"`
+	PasswordHash string   `json:"-"`
 }
 
 type AuthResponse struct {
