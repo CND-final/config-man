@@ -174,6 +174,15 @@ func (s *Store) InitSchema(ctx context.Context) error {
 			metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
 			created_at TIMESTAMPTZ NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS users (
+			id            TEXT        PRIMARY KEY,
+			email         TEXT        NOT NULL UNIQUE,
+			name          TEXT        NOT NULL,
+			role          TEXT        NOT NULL,
+			password_hash TEXT,
+			created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)`,
 	}
 
 	for _, statement := range statements {
