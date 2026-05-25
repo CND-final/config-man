@@ -3,16 +3,17 @@ package model
 import "time"
 
 type ConfigEntry struct {
-	ID          string    `json:"id"`
-	ProjectID   string    `json:"projectId"`
-	Environment string    `json:"environment"`
-	Key         string    `json:"key"`
-	Value       string    `json:"value"`
-	ValueType   string    `json:"valueType"`
-	IsSensitive bool      `json:"isSensitive"`
-	UpdatedBy   string    `json:"updatedBy"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	ID           string    `json:"id"`
+	ProjectID    string    `json:"projectId"`
+	Environment  string    `json:"environment"`
+	ConfigFileID string    `json:"configFileId"`
+	Key          string    `json:"key"`
+	Value        string    `json:"value"`
+	ValueType    string    `json:"valueType"`
+	IsSensitive  bool      `json:"isSensitive"`
+	UpdatedBy    string    `json:"updatedBy"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
 }
 
 type ConfigVersion struct {
@@ -26,10 +27,11 @@ type ConfigVersion struct {
 }
 
 type ConfigRevisionEntry struct {
-	Key         string `json:"key"`
-	Value       string `json:"value"`
-	ValueType   string `json:"valueType"`
-	IsSensitive bool   `json:"isSensitive"`
+	ConfigFileID string `json:"configFileId,omitempty"`
+	Key          string `json:"key"`
+	Value        string `json:"value"`
+	ValueType    string `json:"valueType"`
+	IsSensitive  bool   `json:"isSensitive"`
 }
 
 type ConfigRevision struct {

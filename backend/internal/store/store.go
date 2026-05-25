@@ -37,6 +37,9 @@ func NewStoreWithDB(ctx context.Context, db *sql.DB) (*Store, error) {
 			return nil, err
 		}
 	}
+	for _, project := range store.ListProjects() {
+		store.EnsureProjectConfigFiles(project.ID)
+	}
 	store.ensureDefaultSharedConfigs()
 	return store, nil
 }

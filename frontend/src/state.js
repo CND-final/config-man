@@ -17,7 +17,7 @@ export const state = {
   configFileSourceType: "blank",
   configFileSourceId: "",
   configFileDraftName: "",
-  customConfigFiles: [],
+  configFiles: [],
   newConfigValueType: "string",
   globalSearch: "",
   configSearch: "",

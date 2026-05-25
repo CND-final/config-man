@@ -68,8 +68,8 @@ func upsertConfigEntryTx(ctx context.Context, tx *sql.Tx, entry model.ConfigEntr
 	if entry.ID == "" {
 		return nil
 	}
-	_, err := tx.ExecContext(ctx, `INSERT INTO config_entries (id, project_id, environment, key, value, value_type, is_sensitive, updated_by, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-		ON CONFLICT (id) DO UPDATE SET project_id = EXCLUDED.project_id, environment = EXCLUDED.environment, key = EXCLUDED.key, value = EXCLUDED.value, value_type = EXCLUDED.value_type, is_sensitive = EXCLUDED.is_sensitive, updated_by = EXCLUDED.updated_by, updated_at = EXCLUDED.updated_at`, entry.ID, entry.ProjectID, entry.Environment, entry.Key, entry.Value, entry.ValueType, entry.IsSensitive, entry.UpdatedBy, entry.CreatedAt, entry.UpdatedAt)
+	_, err := tx.ExecContext(ctx, `INSERT INTO config_entries (id, project_id, environment, config_file_id, key, value, value_type, is_sensitive, updated_by, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+		ON CONFLICT (id) DO UPDATE SET project_id = EXCLUDED.project_id, environment = EXCLUDED.environment, config_file_id = EXCLUDED.config_file_id, key = EXCLUDED.key, value = EXCLUDED.value, value_type = EXCLUDED.value_type, is_sensitive = EXCLUDED.is_sensitive, updated_by = EXCLUDED.updated_by, updated_at = EXCLUDED.updated_at`, entry.ID, entry.ProjectID, entry.Environment, entry.ConfigFileID, entry.Key, entry.Value, entry.ValueType, entry.IsSensitive, entry.UpdatedBy, entry.CreatedAt, entry.UpdatedAt)
 	return err
 }
 
@@ -122,7 +122,7 @@ func insertConfigRevisionSeedTx(ctx context.Context, tx *sql.Tx, revision model.
 }
 
 func (s *Store) ListConfigEntries(ctx context.Context, projectID, environment string) ([]model.ConfigEntry, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, project_id, environment, key, value, value_type, is_sensitive, updated_by, created_at, updated_at FROM config_entries WHERE project_id = $1 AND environment = $2 ORDER BY key ASC`, projectID, environment)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, project_id, environment, config_file_id, key, value, value_type, is_sensitive, updated_by, created_at, updated_at FROM config_entries WHERE project_id = $1 AND environment = $2 ORDER BY key ASC`, projectID, environment)
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +131,7 @@ func (s *Store) ListConfigEntries(ctx context.Context, projectID, environment st
 	entries := make([]model.ConfigEntry, 0)
 	for rows.Next() {
 		entry := model.ConfigEntry{}
-		if err := rows.Scan(&entry.ID, &entry.ProjectID, &entry.Environment, &entry.Key, &entry.Value, &entry.ValueType, &entry.IsSensitive, &entry.UpdatedBy, &entry.CreatedAt, &entry.UpdatedAt); err != nil {
+		if err := rows.Scan(&entry.ID, &entry.ProjectID, &entry.Environment, &entry.ConfigFileID, &entry.Key, &entry.Value, &entry.ValueType, &entry.IsSensitive, &entry.UpdatedBy, &entry.CreatedAt, &entry.UpdatedAt); err != nil {
 			return nil, err
 		}
 		entries = append(entries, entry)
@@ -141,7 +141,7 @@ func (s *Store) ListConfigEntries(ctx context.Context, projectID, environment st
 
 func (s *Store) FindConfig(ctx context.Context, projectID, configID string) (model.ConfigEntry, bool, error) {
 	entry := model.ConfigEntry{}
-	err := s.db.QueryRowContext(ctx, `SELECT id, project_id, environment, key, value, value_type, is_sensitive, updated_by, created_at, updated_at FROM config_entries WHERE project_id = $1 AND id = $2`, projectID, configID).Scan(&entry.ID, &entry.ProjectID, &entry.Environment, &entry.Key, &entry.Value, &entry.ValueType, &entry.IsSensitive, &entry.UpdatedBy, &entry.CreatedAt, &entry.UpdatedAt)
+	err := s.db.QueryRowContext(ctx, `SELECT id, project_id, environment, config_file_id, key, value, value_type, is_sensitive, updated_by, created_at, updated_at FROM config_entries WHERE project_id = $1 AND id = $2`, projectID, configID).Scan(&entry.ID, &entry.ProjectID, &entry.Environment, &entry.ConfigFileID, &entry.Key, &entry.Value, &entry.ValueType, &entry.IsSensitive, &entry.UpdatedBy, &entry.CreatedAt, &entry.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return model.ConfigEntry{}, false, nil
 	}
@@ -153,7 +153,7 @@ func (s *Store) FindConfig(ctx context.Context, projectID, configID string) (mod
 
 func (s *Store) FindConfigByKey(ctx context.Context, projectID, environment, key string) (model.ConfigEntry, bool, error) {
 	entry := model.ConfigEntry{}
-	err := s.db.QueryRowContext(ctx, `SELECT id, project_id, environment, key, value, value_type, is_sensitive, updated_by, created_at, updated_at FROM config_entries WHERE project_id = $1 AND environment = $2 AND key = $3`, projectID, environment, key).Scan(&entry.ID, &entry.ProjectID, &entry.Environment, &entry.Key, &entry.Value, &entry.ValueType, &entry.IsSensitive, &entry.UpdatedBy, &entry.CreatedAt, &entry.UpdatedAt)
+	err := s.db.QueryRowContext(ctx, `SELECT id, project_id, environment, config_file_id, key, value, value_type, is_sensitive, updated_by, created_at, updated_at FROM config_entries WHERE project_id = $1 AND environment = $2 AND key = $3`, projectID, environment, key).Scan(&entry.ID, &entry.ProjectID, &entry.Environment, &entry.ConfigFileID, &entry.Key, &entry.Value, &entry.ValueType, &entry.IsSensitive, &entry.UpdatedBy, &entry.CreatedAt, &entry.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return model.ConfigEntry{}, false, nil
 	}

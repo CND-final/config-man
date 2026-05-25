@@ -65,12 +65,7 @@ import {
   openSharedConfigEdit,
 } from "./actions.js";
 import { api } from "./api.js";
-import {
-  loadCompareConfigs,
-  loadConfigsAndHistory,
-  loadInitialData,
-} from "./data.js";
-import { loadCustomConfigFiles } from "./configFiles.js";
+import { loadCompareConfigs, loadConfigsAndHistory, loadInitialData } from "./data.js";
 import { $, setAuthenticated, showToast } from "./dom.js";
 import { renderAll, renderConfigRows } from "./render.js";
 import { activeProject, state } from "./state.js";
@@ -208,7 +203,7 @@ export function bindEvents() {
   document.addEventListener("submit", (event) => {
     const configFileForm = event.target.closest("#configFileCreateForm");
     if (configFileForm) {
-      createConfigFile(event);
+      createConfigFile(event).catch((error) => showToast(error.message));
     }
   });
 
@@ -509,8 +504,7 @@ async function handleDocumentClick(event) {
     const projectId = target.dataset.openConfig ?? target.dataset.selectProject;
     if (projectId) {
       state.activeProjectId = projectId;
-      loadCustomConfigFiles(state);
-      state.activeConfigFile = "application.yaml";
+      state.activeConfigFile = "";
       const project = activeProject();
       state.activeEnvironment = project.environments.includes("prod")
         ? "prod"

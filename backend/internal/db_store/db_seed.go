@@ -38,6 +38,14 @@ func (s *Store) SaveSeedData(ctx context.Context, groups map[string]*model.Group
 				return err
 			}
 		}
+		now := projectSeedTime(projects)
+		for _, project := range projects {
+			for _, file := range model.StandardConfigFiles(project.ID, now) {
+				if err := upsertConfigFileTx(ctx, tx, file); err != nil {
+					return err
+				}
+			}
+		}
 		for _, entry := range configs {
 			if err := upsertConfigEntryTx(ctx, tx, *entry); err != nil {
 				return err

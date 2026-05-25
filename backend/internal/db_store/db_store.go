@@ -121,10 +121,24 @@ func (s *Store) InitSchema(ctx context.Context) error {
 			created_at TIMESTAMPTZ NOT NULL,
 			updated_at TIMESTAMPTZ NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS config_files (
+			id TEXT PRIMARY KEY,
+			project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+			name TEXT NOT NULL,
+			description TEXT NOT NULL DEFAULT '',
+			source_type TEXT NOT NULL DEFAULT 'custom',
+			source_id TEXT NOT NULL DEFAULT '',
+			prefix TEXT NOT NULL DEFAULT '',
+			sort_order INTEGER NOT NULL DEFAULT 100,
+			created_at TIMESTAMPTZ NOT NULL,
+			updated_at TIMESTAMPTZ NOT NULL,
+			UNIQUE(project_id, name)
+		)`,
 		`CREATE TABLE IF NOT EXISTS config_entries (
 			id TEXT PRIMARY KEY,
 			project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
 			environment TEXT NOT NULL,
+			config_file_id TEXT NOT NULL DEFAULT '',
 			key TEXT NOT NULL,
 			value TEXT NOT NULL,
 			value_type TEXT NOT NULL,
@@ -134,6 +148,7 @@ func (s *Store) InitSchema(ctx context.Context) error {
 			updated_at TIMESTAMPTZ NOT NULL,
 			UNIQUE(project_id, environment, key)
 		)`,
+		`ALTER TABLE config_entries ADD COLUMN IF NOT EXISTS config_file_id TEXT NOT NULL DEFAULT ''`,
 		`CREATE TABLE IF NOT EXISTS config_versions (
 			id TEXT PRIMARY KEY,
 			config_id TEXT NOT NULL,

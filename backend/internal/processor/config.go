@@ -13,6 +13,94 @@ import (
 
 const maskedValue = "******"
 
+func (p *Processor) ListConfigFiles(ctx appctx.RequestContext, projectID string) (map[string]any, *model.ErrorDetail) {
+	project, err := p.requireReadableProject(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	files := p.store.ListConfigFiles(project.ID)
+	return map[string]any{
+		"projectId": project.ID,
+		"files":     files,
+	}, nil
+}
+
+func (p *Processor) CreateConfigFile(ctx appctx.RequestContext, projectID string, req model.CreateConfigFileRequest) (model.ConfigFile, *model.ErrorDetail) {
+	project, err := p.requireReadableProject(ctx, projectID)
+	if err != nil {
+		return model.ConfigFile{}, err
+	}
+	if !util.CanManageProjectConfigFiles(ctx.Actor, project.Members) {
+		return model.ConfigFile{}, model.Forbidden("Only project admins or developers can create config files")
+	}
+	name := model.NormalizeConfigFileName(req.Name)
+	if len(name) < 2 {
+		return model.ConfigFile{}, model.InvalidInput("name is required")
+	}
+	if p.store.ConfigFileNameExists(project.ID, name) {
+		return model.ConfigFile{}, model.Conflict(fmt.Sprintf("Config file %q already exists", name))
+	}
+	sourceType := strings.TrimSpace(req.SourceType)
+	if sourceType == "" {
+		sourceType = "blank"
+	}
+	sourceID := strings.TrimSpace(req.SourceID)
+	if appErr := p.validateConfigFileSource(ctx, sourceType, sourceID); appErr != nil {
+		return model.ConfigFile{}, appErr
+	}
+	now := time.Now().UTC()
+	file := model.ConfigFile{
+		ID:          model.ConfigFileID(project.ID, name),
+		ProjectID:   project.ID,
+		Name:        name,
+		Description: strings.TrimSpace(req.Description),
+		SourceType:  sourceType,
+		SourceID:    sourceID,
+		Prefix:      model.ConfigFilePrefix(name),
+		SortOrder:   100,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	audit := newAudit(ctx.ActorName(), "config_file.create", "config_file", file.ID, project.ID, map[string]any{
+		"name":       file.Name,
+		"sourceType": file.SourceType,
+		"sourceId":   file.SourceID,
+	})
+	if err := p.store.SaveConfigFile(file, audit); err != nil {
+		return model.ConfigFile{}, model.InternalError("database persistence failed: " + err.Error())
+	}
+	return file, nil
+}
+
+func (p *Processor) validateConfigFileSource(ctx appctx.RequestContext, sourceType, sourceID string) *model.ErrorDetail {
+	switch sourceType {
+	case "blank", "standard":
+		return nil
+	case "template":
+		if sourceID == "" {
+			return nil
+		}
+		if _, ok := p.findAccessibleTemplate(ctx, sourceID); !ok {
+			return model.NotFound(fmt.Sprintf("Template %q not found", sourceID))
+		}
+		return nil
+	case "shared-config":
+		if sourceID == "" {
+			return nil
+		}
+		item, ok := p.store.FindSharedConfig(sourceID)
+		if !ok {
+			return model.NotFound(fmt.Sprintf("Shared config %q not found", sourceID))
+		}
+		if !p.canReadSharedConfig(ctx, item) {
+			return model.Forbidden("You cannot use this shared config")
+		}
+		return nil
+	default:
+		return model.InvalidInput("sourceType must be blank, template, or shared-config")
+	}
+}
+
 func (p *Processor) ListConfigs(ctx appctx.RequestContext, projectID, environment string, revealSensitive bool) (map[string]any, *model.ErrorDetail) {
 	environment = strings.TrimSpace(environment)
 	logger.Config.Info("list configs requested")
@@ -35,6 +123,7 @@ func (p *Processor) ListConfigs(ctx appctx.RequestContext, projectID, environmen
 		return nil, err
 	}
 
+	p.store.EnsureProjectConfigFiles(projectID)
 	entries := p.store.ListConfigEntries(projectID, environment)
 	for index := range entries {
 		if entries[index].IsSensitive && !revealSensitive {
@@ -46,6 +135,7 @@ func (p *Processor) ListConfigs(ctx appctx.RequestContext, projectID, environmen
 		"projectId":    projectID,
 		"environment":  environment,
 		"entries":      entries,
+		"files":        p.store.ListConfigFiles(projectID),
 		"entryCount":   len(entries),
 		"maskedValues": !revealSensitive,
 	}
@@ -80,25 +170,31 @@ func (p *Processor) CreateConfig(ctx appctx.RequestContext, projectID string, re
 		logger.Config.Warn("create config invalid")
 		return model.ConfigEntry{}, model.InvalidInput("valueType must be string, number, boolean, json, or yaml")
 	}
+	configFileID, fileErr := p.resolveConfigFileID(projectID, strings.TrimSpace(req.ConfigFileID), key)
+	if fileErr != nil {
+		return model.ConfigEntry{}, fileErr
+	}
 
 	now := time.Now().UTC()
 	entry := model.ConfigEntry{
-		ID:          util.NewID("cfg"),
-		ProjectID:   projectID,
-		Environment: environment,
-		Key:         key,
-		Value:       req.Value,
-		ValueType:   valueType,
-		IsSensitive: req.IsSensitive,
-		UpdatedBy:   ctx.ActorName(),
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:           util.NewID("cfg"),
+		ProjectID:    projectID,
+		Environment:  environment,
+		ConfigFileID: configFileID,
+		Key:          key,
+		Value:        req.Value,
+		ValueType:    valueType,
+		IsSensitive:  req.IsSensitive,
+		UpdatedBy:    ctx.ActorName(),
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}
 	version := newVersion(entry.ID, nil, entry.Value, ctx.ActorName(), util.Fallback(req.ChangeReason, "create config"))
 	audit := newAudit(ctx.ActorName(), "config.create", "config_entry", entry.ID, projectID, map[string]any{
-		"environment": entry.Environment,
-		"key":         entry.Key,
-		"isSensitive": entry.IsSensitive,
+		"environment":  entry.Environment,
+		"configFileId": entry.ConfigFileID,
+		"key":          entry.Key,
+		"isSensitive":  entry.IsSensitive,
 	})
 	if err := p.store.SaveConfig([]model.ConfigEntry{entry}, []model.ConfigVersion{version}, audit); err != nil {
 		logger.Config.Error("create config persistence failed")
@@ -112,7 +208,7 @@ func (p *Processor) CreateConfig(ctx appctx.RequestContext, projectID string, re
 func (p *Processor) UpdateConfig(ctx appctx.RequestContext, projectID, configID string, req model.UpdateConfigRequest) (model.ConfigEntry, *model.ErrorDetail) {
 	logger.Config.Info("update config requested")
 
-	if req.Key == nil && req.Value == nil && req.ValueType == nil && req.IsSensitive == nil {
+	if req.ConfigFileID == nil && req.Key == nil && req.Value == nil && req.ValueType == nil && req.IsSensitive == nil {
 		logger.Config.Warn("update config invalid")
 		return model.ConfigEntry{}, model.InvalidInput("No config fields provided for update")
 	}
@@ -128,6 +224,13 @@ func (p *Processor) UpdateConfig(ctx appctx.RequestContext, projectID, configID 
 	}
 
 	oldValue := entry.Value
+	if req.ConfigFileID != nil {
+		configFileID, fileErr := p.resolveConfigFileID(projectID, strings.TrimSpace(*req.ConfigFileID), entry.Key)
+		if fileErr != nil {
+			return model.ConfigEntry{}, fileErr
+		}
+		entry.ConfigFileID = configFileID
+	}
 	if req.Key != nil {
 		nextKey := strings.TrimSpace(*req.Key)
 		if nextKey == "" {
@@ -140,6 +243,13 @@ func (p *Processor) UpdateConfig(ctx appctx.RequestContext, projectID, configID 
 				return model.ConfigEntry{}, model.Conflict(fmt.Sprintf("Config key %q already exists in %q", nextKey, entry.Environment))
 			}
 			entry.Key = nextKey
+			if req.ConfigFileID == nil {
+				configFileID, fileErr := p.resolveConfigFileID(projectID, entry.ConfigFileID, entry.Key)
+				if fileErr != nil {
+					return model.ConfigEntry{}, fileErr
+				}
+				entry.ConfigFileID = configFileID
+			}
 		}
 	}
 	if req.Value != nil {
@@ -161,10 +271,11 @@ func (p *Processor) UpdateConfig(ctx appctx.RequestContext, projectID, configID 
 
 	version := newVersion(entry.ID, &oldValue, entry.Value, ctx.ActorName(), util.Fallback(req.ChangeReason, "update config"))
 	audit := newAudit(ctx.ActorName(), "config.update", "config_entry", entry.ID, projectID, map[string]any{
-		"environment": entry.Environment,
-		"key":         entry.Key,
-		"valueType":   entry.ValueType,
-		"isSensitive": entry.IsSensitive,
+		"environment":  entry.Environment,
+		"configFileId": entry.ConfigFileID,
+		"key":          entry.Key,
+		"valueType":    entry.ValueType,
+		"isSensitive":  entry.IsSensitive,
 	})
 	if err := p.store.SaveConfig([]model.ConfigEntry{entry}, []model.ConfigVersion{version}, audit); err != nil {
 		logger.Config.Error("update config persistence failed")
@@ -173,6 +284,17 @@ func (p *Processor) UpdateConfig(ctx appctx.RequestContext, projectID, configID 
 
 	logger.Config.Info("config updated")
 	return entry, nil
+}
+
+func (p *Processor) resolveConfigFileID(projectID, requestedFileID, key string) (string, *model.ErrorDetail) {
+	p.store.EnsureProjectConfigFiles(projectID)
+	if requestedFileID != "" {
+		if _, ok := p.store.FindConfigFile(projectID, requestedFileID); !ok {
+			return "", model.NotFound(fmt.Sprintf("Config file %q not found", requestedFileID))
+		}
+		return requestedFileID, nil
+	}
+	return model.StandardConfigFileForKey(projectID, key, time.Now().UTC()).ID, nil
 }
 
 func (p *Processor) DeleteConfig(ctx appctx.RequestContext, projectID, configID string) (map[string]any, *model.ErrorDetail) {
@@ -462,6 +584,7 @@ func (p *Processor) ExtractConfigs(ctx appctx.RequestContext, projectID string, 
 }
 
 func (p *Processor) previewParsedConfigs(projectID, environment string, parsed []util.ParsedConfigEntry) ([]model.ConfigRevisionEntry, int, int, int) {
+	p.store.EnsureProjectConfigFiles(projectID)
 	entries := make([]model.ConfigRevisionEntry, 0, len(parsed))
 	created, updated, unchanged := 0, 0, 0
 	for _, parsedEntry := range parsed {
@@ -476,11 +599,13 @@ func (p *Processor) previewParsedConfigs(projectID, environment string, parsed [
 		} else {
 			created++
 		}
+		configFileID := model.StandardConfigFileForKey(projectID, parsedEntry.Key, time.Now().UTC()).ID
 		entries = append(entries, model.ConfigRevisionEntry{
-			Key:         parsedEntry.Key,
-			Value:       parsedEntry.Value,
-			ValueType:   parsedEntry.ValueType,
-			IsSensitive: isSensitive,
+			ConfigFileID: configFileID,
+			Key:          parsedEntry.Key,
+			Value:        parsedEntry.Value,
+			ValueType:    parsedEntry.ValueType,
+			IsSensitive:  isSensitive,
 		})
 	}
 	return entries, created, updated, unchanged
@@ -517,24 +642,36 @@ func (p *Processor) ImportConfigs(ctx appctx.RequestContext, projectID string, r
 		return nil, model.InvalidInput("No config entries found in file content")
 	}
 
+	p.store.EnsureProjectConfigFiles(projectID)
+	requestedConfigFileID := strings.TrimSpace(req.ConfigFileID)
+	if requestedConfigFileID != "" {
+		if _, ok := p.store.FindConfigFile(projectID, requestedConfigFileID); !ok {
+			return nil, model.NotFound(fmt.Sprintf("Config file %q not found", requestedConfigFileID))
+		}
+	}
 	entries := make([]model.ConfigEntry, 0, len(parsed))
 	versions := make([]model.ConfigVersion, 0, len(parsed))
 	created, updated, unchanged := 0, 0, 0
 	for _, parsedEntry := range parsed {
 		existing, ok := p.store.FindConfigByKey(projectID, environment, parsedEntry.Key)
+		configFileID := requestedConfigFileID
+		if configFileID == "" {
+			configFileID = model.StandardConfigFileForKey(projectID, parsedEntry.Key, time.Now().UTC()).ID
+		}
 		if !ok {
 			now := time.Now().UTC()
 			entry := model.ConfigEntry{
-				ID:          util.NewID("cfg"),
-				ProjectID:   projectID,
-				Environment: environment,
-				Key:         parsedEntry.Key,
-				Value:       parsedEntry.Value,
-				ValueType:   parsedEntry.ValueType,
-				IsSensitive: util.LooksSensitive(parsedEntry.Key),
-				UpdatedBy:   ctx.ActorName(),
-				CreatedAt:   now,
-				UpdatedAt:   now,
+				ID:           util.NewID("cfg"),
+				ProjectID:    projectID,
+				Environment:  environment,
+				ConfigFileID: configFileID,
+				Key:          parsedEntry.Key,
+				Value:        parsedEntry.Value,
+				ValueType:    parsedEntry.ValueType,
+				IsSensitive:  util.LooksSensitive(parsedEntry.Key),
+				UpdatedBy:    ctx.ActorName(),
+				CreatedAt:    now,
+				UpdatedAt:    now,
 			}
 			entries = append(entries, entry)
 			versions = append(versions, newVersion(entry.ID, nil, entry.Value, ctx.ActorName(), util.Fallback(req.ChangeReason, "import config file")))
@@ -548,6 +685,7 @@ func (p *Processor) ImportConfigs(ctx appctx.RequestContext, projectID string, r
 		}
 
 		oldValue := existing.Value
+		existing.ConfigFileID = configFileID
 		existing.Value = parsedEntry.Value
 		existing.ValueType = parsedEntry.ValueType
 		existing.IsSensitive = existing.IsSensitive || util.LooksSensitive(parsedEntry.Key)
@@ -559,11 +697,12 @@ func (p *Processor) ImportConfigs(ctx appctx.RequestContext, projectID string, r
 	}
 
 	audit := newAudit(ctx.ActorName(), "config.import", "config_file", "", projectID, map[string]any{
-		"environment": environment,
-		"format":      req.Format,
-		"created":     created,
-		"updated":     updated,
-		"unchanged":   unchanged,
+		"environment":  environment,
+		"format":       req.Format,
+		"configFileId": requestedConfigFileID,
+		"created":      created,
+		"updated":      updated,
+		"unchanged":    unchanged,
 	})
 	if err := p.store.SaveConfig(entries, versions, audit); err != nil {
 		logger.Config.Error("import configs persistence failed")

@@ -87,6 +87,8 @@ func demoSeedData() seedData {
 	}
 	for index := range entries {
 		entry := entries[index]
+		entry.ConfigFileID = model.StandardConfigFileForKey(project.ID, entry.Key, now).ID
+		entries[index].ConfigFileID = entry.ConfigFileID
 		seed.configs[entry.ID] = &entry
 		seed.versions = append(seed.versions, model.ConfigVersion{
 			ID:           util.NewID("ver"),

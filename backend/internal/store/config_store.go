@@ -140,10 +140,11 @@ func configRevisionFromEntries(projectID, environment, changedBy, reason string,
 			continue
 		}
 		revisionEntries = append(revisionEntries, model.ConfigRevisionEntry{
-			Key:         entry.Key,
-			Value:       entry.Value,
-			ValueType:   entry.ValueType,
-			IsSensitive: entry.IsSensitive,
+			ConfigFileID: entry.ConfigFileID,
+			Key:          entry.Key,
+			Value:        entry.Value,
+			ValueType:    entry.ValueType,
+			IsSensitive:  entry.IsSensitive,
 		})
 	}
 	sort.Slice(revisionEntries, func(i, j int) bool {
@@ -191,16 +192,17 @@ func buildRestoreChanges(projectID, environment string, revision model.ConfigRev
 		entry, ok := currentByKey[revisionEntry.Key]
 		if !ok {
 			newEntry := model.ConfigEntry{
-				ID:          util.NewID("cfg"),
-				ProjectID:   projectID,
-				Environment: environment,
-				Key:         revisionEntry.Key,
-				Value:       revisionEntry.Value,
-				ValueType:   revisionEntry.ValueType,
-				IsSensitive: revisionEntry.IsSensitive,
-				UpdatedBy:   actor,
-				CreatedAt:   now,
-				UpdatedAt:   now,
+				ID:           util.NewID("cfg"),
+				ProjectID:    projectID,
+				Environment:  environment,
+				ConfigFileID: revisionEntry.ConfigFileID,
+				Key:          revisionEntry.Key,
+				Value:        revisionEntry.Value,
+				ValueType:    revisionEntry.ValueType,
+				IsSensitive:  revisionEntry.IsSensitive,
+				UpdatedBy:    actor,
+				CreatedAt:    now,
+				UpdatedAt:    now,
 			}
 			upserts = append(upserts, newEntry)
 			versions = append(versions, newConfigVersion(newEntry.ID, nil, newEntry.Value, actor, reason))
@@ -208,6 +210,9 @@ func buildRestoreChanges(projectID, environment string, revision model.ConfigRev
 		}
 
 		oldValue := entry.Value
+		if revisionEntry.ConfigFileID != "" {
+			entry.ConfigFileID = revisionEntry.ConfigFileID
+		}
 		if entry.Value != revisionEntry.Value || entry.ValueType != revisionEntry.ValueType || entry.IsSensitive != revisionEntry.IsSensitive {
 			entry.Value = revisionEntry.Value
 			entry.ValueType = revisionEntry.ValueType

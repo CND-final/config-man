@@ -1,9 +1,5 @@
 import { api } from "./api.js";
-import {
-  loadCustomConfigFiles,
-  newCustomConfigFile,
-  saveCustomConfigFiles,
-} from "./configFiles.js";
+import { loadCustomConfigFiles, newCustomConfigFile, saveCustomConfigFiles } from "./configFiles.js";
 import { $, $all, showToast } from "./dom.js";
 import {
   loadCompareConfigs,
@@ -139,30 +135,34 @@ export function updateConfigFileSourceId(sourceId) {
   state.configFileSourceId = sourceId || "";
 }
 
-export function createConfigFile(event) {
+export async function createConfigFile(event) {
   event.preventDefault();
   const name = $("#newConfigFileName")?.value || "";
   const sourceType = state.configFileSourceType || "blank";
-  const sourceId =
-    state.configFileSourceId || $("#configFileSourceId")?.value || "";
+  const sourceId = state.configFileSourceId || $("#configFileSourceId")?.value || "";
   const source = configFileSource(sourceType, sourceId);
   const file = newCustomConfigFile(name, source);
   if (!file.name) {
     showToast("Config file name is required");
     return;
   }
-  loadCustomConfigFiles(state);
-  if (state.customConfigFiles.some((item) => item.id === file.id)) {
-    showToast(`${file.name} already exists`);
-    return;
-  }
-  state.customConfigFiles = [...state.customConfigFiles, file];
-  saveCustomConfigFiles(state);
-  state.activeConfigFile = file.id;
+  const sourceType = state.configFileSourceType || "blank";
+  const sourceId = state.configFileSourceId || $("#configFileSourceId")?.value || "";
+  const created = await api(`/projects/${project.id}/config-files`, {
+    method: "POST",
+    body: JSON.stringify({
+      name,
+      sourceType,
+      sourceId,
+      description: configFileSource(sourceType, sourceId).label,
+    }),
+  });
+  await loadConfigsAndHistory();
+  state.activeConfigFile = created.id;
   state.configFileCreateOpen = false;
   state.configFileDraftName = "";
   renderAll();
-  showToast(`${file.name} created`);
+  showToast(`${created.name} created`);
 }
 
 function configFileSource(sourceType, sourceId) {
@@ -265,6 +265,7 @@ export async function createConfigKey(event) {
 
   const bodyBase = {
     key,
+    configFileId: state.activeConfigFile,
     valueType: $("#newConfigValueType").value,
     isSensitive: $("#newConfigSensitive").checked,
     changeReason: reason,
@@ -852,6 +853,7 @@ export async function applyTemplate() {
     method: "POST",
     body: JSON.stringify({
       environment: state.activeEnvironment,
+      configFileId: state.activeConfigFile,
       format: sourceFormat,
       content,
     }),
@@ -867,6 +869,7 @@ export async function applyTemplate() {
     format: outputFormat,
     projectId: project.id,
     environment: state.activeEnvironment,
+    configFileId: state.activeConfigFile,
   };
   state.templateModalOpen = false;
   state.importPreviewOpen = true;
@@ -1184,6 +1187,7 @@ export async function extractConfigFile() {
     method: "POST",
     body: JSON.stringify({
       environment: state.activeEnvironment,
+      configFileId: state.activeConfigFile,
       format,
       content,
     }),
@@ -1196,6 +1200,7 @@ export async function extractConfigFile() {
     format,
     projectId: project.id,
     environment: state.activeEnvironment,
+    configFileId: state.activeConfigFile,
   };
   state.importPreviewOpen = true;
   setImportModal(false);
@@ -1217,6 +1222,7 @@ export async function applyImportPreview() {
       method: "POST",
       body: JSON.stringify({
         environment: preview.environment,
+        configFileId: preview.configFileId || state.activeConfigFile,
         format: preview.format,
         content: preview.content,
         changeReason: `import ${preview.fileName}`,

@@ -12,6 +12,18 @@ import (
 func (s *Server) getConfigRoutes() Routes {
 	return Routes{
 		{
+			Name:    "ListConfigFiles",
+			Method:  http.MethodGet,
+			Pattern: "/projects/:projectId/config-files",
+			APIFunc: s.handleListConfigFiles,
+		},
+		{
+			Name:    "CreateConfigFile",
+			Method:  http.MethodPost,
+			Pattern: "/projects/:projectId/config-files",
+			APIFunc: s.handleCreateConfigFile,
+		},
+		{
 			Name:    "ListConfigs",
 			Method:  http.MethodGet,
 			Pattern: "/projects/:projectId/configs",
@@ -72,6 +84,34 @@ func (s *Server) getConfigRoutes() Routes {
 			APIFunc: s.handleDeleteConfig,
 		},
 	}
+}
+
+func (s *Server) handleListConfigFiles(c *gin.Context) {
+	reqCtx := requestContextFromGin(c)
+
+	payload, appErr := s.processor.ListConfigFiles(reqCtx, c.Param("projectId"))
+	if appErr != nil {
+		response.WriteError(c, appErr)
+		return
+	}
+	response.WriteJSON(c, http.StatusOK, payload)
+}
+
+func (s *Server) handleCreateConfigFile(c *gin.Context) {
+	reqCtx := requestContextFromGin(c)
+
+	var req model.CreateConfigFileRequest
+	if err := response.DecodeJSON(c, &req); err != nil {
+		response.WriteError(c, err)
+		return
+	}
+
+	file, appErr := s.processor.CreateConfigFile(reqCtx, c.Param("projectId"), req)
+	if appErr != nil {
+		response.WriteError(c, appErr)
+		return
+	}
+	response.WriteJSON(c, http.StatusCreated, file)
 }
 
 func (s *Server) handleListConfigs(c *gin.Context) {

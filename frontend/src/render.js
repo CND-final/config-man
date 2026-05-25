@@ -694,7 +694,7 @@ export function renderConfigFileList() {
             <h3>${escapeHtml(file.name)}</h3>
             <p class="project-meta">
               <span>${file.count} ${file.count === 1 ? "key" : "keys"}</span>
-              <span>${escapeHtml(file.detail)}</span>
+              <span>${escapeHtml(file.description || file.detail || file.sourceType || "Config file")}</span>
             </p>
           </div>
         </button>

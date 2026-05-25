@@ -1,5 +1,4 @@
 import { api } from "./api.js";
-import { loadCustomConfigFiles } from "./configFiles.js";
 import { activeProject, normalizeProject, state } from "./state.js";
 
 export async function loadInitialData() {
@@ -22,8 +21,6 @@ export async function loadInitialData() {
   if (!state.activeProjectId && state.projects[0]) {
     state.activeProjectId = state.projects[0].id;
   }
-  loadCustomConfigFiles(state);
-
   const project = activeProject();
   if (project && !project.environments.includes(state.activeEnvironment)) {
     state.activeEnvironment = project.environments[0];
@@ -88,6 +85,7 @@ export async function loadConfigs(revealSensitive = false) {
       state.activeEnvironment,
     )}${revealSensitive ? "&revealSensitive=true" : ""}`,
   );
+  state.configFiles = data.files || [];
   state.configs = data.entries.map((entry) => ({
     ...entry,
     updated: entry.updatedBy,
@@ -141,6 +139,9 @@ export async function loadCompareConfigs() {
             "/configs?env=" +
             encodeURIComponent(environment),
         );
+        if (environment === state.activeEnvironment) {
+          state.configFiles = data.files || state.configFiles;
+        }
         return [
           environment,
           data.entries.map((entry) => ({
