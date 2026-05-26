@@ -21,16 +21,16 @@ type CreateTemplateRequest struct {
 	Body        string `json:"body"`
 }
 
-type CreateConfigFileRequest struct {
+type CreateConfigRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	SourceType  string `json:"sourceType"`
 	SourceID    string `json:"sourceId"`
 }
 
-type CreateConfigRequest struct {
+type CreateConfigEntryRequest struct {
 	Environment  string `json:"environment"`
-	ConfigFileID string `json:"configFileId"`
+	ConfigID     string `json:"configId"`
 	Key          string `json:"key"`
 	Value        string `json:"value"`
 	ValueType    string `json:"valueType"`
@@ -38,8 +38,8 @@ type CreateConfigRequest struct {
 	ChangeReason string `json:"changeReason"`
 }
 
-type UpdateConfigRequest struct {
-	ConfigFileID *string `json:"configFileId"`
+type UpdateConfigEntryRequest struct {
+	ConfigID     *string `json:"configId"`
 	Key          *string `json:"key"`
 	Value        *string `json:"value"`
 	ValueType    *string `json:"valueType"`
@@ -60,7 +60,7 @@ type RollbackConfigRevisionRequest struct {
 
 type ImportConfigRequest struct {
 	Environment  string `json:"environment"`
-	ConfigFileID string `json:"configFileId"`
+	ConfigID     string `json:"configId"`
 	Format       string `json:"format"`
 	Content      string `json:"content"`
 	ChangeReason string `json:"changeReason"`

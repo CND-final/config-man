@@ -1,7 +1,6 @@
 import { $ } from "./dom.js";
 import {
   configFileForEntry,
-  configFilesForEntries,
   configsForActiveFile,
   ensureActiveConfigFile,
 } from "./configFiles.js";
@@ -150,7 +149,7 @@ function matchesConfigSearch(config) {
     config.environment,
     config.updatedBy,
     config.valueType,
-    file.name,
+    file?.name || "",
   ];
   return includesSearch(values, local) && includesSearch(values, global);
 }
@@ -553,12 +552,14 @@ export function renderProjects() {
 export function renderTemplates() {
   const action = $("#openTemplateCreate");
   if (action) {
-    action.textContent = state.templatePickerActive ? "Cancel" : "New Template";
-    action.className = state.templatePickerActive
+    action.textContent = state.configSourcePickerActive ? "Cancel" : "New Template";
+    action.className = state.configSourcePickerActive
       ? "secondary-action"
       : "primary-action";
     const canCreateSharedConfig =
-      state.libraryTab === "shared-config" && isSystemView();
+      !state.configSourcePickerActive &&
+      state.libraryTab === "shared-config" &&
+      isSystemView();
     action.textContent = canCreateSharedConfig
       ? "New Global Shared Config"
       : action.textContent;
@@ -589,7 +590,7 @@ export function renderTemplates() {
 }
 
 function renderTemplateCard(template) {
-  const canPick = state.templatePickerActive && template.body;
+  const canPick = state.configSourcePickerActive && state.libraryTab === "templates" && template.body;
   const tag = canPick ? "button" : "article";
   const typeAttr = canPick ? ' type="button"' : "";
   const pickAttr = canPick
@@ -618,15 +619,19 @@ function renderTemplateCard(template) {
 
 function renderSharedConfigCard(item) {
   const scope = libraryScopeLabel(item);
+  const canPick = state.configSourcePickerActive && state.libraryTab === "shared-config";
+  const tag = canPick ? "button" : "article";
+  const typeAttr = canPick ? ' type="button"' : "";
+  const pickAttr = canPick ? ` data-pick-shared-config="${escapeHtml(item.id)}"` : "";
   return `
-    <article class="template-card shared-config-card">
+    <${tag} class="template-card shared-config-card ${canPick ? "template-card-button" : ""}"${typeAttr}${pickAttr}>
       <div class="card-top">
         <div class="card-title">
           <h3>${escapeHtml(item.name)}</h3>
           <p>${escapeHtml(item.description || "Config inherited by projects")}</p>
         </div>
         <div class="template-badges shared-card-tools">
-          ${isSystemView() && scope === "Global" ? `<button class="icon-button small-icon-button" type="button" aria-label="Edit ${escapeHtml(item.name)}" title="Edit" data-edit-shared-config="${escapeHtml(item.id)}"><span aria-hidden="true">✎</span></button>` : ""}
+          ${!canPick && isSystemView() && scope === "Global" ? `<button class="icon-button small-icon-button" type="button" aria-label="Edit ${escapeHtml(item.name)}" title="Edit" data-edit-shared-config="${escapeHtml(item.id)}"><span aria-hidden="true">✎</span></button>` : ""}
           <span class="library-pill type">Shared Config</span>
           ${renderLibraryScopePill(scope)}
         </div>
@@ -641,9 +646,9 @@ function renderSharedConfigCard(item) {
       </div>
       <p class="project-meta"><span>Updated by ${escapeHtml(item.updatedBy || "System")}</span></p>
       <div class="template-card-actions">
-        ${isSystemView() && scope === "Global" ? `<button class="ghost-action danger-action" type="button" data-delete-shared-config="${escapeHtml(item.id)}">Delete</button>` : ""}
+        ${!canPick && isSystemView() && scope === "Global" ? `<button class="ghost-action danger-action" type="button" data-delete-shared-config="${escapeHtml(item.id)}">Delete</button>` : ""}
       </div>
-    </article>
+    </${tag}>
   `;
 }
 
@@ -681,27 +686,30 @@ function projectTemplateName(templateId) {
   );
 }
 
+
 export function renderConfigFileList() {
   ensureActiveConfigFile(state);
   const createForm = state.configFileCreateOpen
     ? renderConfigFileCreateForm()
     : "";
-  const files = configFilesForEntries(configEntriesForFileList(), state)
-    .map(
-      (file) => `
+  const files = (state.configFiles || [])
+    .map((file) => {
+      const count = file.entries?.length ?? 0;
+      return `
         <button class="compact-item config-file-item ${file.id === state.activeConfigFile ? "active" : ""}" type="button" data-select-config-file="${escapeHtml(file.id)}">
           <div>
             <h3>${escapeHtml(file.name)}</h3>
             <p class="project-meta">
-              <span>${file.count} ${file.count === 1 ? "key" : "keys"}</span>
+              <span>${count} ${count === 1 ? "key" : "keys"}</span>
               <span>${escapeHtml(file.description || file.detail || file.sourceType || "Config file")}</span>
             </p>
           </div>
         </button>
-      `,
-    )
+      `;
+    })
     .join("");
-  $("#configProjectList").innerHTML = `${createForm}${files}`;
+  const empty = !files && !createForm ? `<p class="project-meta config-empty-state">No configs yet.</p>` : "";
+  $("#configProjectList").innerHTML = `${createForm}${files}${empty}`;
 }
 
 function renderConfigFileCreateForm() {
@@ -709,44 +717,23 @@ function renderConfigFileCreateForm() {
   return `
     <form id="configFileCreateForm" class="config-file-create-form">
       <input id="newConfigFileName" type="text" autocomplete="off" placeholder="database.yaml" value="${escapeHtml(state.configFileDraftName || "")}" required />
-      <select id="configFileSourceType" aria-label="Config file source">
-        <option value="blank" ${sourceType === "blank" ? "selected" : ""}>Blank</option>
-        <option value="template" ${sourceType === "template" ? "selected" : ""}>Template</option>
-        <option value="shared-config" ${sourceType === "shared-config" ? "selected" : ""}>Shared Config</option>
-      </select>
+      <div class="template-choice-row config-source-choice">
+        <button class="secondary-action ${sourceType === "blank" ? "active" : ""}" type="button" data-config-source-type="blank">Blank</button>
+        <button class="secondary-action ${sourceType === "template" ? "active" : ""}" type="button" data-open-config-source-picker="template">Choose Template</button>
+        <button class="secondary-action ${sourceType === "shared-config" ? "active" : ""}" type="button" data-open-config-source-picker="shared-config">Choose Shared Config</button>
+      </div>
       ${renderConfigFileSourcePicker(sourceType)}
     </form>
   `;
 }
 
 function renderConfigFileSourcePicker(sourceType) {
-  const items =
-    sourceType === "template"
-      ? state.templates
-      : sourceType === "shared-config"
-        ? state.sharedConfigs
-        : [];
-  if (!items.length) return "";
-  return `
-    <select id="configFileSourceId" aria-label="Source item">
-      <option value="">No source selected</option>
-      ${items
-        .map(
-          (item) =>
-            `<option value="${escapeHtml(item.id)}" ${item.id === state.configFileSourceId ? "selected" : ""}>${escapeHtml(item.name || item.id)}</option>`,
-        )
-        .join("")}
-    </select>
-  `;
+  if (sourceType === "blank") return `<p class="project-meta">Blank config.</p>`;
+  const items = sourceType === "template" ? state.templates : state.sharedConfigs;
+  const selected = items.find((item) => item.id === state.configFileSourceId);
+  return `<p class="project-meta">${selected ? escapeHtml(selected.name || selected.id) : "No source selected."}</p>`;
 }
 
-function configEntriesForFileList() {
-  if (state.configMode !== "compare") return state.configs;
-  return [
-    ...(state.compareConfigs[state.compareSourceEnv] || []),
-    ...(state.compareConfigs[state.compareTargetEnv] || []),
-  ];
-}
 
 export function renderEnvironmentTabs() {
   const project = activeProject();
@@ -826,35 +813,24 @@ function renderEnvironmentOptions(environments, selected) {
     .join("");
 }
 
-export function renderProjectTemplateOptions() {
-  const summary = $("#projectTemplateSelection");
-  const clearButton = $("#clearProjectTemplate");
+export function renderProjectFormOptions() {
   const groupSelect = $("#projectGroup");
-  if (!summary) return;
-
-  const selection = state.projectTemplateSelection;
-  summary.textContent = selection
-    ? `${selection.templateName} · ${selection.outputFormat}`
-    : "No template selected.";
-  if (clearButton) {
-    clearButton.classList.toggle("hidden", !selection);
-  }
-  if (groupSelect) {
-    const current = groupSelect.value || state.projectDraft?.groupId || "";
-    groupSelect.innerHTML = [
-      `<option value="" disabled ${current ? "" : "selected"}>Select group</option>`,
-      ...state.groups.map(
-        (group) =>
-          `<option value="${escapeHtml(group.id)}" ${group.id === current ? "selected" : ""}>${escapeHtml(group.name || group.id)}</option>`,
-      ),
-    ].join("");
-    if (current && state.groups.some((group) => group.id === current)) {
-      groupSelect.value = current;
-    } else if (!current && state.groups.length === 1) {
-      groupSelect.value = state.groups[0].id;
-    }
+  if (!groupSelect) return;
+  const current = groupSelect.value || state.projectDraft?.groupId || "";
+  groupSelect.innerHTML = [
+    `<option value="" disabled ${current ? "" : "selected"}>Select group</option>`,
+    ...state.groups.map(
+      (group) =>
+        `<option value="${escapeHtml(group.id)}" ${group.id === current ? "selected" : ""}>${escapeHtml(group.name || group.id)}</option>`,
+    ),
+  ].join("");
+  if (current && state.groups.some((group) => group.id === current)) {
+    groupSelect.value = current;
+  } else if (!current && state.groups.length === 1) {
+    groupSelect.value = state.groups[0].id;
   }
 }
+
 
 export function renderConfigRows(renderShell = true) {
   const project = activeProject();
@@ -880,7 +856,7 @@ export function renderConfigRows(renderShell = true) {
 
   $("#configRows").innerHTML =
     rows.map(renderConfigRowMarkup).join("") ||
-    `<tr><td colspan="3" class="value-cell">No config keys match this view.</td></tr>`;
+    `<tr><td colspan="3" class="value-cell">${state.activeConfigFile ? "No config keys match this view." : "No config selected. Add a config first."}</td></tr>`;
   renderReviewDock();
 }
 
@@ -1313,9 +1289,7 @@ export function renderTemplateModal() {
 
   const template = activeTemplate();
   const project = activeProject();
-  const targetName = state.templatePickerActive
-    ? state.projectDraft?.name || "New Project"
-    : project?.name || "No project selected";
+  const targetName = project?.name || "No project selected";
   if (!template) return;
 
   $("#templateModalTitle").textContent = template.name;
@@ -1324,9 +1298,7 @@ export function renderTemplateModal() {
     <span>${escapeHtml(targetName)}</span>
     <span>${escapeHtml(state.activeEnvironment)}</span>
   `;
-  $("#confirmApplyTemplate").textContent = state.templatePickerActive
-    ? "Use Template"
-    : "Extract Config";
+  $("#confirmApplyTemplate").textContent = "Extract Config";
   $("#templateVariableList").innerHTML =
     template.variables
       .map(
@@ -1929,7 +1901,7 @@ export function renderAll() {
   renderDashboard();
   renderProjects();
   renderTemplates();
-  renderProjectTemplateOptions();
+  renderProjectFormOptions();
   renderTemplateModal();
   renderTemplateCreateModal();
   renderSharedConfigCreateModal();

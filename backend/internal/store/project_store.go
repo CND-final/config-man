@@ -34,11 +34,7 @@ func (s *Store) ProjectNameExists(name string) bool {
 }
 
 func (s *Store) SaveProject(project model.Project, audit model.AuditLog) error {
-	if err := s.db.SaveProject(context.Background(), project, audit); err != nil {
-		return err
-	}
-	s.ensureStandardConfigFiles(project.ID)
-	return nil
+	return s.db.SaveProject(context.Background(), project, audit)
 }
 
 func (s *Store) SaveProjectMembers(projectID string, members []model.ProjectMember, audit model.AuditLog) error {

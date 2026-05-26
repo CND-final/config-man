@@ -15,12 +15,11 @@ import {
   addGroupMember,
   applyImportPreview,
   applyTemplate,
-  cancelProjectTemplatePicker,
-  chooseProjectTemplate,
-  clearProjectTemplateSelection,
+  cancelConfigSourcePicker,
+  chooseConfigSource,
   openExportConfig,
   openGroupPanel,
-  openProjectTemplatePicker,
+  openConfigSourcePicker,
   openVersionHistory,
   rollbackLatestVersion,
   setConfigCreateDrawer,
@@ -53,7 +52,6 @@ import {
   switchView,
   updateGroupCreateMemberSearch,
   updateConfigFileDraftName,
-  updateConfigFileSourceId,
   updateConfigFileSourceType,
   updateGroupMemberRole,
   updateGroupMemberSearch,
@@ -125,18 +123,6 @@ export function bindEvents() {
     const member = event.target.closest("[data-group-member-option]");
     if (member) {
       toggleGroupMemberSelection(member.value, member.checked);
-      return;
-    }
-
-    const configFileSourceType = event.target.closest("#configFileSourceType");
-    if (configFileSourceType) {
-      updateConfigFileSourceType(configFileSourceType.value);
-      return;
-    }
-
-    const configFileSourceId = event.target.closest("#configFileSourceId");
-    if (configFileSourceId) {
-      updateConfigFileSourceId(configFileSourceId.value);
       return;
     }
 
@@ -396,6 +382,16 @@ async function handleDocumentClick(event) {
       return;
     }
 
+    if (target.dataset.configSourceType) {
+      updateConfigFileSourceType(target.dataset.configSourceType);
+      return;
+    }
+
+    if (target.dataset.openConfigSourcePicker) {
+      openConfigSourcePicker(target.dataset.openConfigSourcePicker);
+      return;
+    }
+
     if (target.dataset.configMode) {
       await setConfigMode(target.dataset.configMode);
       return;
@@ -407,23 +403,13 @@ async function handleDocumentClick(event) {
       return;
     }
 
-    if (target.id === "chooseProjectTemplate") {
-      openProjectTemplatePicker();
-      return;
-    }
-
-    if (target.id === "clearProjectTemplate") {
-      clearProjectTemplateSelection();
-      return;
-    }
-
     if (target.id === "openTemplateCreate") {
       if (state.libraryTab === "shared-config") {
         setSharedConfigCreateModal(true);
         return;
       }
-      if (state.templatePickerActive) {
-        cancelProjectTemplatePicker();
+      if (state.configSourcePickerActive) {
+        cancelConfigSourcePicker();
         return;
       }
       setTemplateCreateModal(true);
@@ -446,7 +432,12 @@ async function handleDocumentClick(event) {
     }
 
     if (target.dataset.pickTemplate) {
-      chooseProjectTemplate(target.dataset.pickTemplate);
+      chooseConfigSource("template", target.dataset.pickTemplate);
+      return;
+    }
+
+    if (target.dataset.pickSharedConfig) {
+      chooseConfigSource("shared-config", target.dataset.pickSharedConfig);
       return;
     }
 

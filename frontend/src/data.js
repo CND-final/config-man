@@ -85,8 +85,8 @@ export async function loadConfigs(revealSensitive = false) {
       state.activeEnvironment,
     )}${revealSensitive ? "&revealSensitive=true" : ""}`,
   );
-  state.configFiles = data.files || [];
-  state.configs = data.entries.map((entry) => ({
+  state.configFiles = configsFromPayload(data);
+  state.configs = entriesFromConfigPayload(data).map((entry) => ({
     ...entry,
     updated: entry.updatedBy,
   }));
@@ -99,6 +99,24 @@ export async function loadConfigs(revealSensitive = false) {
     );
     state.pendingReviewChanges = [];
   }
+}
+
+function configsFromPayload(data) {
+  const configs = Array.isArray(data?.configs) ? data.configs : data?.files || [];
+  return configs.map((config) => ({
+    ...config,
+    entries: (config.entries || []).map((entry) => ({
+      ...entry,
+      updated: entry.updatedBy,
+    })),
+  }));
+}
+
+function entriesFromConfigPayload(data) {
+  if (Array.isArray(data?.configs)) {
+    return data.configs.flatMap((config) => config.entries || []);
+  }
+  return data?.entries || [];
 }
 
 function baselineConfig(entry) {
@@ -140,11 +158,11 @@ export async function loadCompareConfigs() {
             encodeURIComponent(environment),
         );
         if (environment === state.activeEnvironment) {
-          state.configFiles = data.files || state.configFiles;
+          state.configFiles = configsFromPayload(data) || state.configFiles;
         }
         return [
           environment,
-          data.entries.map((entry) => ({
+          entriesFromConfigPayload(data).map((entry) => ({
             ...entry,
             updated: entry.updatedBy,
           })),

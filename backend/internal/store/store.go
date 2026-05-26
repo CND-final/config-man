@@ -33,12 +33,9 @@ func NewStoreWithDB(ctx context.Context, db *sql.DB) (*Store, error) {
 	}
 	if !hasProjects {
 		seed := demoSeedData()
-		if err := client.SaveSeedData(ctx, seed.groups, seed.projects, seed.configs, seed.reviews, seed.templates, seed.versions, seed.revisions, seed.audits); err != nil {
+		if err := client.SaveSeedData(ctx, seed.groups, seed.projects, seed.configFiles, seed.configs, seed.reviews, seed.templates, seed.versions, seed.revisions, seed.audits); err != nil {
 			return nil, err
 		}
-	}
-	for _, project := range store.ListProjects() {
-		store.EnsureProjectConfigFiles(project.ID)
 	}
 	store.ensureDefaultSharedConfigs()
 	return store, nil

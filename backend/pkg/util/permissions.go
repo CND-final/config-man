@@ -96,7 +96,7 @@ func CanRevealProjectSensitive(user model.User, members []model.ProjectMember) b
 	return role == model.RoleProjectMemberAdmin || role == model.RoleProjectDeveloper
 }
 
-func CanManageProjectConfigFiles(user model.User, members []model.ProjectMember) bool {
+func CanManageProjectConfigs(user model.User, members []model.ProjectMember) bool {
 	if user.Role == model.RoleSystemAdmin {
 		return true
 	}

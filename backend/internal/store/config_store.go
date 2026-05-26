@@ -2,245 +2,31 @@ package store
 
 import (
 	"context"
-	"fmt"
-	"sort"
-	"time"
 
 	"config-man/backend/model"
-	"config-man/backend/pkg/util"
 )
 
-func (s *Store) ListConfigEntries(projectID, environment string) []model.ConfigEntry {
-	entries, err := s.db.ListConfigEntries(context.Background(), projectID, environment)
+func (s *Store) ListConfigs(projectID string) []model.Config {
+	configs, err := s.db.ListConfigs(context.Background(), projectID)
 	if err != nil {
 		return nil
 	}
-	return entries
+	return configs
 }
 
-func (s *Store) FindConfig(projectID, configID string) (model.ConfigEntry, bool) {
-	entry, ok, err := s.db.FindConfig(context.Background(), projectID, configID)
+func (s *Store) FindConfig(projectID, configID string) (model.Config, bool) {
+	config, ok, err := s.db.FindConfig(context.Background(), projectID, configID)
 	if err != nil {
-		return model.ConfigEntry{}, false
+		return model.Config{}, false
 	}
-	return entry, ok
+	return config, ok
 }
 
-func (s *Store) FindConfigByKey(projectID, environment, key string) (model.ConfigEntry, bool) {
-	entry, ok, err := s.db.FindConfigByKey(context.Background(), projectID, environment, key)
-	if err != nil {
-		return model.ConfigEntry{}, false
-	}
-	return entry, ok
+func (s *Store) ConfigNameExists(projectID, name string) bool {
+	exists, err := s.db.ConfigNameExists(context.Background(), projectID, name)
+	return err == nil && exists
 }
 
-func (s *Store) ListConfigVersions(configID string) []model.ConfigVersion {
-	versions, err := s.db.ListConfigVersions(context.Background(), configID)
-	if err != nil {
-		return nil
-	}
-	return versions
-}
-
-func (s *Store) SaveConfig(entries []model.ConfigEntry, versions []model.ConfigVersion, audit model.AuditLog) error {
-	revision, err := s.revisionForConfigChanges(entries, versions, audit)
-	if err != nil {
-		return err
-	}
-	return s.db.SaveConfigChanges(context.Background(), entries, versions, revision, audit)
-}
-
-func (s *Store) DeleteConfig(projectID, configID string, audit model.AuditLog) (model.ConfigEntry, bool, error) {
-	deleted, ok, err := s.db.FindConfig(context.Background(), projectID, configID)
-	if err != nil || !ok {
-		return model.ConfigEntry{}, ok, err
-	}
-	entries, err := s.db.ListConfigEntries(context.Background(), deleted.ProjectID, deleted.Environment)
-	if err != nil {
-		return model.ConfigEntry{}, false, err
-	}
-	revision := configRevisionFromEntries(deleted.ProjectID, deleted.Environment, audit.Actor, audit.Action, entries, configID)
-	return deleted, true, s.db.DeleteConfig(context.Background(), configID, revision, audit)
-}
-
-func (s *Store) ListConfigRevisions(projectID, environment string) []model.ConfigRevision {
-	revisions, err := s.db.ListConfigRevisions(context.Background(), projectID, environment)
-	if err != nil {
-		return nil
-	}
-	return revisions
-}
-
-func (s *Store) RestoreConfigRevision(projectID, environment string, revision model.ConfigRevision, actor, reason string, audit model.AuditLog) error {
-	currentEntries, err := s.db.ListConfigEntries(context.Background(), projectID, environment)
-	if err != nil {
-		return err
-	}
-	upserts, deleteIDs, versions := buildRestoreChanges(projectID, environment, revision, currentEntries, actor, reason)
-	nextRevision := configRevisionFromRevision(projectID, environment, actor, reason, revision)
-	return s.restoreConfigDB(projectID, environment, upserts, deleteIDs, versions, nextRevision, audit)
-}
-
-func (s *Store) restoreConfigDB(projectID, environment string, upserts []model.ConfigEntry, deleteIDs []string, versions []model.ConfigVersion, revision model.ConfigRevision, audit model.AuditLog) error {
-	if projectID == "" || environment == "" {
-		return fmt.Errorf("projectID and environment are required")
-	}
-	return s.db.RestoreConfig(context.Background(), upserts, deleteIDs, versions, revision, audit)
-}
-
-func (s *Store) revisionForConfigChanges(entries []model.ConfigEntry, versions []model.ConfigVersion, audit model.AuditLog) (model.ConfigRevision, error) {
-	if len(entries) == 0 {
-		return model.ConfigRevision{}, nil
-	}
-	projectID := entries[0].ProjectID
-	environment := entries[0].Environment
-	currentEntries, err := s.db.ListConfigEntries(context.Background(), projectID, environment)
-	if err != nil {
-		return model.ConfigRevision{}, err
-	}
-	changedBy := audit.Actor
-	changeReason := audit.Action
-	if len(versions) > 0 {
-		changedBy = versions[0].ChangedBy
-		changeReason = versions[0].ChangeReason
-	}
-	return configRevisionFromEntries(projectID, environment, changedBy, changeReason, mergeChangedEntries(currentEntries, entries), ""), nil
-}
-
-func mergeChangedEntries(currentEntries, changedEntries []model.ConfigEntry) []model.ConfigEntry {
-	changedByID := make(map[string]model.ConfigEntry, len(changedEntries))
-	for _, entry := range changedEntries {
-		changedByID[entry.ID] = entry
-	}
-
-	merged := make([]model.ConfigEntry, 0, len(currentEntries)+len(changedEntries))
-	seen := make(map[string]bool, len(currentEntries)+len(changedEntries))
-	for _, entry := range currentEntries {
-		if changed, ok := changedByID[entry.ID]; ok {
-			merged = append(merged, changed)
-			seen[entry.ID] = true
-			continue
-		}
-		merged = append(merged, entry)
-		seen[entry.ID] = true
-	}
-	for _, entry := range changedEntries {
-		if !seen[entry.ID] {
-			merged = append(merged, entry)
-			seen[entry.ID] = true
-		}
-	}
-	return merged
-}
-
-func configRevisionFromEntries(projectID, environment, changedBy, reason string, entries []model.ConfigEntry, excludeConfigID string) model.ConfigRevision {
-	revisionEntries := make([]model.ConfigRevisionEntry, 0, len(entries))
-	for _, entry := range entries {
-		if excludeConfigID != "" && entry.ID == excludeConfigID {
-			continue
-		}
-		revisionEntries = append(revisionEntries, model.ConfigRevisionEntry{
-			ConfigFileID: entry.ConfigFileID,
-			Key:          entry.Key,
-			Value:        entry.Value,
-			ValueType:    entry.ValueType,
-			IsSensitive:  entry.IsSensitive,
-		})
-	}
-	sort.Slice(revisionEntries, func(i, j int) bool {
-		return revisionEntries[i].Key < revisionEntries[j].Key
-	})
-	return model.ConfigRevision{
-		ID:           util.NewID("rev"),
-		ProjectID:    projectID,
-		Environment:  environment,
-		Entries:      revisionEntries,
-		ChangedBy:    changedBy,
-		ChangeReason: reason,
-		CreatedAt:    time.Now().UTC(),
-	}
-}
-
-func configRevisionFromRevision(projectID, environment, changedBy, reason string, sourceRevision model.ConfigRevision) model.ConfigRevision {
-	revision := model.ConfigRevision{
-		ID:           util.NewID("rev"),
-		ProjectID:    projectID,
-		Environment:  environment,
-		Entries:      append([]model.ConfigRevisionEntry(nil), sourceRevision.Entries...),
-		ChangedBy:    changedBy,
-		ChangeReason: reason,
-		CreatedAt:    time.Now().UTC(),
-	}
-	sort.Slice(revision.Entries, func(i, j int) bool {
-		return revision.Entries[i].Key < revision.Entries[j].Key
-	})
-	return revision
-}
-
-func buildRestoreChanges(projectID, environment string, revision model.ConfigRevision, currentEntries []model.ConfigEntry, actor, reason string) ([]model.ConfigEntry, []string, []model.ConfigVersion) {
-	currentByKey := make(map[string]model.ConfigEntry, len(currentEntries))
-	for _, entry := range currentEntries {
-		currentByKey[entry.Key] = entry
-	}
-
-	now := time.Now().UTC()
-	upserts := make([]model.ConfigEntry, 0, len(revision.Entries))
-	versions := make([]model.ConfigVersion, 0)
-	restoredKeys := make(map[string]bool, len(revision.Entries))
-	for _, revisionEntry := range revision.Entries {
-		restoredKeys[revisionEntry.Key] = true
-		entry, ok := currentByKey[revisionEntry.Key]
-		if !ok {
-			newEntry := model.ConfigEntry{
-				ID:           util.NewID("cfg"),
-				ProjectID:    projectID,
-				Environment:  environment,
-				ConfigFileID: revisionEntry.ConfigFileID,
-				Key:          revisionEntry.Key,
-				Value:        revisionEntry.Value,
-				ValueType:    revisionEntry.ValueType,
-				IsSensitive:  revisionEntry.IsSensitive,
-				UpdatedBy:    actor,
-				CreatedAt:    now,
-				UpdatedAt:    now,
-			}
-			upserts = append(upserts, newEntry)
-			versions = append(versions, newConfigVersion(newEntry.ID, nil, newEntry.Value, actor, reason))
-			continue
-		}
-
-		oldValue := entry.Value
-		if revisionEntry.ConfigFileID != "" {
-			entry.ConfigFileID = revisionEntry.ConfigFileID
-		}
-		if entry.Value != revisionEntry.Value || entry.ValueType != revisionEntry.ValueType || entry.IsSensitive != revisionEntry.IsSensitive {
-			entry.Value = revisionEntry.Value
-			entry.ValueType = revisionEntry.ValueType
-			entry.IsSensitive = revisionEntry.IsSensitive
-			entry.UpdatedBy = actor
-			entry.UpdatedAt = now
-			upserts = append(upserts, entry)
-			versions = append(versions, newConfigVersion(entry.ID, &oldValue, entry.Value, actor, reason))
-		}
-	}
-
-	deleteIDs := make([]string, 0)
-	for _, entry := range currentEntries {
-		if !restoredKeys[entry.Key] {
-			deleteIDs = append(deleteIDs, entry.ID)
-		}
-	}
-	return upserts, deleteIDs, versions
-}
-
-func newConfigVersion(configID string, oldValue *string, newValue, changedBy, reason string) model.ConfigVersion {
-	return model.ConfigVersion{
-		ID:           util.NewID("ver"),
-		ConfigID:     configID,
-		OldValue:     oldValue,
-		NewValue:     newValue,
-		ChangedBy:    changedBy,
-		ChangeReason: reason,
-		CreatedAt:    time.Now().UTC(),
-	}
+func (s *Store) SaveConfig(config model.Config, audit model.AuditLog) error {
+	return s.db.SaveConfig(context.Background(), config, audit)
 }

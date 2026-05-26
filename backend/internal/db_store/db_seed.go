@@ -8,7 +8,7 @@ import (
 	"config-man/backend/model"
 )
 
-func (s *Store) SaveSeedData(ctx context.Context, groups map[string]*model.Group, projects map[string]*model.Project, configs map[string]*model.ConfigEntry, reviews map[string]*model.ReviewRequest, templates map[string]*model.Template, versions []model.ConfigVersion, revisions []model.ConfigRevision, audits []model.AuditLog) error {
+func (s *Store) SaveSeedData(ctx context.Context, groups map[string]*model.Group, projects map[string]*model.Project, configFiles map[string]*model.Config, configs map[string]*model.ConfigEntry, reviews map[string]*model.ReviewRequest, templates map[string]*model.Template, versions []model.ConfigVersion, revisions []model.ConfigRevision, audits []model.AuditLog) error {
 	return s.withTx(ctx, func(tx *sql.Tx) error {
 		for _, group := range groups {
 			if _, err := tx.ExecContext(ctx, `INSERT INTO groups (id, name) VALUES ($1,$2) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name`, group.ID, group.Name); err != nil {
@@ -38,12 +38,9 @@ func (s *Store) SaveSeedData(ctx context.Context, groups map[string]*model.Group
 				return err
 			}
 		}
-		now := projectSeedTime(projects)
-		for _, project := range projects {
-			for _, file := range model.StandardConfigFiles(project.ID, now) {
-				if err := upsertConfigFileTx(ctx, tx, file); err != nil {
-					return err
-				}
+		for _, config := range configFiles {
+			if err := upsertConfigTx(ctx, tx, *config); err != nil {
+				return err
 			}
 		}
 		for _, entry := range configs {

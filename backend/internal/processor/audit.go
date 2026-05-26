@@ -7,15 +7,15 @@ import (
 	"config-man/backend/pkg/util"
 )
 
-func newVersion(configID string, oldValue *string, newValue, changedBy, reason string) model.ConfigVersion {
+func newVersion(configEntryID string, oldValue *string, newValue, changedBy, reason string) model.ConfigVersion {
 	return model.ConfigVersion{
-		ID:           util.NewID("ver"),
-		ConfigID:     configID,
-		OldValue:     oldValue,
-		NewValue:     newValue,
-		ChangedBy:    changedBy,
-		ChangeReason: reason,
-		CreatedAt:    time.Now().UTC(),
+		ID:            util.NewID("ver"),
+		ConfigEntryID: configEntryID,
+		OldValue:      oldValue,
+		NewValue:      newValue,
+		ChangedBy:     changedBy,
+		ChangeReason:  reason,
+		CreatedAt:     time.Now().UTC(),
 	}
 }
 

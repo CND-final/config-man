@@ -107,11 +107,12 @@ All demo users use password `password`.
 - `GET /api/v1/projects/:projectId`
 - `GET /api/v1/projects/:projectId/members`
 - `PUT /api/v1/projects/:projectId/members`
-- `GET /api/v1/projects/:projectId/configs?env=dev`
-- `POST /api/v1/projects/:projectId/configs`
+- `GET /api/v1/projects/:projectId/configs` lists config documents.
+- `GET /api/v1/projects/:projectId/configs?env=dev` lists config documents with their environment entries.
+- `POST /api/v1/projects/:projectId/configs` creates a config document, or creates an entry for legacy clients when the body has no `name`.
 - `POST /api/v1/projects/:projectId/configs/import`
-- `PUT /api/v1/projects/:projectId/configs/:configId`
-- `DELETE /api/v1/projects/:projectId/configs/:configId`
+- `PUT /api/v1/projects/:projectId/configs/:configId` updates a config entry for legacy clients.
+- `DELETE /api/v1/projects/:projectId/configs/:configId` deletes a config entry for legacy clients.
 - `GET /api/v1/review-requests`
 - `GET /api/v1/projects/:projectId/review-requests`
 - `POST /api/v1/review-requests`

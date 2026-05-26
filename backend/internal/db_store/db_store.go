@@ -121,7 +121,7 @@ func (s *Store) InitSchema(ctx context.Context) error {
 			created_at TIMESTAMPTZ NOT NULL,
 			updated_at TIMESTAMPTZ NOT NULL
 		)`,
-		`CREATE TABLE IF NOT EXISTS config_files (
+		`CREATE TABLE IF NOT EXISTS configs (
 			id TEXT PRIMARY KEY,
 			project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
 			name TEXT NOT NULL,
@@ -134,11 +134,20 @@ func (s *Store) InitSchema(ctx context.Context) error {
 			updated_at TIMESTAMPTZ NOT NULL,
 			UNIQUE(project_id, name)
 		)`,
+		`DO $$
+		BEGIN
+			IF to_regclass('public.config_files') IS NOT NULL THEN
+				INSERT INTO configs (id, project_id, name, description, source_type, source_id, prefix, sort_order, created_at, updated_at)
+				SELECT id, project_id, name, description, source_type, source_id, prefix, sort_order, created_at, updated_at
+				FROM config_files
+				ON CONFLICT (id) DO NOTHING;
+			END IF;
+		END $$`,
 		`CREATE TABLE IF NOT EXISTS config_entries (
 			id TEXT PRIMARY KEY,
 			project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
 			environment TEXT NOT NULL,
-			config_file_id TEXT NOT NULL DEFAULT '',
+			config_id TEXT NOT NULL DEFAULT '',
 			key TEXT NOT NULL,
 			value TEXT NOT NULL,
 			value_type TEXT NOT NULL,
@@ -148,16 +157,35 @@ func (s *Store) InitSchema(ctx context.Context) error {
 			updated_at TIMESTAMPTZ NOT NULL,
 			UNIQUE(project_id, environment, key)
 		)`,
-		`ALTER TABLE config_entries ADD COLUMN IF NOT EXISTS config_file_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE config_entries ADD COLUMN IF NOT EXISTS config_id TEXT NOT NULL DEFAULT ''`,
+		`DO $$
+		BEGIN
+			IF EXISTS (
+				SELECT 1 FROM information_schema.columns
+				WHERE table_schema = 'public' AND table_name = 'config_entries' AND column_name = 'config_file_id'
+			) THEN
+				UPDATE config_entries SET config_id = config_file_id WHERE config_id = '' AND config_file_id <> '';
+			END IF;
+		END $$`,
 		`CREATE TABLE IF NOT EXISTS config_versions (
 			id TEXT PRIMARY KEY,
-			config_id TEXT NOT NULL,
+			config_entry_id TEXT NOT NULL DEFAULT '',
 			old_value TEXT,
 			new_value TEXT NOT NULL,
 			changed_by TEXT NOT NULL,
 			change_reason TEXT NOT NULL,
 			created_at TIMESTAMPTZ NOT NULL
 		)`,
+		`ALTER TABLE config_versions ADD COLUMN IF NOT EXISTS config_entry_id TEXT NOT NULL DEFAULT ''`,
+		`DO $$
+		BEGIN
+			IF EXISTS (
+				SELECT 1 FROM information_schema.columns
+				WHERE table_schema = 'public' AND table_name = 'config_versions' AND column_name = 'config_id'
+			) THEN
+				UPDATE config_versions SET config_entry_id = config_id WHERE config_entry_id = '' AND config_id <> '';
+			END IF;
+		END $$`,
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
 			id TEXT PRIMARY KEY,
 			project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,

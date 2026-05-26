@@ -1,5 +1,4 @@
 import { api } from "./api.js";
-import { loadCustomConfigFiles, newCustomConfigFile, saveCustomConfigFiles } from "./configFiles.js";
 import { $, $all, showToast } from "./dom.js";
 import {
   loadCompareConfigs,
@@ -25,7 +24,7 @@ import {
   renderGroupCreateMemberPicker,
   renderGroupMemberPicker,
   renderGroupModal,
-  renderProjectTemplateOptions,
+  renderProjectFormOptions,
   renderRequests,
   renderReviewModal,
   renderReviewDock,
@@ -137,24 +136,26 @@ export function updateConfigFileSourceId(sourceId) {
 
 export async function createConfigFile(event) {
   event.preventDefault();
+  const project = activeProject();
   const name = $("#newConfigFileName")?.value || "";
   const sourceType = state.configFileSourceType || "blank";
   const sourceId = state.configFileSourceId || $("#configFileSourceId")?.value || "";
   const source = configFileSource(sourceType, sourceId);
-  const file = newCustomConfigFile(name, source);
-  if (!file.name) {
-    showToast("Config file name is required");
+  if (!project) {
+    showToast("Choose a project first");
     return;
   }
-  const sourceType = state.configFileSourceType || "blank";
-  const sourceId = state.configFileSourceId || $("#configFileSourceId")?.value || "";
-  const created = await api(`/projects/${project.id}/config-files`, {
+  if (!name.trim()) {
+    showToast("Config name is required");
+    return;
+  }
+  const created = await api(`/projects/${project.id}/configs`, {
     method: "POST",
     body: JSON.stringify({
       name,
       sourceType,
       sourceId,
-      description: configFileSource(sourceType, sourceId).label,
+      description: source.label,
     }),
   });
   await loadConfigsAndHistory();
@@ -262,10 +263,14 @@ export async function createConfigKey(event) {
     showToast("Enter at least one environment value");
     return;
   }
+  if (!state.activeConfigFile) {
+    showToast("Add or select a config first");
+    return;
+  }
 
   const bodyBase = {
     key,
-    configFileId: state.activeConfigFile,
+    configId: state.activeConfigFile,
     valueType: $("#newConfigValueType").value,
     isSensitive: $("#newConfigSensitive").checked,
     changeReason: reason,
@@ -531,49 +536,42 @@ export function setProjectModal(open) {
   $("#projectModal").classList.toggle("hidden", !open);
   if (open) {
     restoreProjectDraft();
-    renderProjectTemplateOptions();
+    renderProjectFormOptions();
     window.setTimeout(() => $("#projectName").focus(), 0);
   } else {
     $("#projectForm").reset();
     $("#projectEnvironments").value = "dev, staging, prod";
     state.projectDraft = null;
-    state.projectTemplateSelection = null;
-    renderProjectTemplateOptions();
+    renderProjectFormOptions();
   }
 }
 
-export function openProjectTemplatePicker() {
-  state.projectDraft = readProjectDraft();
-  state.projectModalOpen = false;
-  $("#projectModal").classList.add("hidden");
-  state.templatePickerActive = true;
+export function openConfigSourcePicker(sourceType) {
+  state.configFileDraftName =
+    $("#newConfigFileName")?.value || state.configFileDraftName || "";
+  state.configFileSourceType = sourceType;
+  state.configFileSourceId = "";
+  state.configFileCreateOpen = false;
+  state.configSourcePickerActive = true;
+  state.libraryTab = sourceType === "shared-config" ? "shared-config" : "templates";
   switchView("templates");
   renderAll();
 }
 
-export function cancelProjectTemplatePicker() {
-  state.templatePickerActive = false;
-  state.templateModalOpen = false;
-  switchView("projects");
-  setProjectModal(true);
+export function cancelConfigSourcePicker() {
+  state.configSourcePickerActive = false;
+  switchView("config");
+  setConfigFileCreate(true);
   renderAll();
 }
 
-export function clearProjectTemplateSelection() {
-  state.projectTemplateSelection = null;
-  state.activeTemplateId = "";
-  state.templateValues = {};
-  renderProjectTemplateOptions();
-}
-
-export function chooseProjectTemplate(templateId) {
-  const template = state.templates.find((item) => item.id === templateId);
-  if (!template?.body) {
-    showToast("This template cannot be applied to a project");
-    return;
-  }
-  state.templateApplyFormat = template.format || "yaml";
-  setTemplateModal(true, templateId);
+export function chooseConfigSource(sourceType, sourceId) {
+  state.configFileSourceType = sourceType;
+  state.configFileSourceId = sourceId || "";
+  state.configSourcePickerActive = false;
+  switchView("config");
+  setConfigFileCreate(true);
+  renderAll();
 }
 
 function readProjectDraft() {
@@ -763,6 +761,22 @@ export function setTemplateCreateModal(open) {
   }
 }
 
+
+export function setExportModal(open) {
+  state.exportModalOpen = open;
+  renderExportModal();
+}
+
+export function setImportModal(open) {
+  state.importModalOpen = open;
+  $("#importModal")?.classList.toggle("hidden", !open);
+}
+
+export function setImportPreviewModal(open) {
+  state.importPreviewOpen = open;
+  renderImportPreview();
+}
+
 export function setHistoryModal(open) {
   state.historyModalOpen = open;
   if (!open) {
@@ -823,14 +837,13 @@ export async function applyTemplate() {
   const template = state.templates.find(
     (item) => item.id === state.activeTemplateId,
   );
-  if (state.templatePickerActive) {
-    selectTemplateForProject(template);
-    return;
-  }
-
   const project = activeProject();
   if (!template || !project) {
     showToast("Choose a template and project first");
+    return;
+  }
+  if (!state.activeConfigFile) {
+    showToast("Add or select a config first");
     return;
   }
   for (const variable of template.variables || []) {
@@ -853,7 +866,7 @@ export async function applyTemplate() {
     method: "POST",
     body: JSON.stringify({
       environment: state.activeEnvironment,
-      configFileId: state.activeConfigFile,
+      configId: state.activeConfigFile,
       format: sourceFormat,
       content,
     }),
@@ -869,7 +882,7 @@ export async function applyTemplate() {
     format: outputFormat,
     projectId: project.id,
     environment: state.activeEnvironment,
-    configFileId: state.activeConfigFile,
+    configId: state.activeConfigFile,
   };
   state.templateModalOpen = false;
   state.importPreviewOpen = true;
@@ -877,102 +890,13 @@ export async function applyTemplate() {
   showToast(`Extracted ${result.entryCount} config keys`);
 }
 
-function selectTemplateForProject(template) {
-  if (!template) {
-    showToast("Choose a template first");
-    return;
-  }
-  for (const variable of template.variables || []) {
-    if (
-      variable.required &&
-      String(state.templateValues[variable.name] || "").trim() === ""
-    ) {
-      showToast(`${variable.name} is required`);
-      return;
-    }
-  }
-
-  const outputFormat =
-    $("#templateApplyFormat")?.value ||
-    state.templateApplyFormat ||
-    template.format ||
-    "yaml";
-  state.templateApplyFormat = outputFormat;
-  state.projectTemplateSelection = {
-    templateId: template.id,
-    templateName: template.name,
-    sourceFormat: template.format || "yaml",
-    outputFormat,
-    content: renderTemplateContent(template),
-    values: { ...state.templateValues },
-  };
-  state.templatePickerActive = false;
-  state.templateModalOpen = false;
-  switchView("projects");
-  setProjectModal(true);
-  renderAll();
-  showToast(`${template.name} selected`);
-}
-
-function renderTemplateContent(template) {
-  return (template.body || "").replace(
-    /\$\{([A-Z0-9_]+)\}/g,
-    (_, name) => state.templateValues[name] ?? "",
-  );
-}
-
-export function setExportModal(open) {
-  const project = activeProject();
-  state.exportModalOpen = open;
-  if (open) {
-    state.exportFormat = "yaml";
-  }
-  renderExportModal();
-  if (open) {
-    window.setTimeout(() => $("#exportFormat").focus(), 0);
-  }
-}
-
-export function setImportModal(open) {
-  state.importModalOpen = open;
-  $("#importModal").classList.toggle("hidden", !open);
-  if (open) {
-    window.setTimeout(() => $("#configFile").focus(), 0);
-  } else {
-    $("#configFile").value = "";
-  }
-}
-
-export function setImportPreviewModal(open) {
-  state.importPreviewOpen = open;
-  if (!open && !state.importApplying) {
-    state.importPreview = null;
-  }
-  renderImportPreview();
-}
-
-export async function openVersionHistory() {
-  state.historyLoading = true;
-  state.historyModalOpen = true;
-  renderVersionHistory();
-  try {
-    await loadConfigHistory();
-  } finally {
-    state.historyLoading = false;
-    renderVersionHistory();
-  }
-}
-
 export async function createProject(event) {
   event.preventDefault();
-  const templateSelection = state.projectTemplateSelection;
-  const templateId = templateSelection?.templateId || "";
   const created = await api("/projects", {
     method: "POST",
     body: JSON.stringify({
       name: $("#projectName").value,
       repoUrl: $("#projectRepo").value,
-      templateId,
       groupId: $("#projectGroup")?.value || "",
       environments: parseEnvironmentInput($("#projectEnvironments").value),
       description: $("#projectDescription").value,
@@ -989,39 +913,27 @@ export async function createProject(event) {
   }
   await loadConfigsAndHistory();
   setProjectModal(false);
-  if (templateSelection) {
-    const result = await api(`/projects/${created.id}/configs/extract`, {
-      method: "POST",
-      body: JSON.stringify({
-        environment: state.activeEnvironment,
-        format: templateSelection.sourceFormat,
-        content: templateSelection.content,
-      }),
-    });
-    const outputContent =
-      templateSelection.outputFormat === templateSelection.sourceFormat
-        ? templateSelection.content
-        : serializeConfigs(
-            result.entries || [],
-            templateSelection.outputFormat,
-          );
-    state.importPreview = {
-      ...result,
-      fileName: templateSelection.templateName,
-      content: outputContent,
-      format: templateSelection.outputFormat,
-      projectId: created.id,
-      environment: state.activeEnvironment,
-    };
-    state.importPreviewOpen = true;
-    switchView("config");
-    renderAll();
-    showToast(`${created.name} created. Review extracted template config.`);
-    return;
-  }
   switchView("projects");
   renderAll();
   showToast(`${created.name} created`);
+}
+
+
+export async function openVersionHistory() {
+  const project = activeProject();
+  if (!project) {
+    showToast("Choose a project first");
+    return;
+  }
+  state.historyModalOpen = true;
+  state.historyLoading = true;
+  renderVersionHistory();
+  try {
+    await loadConfigHistory();
+  } finally {
+    state.historyLoading = false;
+    renderVersionHistory();
+  }
 }
 
 export async function rollbackLatestVersion() {
@@ -1180,6 +1092,10 @@ export async function extractConfigFile() {
     showToast("Choose a config file first");
     return;
   }
+  if (!state.activeConfigFile) {
+    showToast("Add or select a config first");
+    return;
+  }
 
   const format = $("#configFormat").value;
   const content = await file.text();
@@ -1187,7 +1103,7 @@ export async function extractConfigFile() {
     method: "POST",
     body: JSON.stringify({
       environment: state.activeEnvironment,
-      configFileId: state.activeConfigFile,
+      configId: state.activeConfigFile,
       format,
       content,
     }),
@@ -1200,7 +1116,7 @@ export async function extractConfigFile() {
     format,
     projectId: project.id,
     environment: state.activeEnvironment,
-    configFileId: state.activeConfigFile,
+    configId: state.activeConfigFile,
   };
   state.importPreviewOpen = true;
   setImportModal(false);
@@ -1222,7 +1138,7 @@ export async function applyImportPreview() {
       method: "POST",
       body: JSON.stringify({
         environment: preview.environment,
-        configFileId: preview.configFileId || state.activeConfigFile,
+        configId: preview.configId || state.activeConfigFile,
         format: preview.format,
         content: preview.content,
         changeReason: `import ${preview.fileName}`,
