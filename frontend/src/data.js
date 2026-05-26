@@ -54,6 +54,19 @@ export async function reloadNotifications() {
   state.notifications = await api("/notifications");
 }
 
+
+export async function reloadProjectMembers(projectId = activeProject()?.id) {
+  if (!projectId) return [];
+  const payload = await api(`/projects/${encodeURIComponent(projectId)}/members`);
+  const members = listFromPayload(payload, "members");
+  state.projects = state.projects.map((project) =>
+    project.id === projectId
+      ? { ...project, members, memberCount: members.length }
+      : project,
+  );
+  return members;
+}
+
 export async function reloadProjects() {
   const projects = await api("/projects");
   state.projects = projects.map(normalizeProject);

@@ -757,11 +757,58 @@ func TestGlobalSharedConfigPermissions(t *testing.T) {
 
 func TestReviewRequestLifecycle(t *testing.T) {
 	handler := newTestHandler(t)
-	res := request(t, handler, http.MethodPost, "/api/v1/review-requests", "nora", map[string]any{"projectId": "customer-portal", "environment": "prod", "configKey": "database.url", "reason": "Rotate database credential"})
+
+	res := request(t, handler, http.MethodGet, "/api/v1/projects/customer-portal/configs?env=prod&revealSensitive=true", "nora", nil)
+	if res.Code != http.StatusOK {
+		t.Fatalf("list prod configs status = %d body=%s", res.Code, res.Body.String())
+	}
+	configs := decodeBody[struct {
+		Entries []model.ConfigEntry `json:"entries"`
+	}](t, res)
+	var databaseURL model.ConfigEntry
+	for _, entry := range configs.Entries {
+		if entry.Key == "database.url" {
+			databaseURL = entry
+			break
+		}
+	}
+	if databaseURL.ID == "" {
+		t.Fatalf("database.url seed entry missing: %#v", configs.Entries)
+	}
+
+	nextValue := "postgresql://prod-user:rotated-secret@prod-db:5432/app"
+	res = request(t, handler, http.MethodPost, "/api/v1/review-requests", "nora", map[string]any{
+		"projectId":   "customer-portal",
+		"environment": "prod",
+		"configKey":   "database.url",
+		"reason":      "Rotate database credential",
+		"proposedChanges": []map[string]any{
+			{
+				"configEntryId": databaseURL.ID,
+				"configId":      databaseURL.ConfigID,
+				"key":           databaseURL.Key,
+				"value":         nextValue,
+				"valueType":     databaseURL.ValueType,
+				"isSensitive":   databaseURL.IsSensitive,
+				"environment":   databaseURL.Environment,
+			},
+		},
+	})
 	if res.Code != http.StatusCreated {
 		t.Fatalf("create review status = %d body=%s", res.Code, res.Body.String())
 	}
 	created := decodeBody[model.ReviewRequest](t, res)
+	if len(created.ProposedChanges) != 1 {
+		t.Fatalf("proposed changes not persisted: %#v", created)
+	}
+
+	res = request(t, handler, http.MethodGet, "/api/v1/notifications", "paul", nil)
+	if res.Code != http.StatusOK {
+		t.Fatalf("list project_admin notifications status = %d body=%s", res.Code, res.Body.String())
+	}
+	if len(decodeBody[[]model.Notification](t, res)) == 0 {
+		t.Fatalf("expected project_admin notification after review submit")
+	}
 
 	res = request(t, handler, http.MethodPut, "/api/v1/review-requests/"+created.ID+"/approve", "rachel", map[string]any{"comment": "looks good"})
 	if res.Code != http.StatusOK {
@@ -771,6 +818,34 @@ func TestReviewRequestLifecycle(t *testing.T) {
 	if approved.Status != "approved" || approved.Reviewer != "Rachel Kao" {
 		t.Fatalf("unexpected approved request: %#v", approved)
 	}
+
+	res = request(t, handler, http.MethodGet, "/api/v1/projects/customer-portal/configs?env=prod&revealSensitive=true", "nora", nil)
+	if res.Code != http.StatusOK {
+		t.Fatalf("list prod configs after approval status = %d body=%s", res.Code, res.Body.String())
+	}
+	configs = decodeBody[struct {
+		Entries []model.ConfigEntry `json:"entries"`
+	}](t, res)
+	if !configEntriesHaveValue(configs.Entries, "database.url", nextValue) {
+		t.Fatalf("approved value was not applied: %#v", configs.Entries)
+	}
+
+	res = request(t, handler, http.MethodGet, "/api/v1/notifications", "nora", nil)
+	if res.Code != http.StatusOK {
+		t.Fatalf("list requester notifications status = %d body=%s", res.Code, res.Body.String())
+	}
+	if len(decodeBody[[]model.Notification](t, res)) == 0 {
+		t.Fatalf("expected project member notification after approval")
+	}
+}
+
+func configEntriesHaveValue(entries []model.ConfigEntry, key, value string) bool {
+	for _, entry := range entries {
+		if entry.Key == key && entry.Value == value {
+			return true
+		}
+	}
+	return false
 }
 
 func isolatedDatabaseURL(baseURL, schemaName string) (string, error) {

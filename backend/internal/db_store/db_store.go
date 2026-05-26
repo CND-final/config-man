@@ -206,9 +206,11 @@ func (s *Store) InitSchema(ctx context.Context) error {
 			status TEXT NOT NULL,
 			reason TEXT NOT NULL,
 			comment TEXT NOT NULL DEFAULT '',
+			proposed_changes JSONB NOT NULL DEFAULT '[]'::jsonb,
 			created_at TIMESTAMPTZ NOT NULL,
 			updated_at TIMESTAMPTZ NOT NULL
 		)`,
+		`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS proposed_changes JSONB NOT NULL DEFAULT '[]'::jsonb`,
 		`CREATE TABLE IF NOT EXISTS app_notifications (
 			id TEXT PRIMARY KEY,
 			user_id TEXT NOT NULL,

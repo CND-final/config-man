@@ -33,7 +33,7 @@ func (p *Processor) CreateProject(ctx appctx.RequestContext, req model.CreatePro
 
 	if !util.CanRegisterProject(ctx.Actor) {
 		logger.Project.Warn("create project denied")
-		return model.Project{}, model.Forbidden("Only system_admin or project_admin can register projects")
+		return model.Project{}, model.Forbidden("Only system_admin, group_admin, or project_admin can register projects")
 	}
 
 	if len(name) < 2 {
@@ -87,7 +87,12 @@ func (p *Processor) CreateProject(ctx appctx.RequestContext, req model.CreatePro
 			SortOrder: index + 1,
 		})
 	}
-	project.Members = []model.ProjectMember{{User: ctx.Actor, ProjectRole: model.RoleProjectMemberAdmin}}
+	admin, adminErr := p.defaultProjectAdmin(ctx, group)
+	if adminErr != nil {
+		logger.Project.Warn("create project invalid")
+		return model.Project{}, adminErr
+	}
+	project.Members = []model.ProjectMember{{User: admin, ProjectRole: model.RoleProjectMemberAdmin}}
 	project.MemberCount = len(project.Members)
 
 	if err := p.store.SaveProject(project, newAudit(ctx.ActorName(), "project.create", "project", project.ID, project.ID, map[string]any{
@@ -177,14 +182,19 @@ func (p *Processor) UpdateProjectMembers(ctx appctx.RequestContext, projectID st
 	if err != nil {
 		return nil, err
 	}
+	group, groupErr := p.requireGroup(project.GroupID)
+	if groupErr != nil {
+		return nil, groupErr
+	}
 	if ctx.Actor.Role != model.RoleSystemAdmin {
 		role, ok := util.ProjectRoleForUser(ctx.Actor, project.Members)
-		if !ok || role != model.RoleProjectMemberAdmin {
-			return nil, model.Forbidden("Only system_admin or project_admin can edit project members")
+		canManageProject := ok && role == model.RoleProjectMemberAdmin
+		if !canManageProject && !util.CanManageGroup(ctx.Actor, group) {
+			return nil, model.Forbidden("Only system_admin, group_admin, or project_admin can edit project members")
 		}
 	}
 
-	members, appErr := p.projectMembersFromRequests(req.Members)
+	members, appErr := p.projectMembersFromRequests(req.Members, group)
 	if appErr != nil {
 		return nil, appErr
 	}
@@ -198,13 +208,17 @@ func (p *Processor) UpdateProjectMembers(ctx appctx.RequestContext, projectID st
 	return updated.Members, nil
 }
 
-func (p *Processor) projectMembersFromRequests(requests []model.ProjectMemberRequest) ([]model.ProjectMember, *model.ErrorDetail) {
+func (p *Processor) projectMembersFromRequests(requests []model.ProjectMemberRequest, group model.Group) ([]model.ProjectMember, *model.ErrorDetail) {
 	seen := map[string]bool{}
+	groupMemberIDs := groupMemberIDSet(group)
 	members := make([]model.ProjectMember, 0, len(requests))
 	for _, request := range requests {
 		userID := strings.TrimSpace(request.UserID)
 		if userID == "" || seen[userID] {
 			continue
+		}
+		if !groupMemberIDs[userID] {
+			return nil, model.InvalidInput(fmt.Sprintf("User %q is not a member of project group %q", userID, group.ID))
 		}
 		role := request.ProjectRole
 		if role == "" {
@@ -221,6 +235,40 @@ func (p *Processor) projectMembersFromRequests(requests []model.ProjectMemberReq
 		members = append(members, model.ProjectMember{User: user, ProjectRole: role})
 	}
 	return members, nil
+}
+
+func (p *Processor) defaultProjectAdmin(ctx appctx.RequestContext, group model.Group) (model.User, *model.ErrorDetail) {
+	for _, member := range group.Members {
+		if member.ID == ctx.Actor.ID {
+			user, ok := p.store.FindUserByID(member.ID)
+			if ok {
+				return user, nil
+			}
+		}
+	}
+	for _, member := range group.Members {
+		if member.GroupRole == model.RoleGroupAdmin {
+			user, ok := p.store.FindUserByID(member.ID)
+			if ok {
+				return user, nil
+			}
+		}
+	}
+	for _, member := range group.Members {
+		user, ok := p.store.FindUserByID(member.ID)
+		if ok {
+			return user, nil
+		}
+	}
+	return model.User{}, model.InvalidInput("Project group must have at least one member")
+}
+
+func groupMemberIDSet(group model.Group) map[string]bool {
+	ids := make(map[string]bool, len(group.Members))
+	for _, member := range group.Members {
+		ids[member.ID] = true
+	}
+	return ids
 }
 
 func projectHasProjectAdmin(members []model.ProjectMember) bool {

@@ -7,7 +7,7 @@ import (
 )
 
 func CanRegisterProject(user model.User) bool {
-	return user.Role == model.RoleSystemAdmin || user.Role == model.RoleProjectAdmin
+	return user.Role == model.RoleSystemAdmin || user.Role == model.RoleProjectAdmin || user.Role == model.RoleUserGroupAdmin
 }
 
 func CanWriteEnvironment(user model.User, environment string) bool {
@@ -137,7 +137,7 @@ func CanReviewProject(user model.User, members []model.ProjectMember) bool {
 		return true
 	}
 	role, ok := ProjectRoleForUser(user, members)
-	return ok && role == model.RoleProjectReviewer
+	return ok && (role == model.RoleProjectReviewer || role == model.RoleProjectMemberAdmin)
 }
 
 func ValidProjectRole(role model.ProjectRole) bool {

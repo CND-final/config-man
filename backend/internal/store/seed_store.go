@@ -28,6 +28,10 @@ func (s *Store) seedUsers() {
 		{ID: "nora", Email: "developer@config-man.local", Name: "Nora Chen", Role: model.RoleDeveloper},
 		{ID: "rachel", Email: "reviewer@config-man.local", Name: "Rachel Kao", Role: model.RoleReviewer},
 		{ID: "vincent", Email: "viewer@config-man.local", Name: "Vincent Lee", Role: model.RoleViewer},
+		{ID: "oliver", Email: "platform-viewer@config-man.local", Name: "Oliver Chen", Role: model.RoleViewer},
+		{ID: "ethan", Email: "commerce-developer@config-man.local", Name: "Ethan Liu", Role: model.RoleDeveloper},
+		{ID: "sophia", Email: "commerce-reviewer@config-man.local", Name: "Sophia Wang", Role: model.RoleReviewer},
+		{ID: "mia", Email: "commerce-viewer@config-man.local", Name: "Mia Tsai", Role: model.RoleViewer},
 	}
 	for _, user := range users {
 		s.users = append(s.users, user)
@@ -53,6 +57,9 @@ func demoSeedData() seedData {
 		Members: []model.GroupMember{
 			{User: model.User{ID: "paul"}, GroupRole: model.RoleGroupAdmin},
 			{User: model.User{ID: "nora"}, GroupRole: model.RoleGroupMember},
+			{User: model.User{ID: "rachel"}, GroupRole: model.RoleGroupMember},
+			{User: model.User{ID: "vincent"}, GroupRole: model.RoleGroupMember},
+			{User: model.User{ID: "oliver"}, GroupRole: model.RoleGroupMember},
 		},
 	}
 	commerceGroup := &model.Group{
@@ -60,7 +67,9 @@ func demoSeedData() seedData {
 		Name: "Commerce Team",
 		Members: []model.GroupMember{
 			{User: model.User{ID: "grace"}, GroupRole: model.RoleGroupAdmin},
-			{User: model.User{ID: "nora"}, GroupRole: model.RoleGroupMember},
+			{User: model.User{ID: "ethan"}, GroupRole: model.RoleGroupMember},
+			{User: model.User{ID: "sophia"}, GroupRole: model.RoleGroupMember},
+			{User: model.User{ID: "mia"}, GroupRole: model.RoleGroupMember},
 		},
 	}
 	seed.groups[platformGroup.ID] = platformGroup
@@ -99,9 +108,9 @@ func demoSeedData() seedData {
 		},
 		Members: []model.ProjectMember{
 			{User: model.User{ID: "grace"}, ProjectRole: model.RoleProjectMemberAdmin},
-			{User: model.User{ID: "nora"}, ProjectRole: model.RoleProjectDeveloper},
-			{User: model.User{ID: "rachel"}, ProjectRole: model.RoleProjectReviewer},
-			{User: model.User{ID: "vincent"}, ProjectRole: model.RoleProjectViewer},
+			{User: model.User{ID: "ethan"}, ProjectRole: model.RoleProjectDeveloper},
+			{User: model.User{ID: "sophia"}, ProjectRole: model.RoleProjectReviewer},
+			{User: model.User{ID: "mia"}, ProjectRole: model.RoleProjectViewer},
 		},
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -164,16 +173,26 @@ func demoSeedData() seedData {
 
 	addEntriesForAllEnvs(customerPortal, customerApp, "api.baseUrl", "https://dev-api.example.com", "https://staging-api.example.com", "https://api.example.com", "string", false)
 	addEntriesForAllEnvs(customerPortal, customerApp, "log.level", "debug", "info", "info", "string", false)
-	addEntry(customerPortal, customerRuntime, "prod", "logging.level.root", "INFO", "string", false)
-	addEntry(customerPortal, customerRuntime, "prod", "observability.metrics.enabled", "true", "boolean", false)
-	addEntry(customerPortal, customerSecurity, "prod", "database.url", "postgresql://prod-user:secret@prod-db:5432/app", "string", true)
+	addEntriesForAllEnvs(customerPortal, customerApp, "feature.checkout.enabled", "true", "true", "true", "boolean", false)
+
+	addEntriesForAllEnvs(customerPortal, customerRuntime, "logging.level.root", "DEBUG", "INFO", "INFO", "string", false)
+	addEntriesForAllEnvs(customerPortal, customerRuntime, "observability.metrics.enabled", "false", "true", "true", "boolean", false)
+	addEntriesForAllEnvs(customerPortal, customerRuntime, "security.headers.enabled", "false", "true", "true", "boolean", false)
+
+	addEntriesForAllEnvs(customerPortal, customerSecurity, "database.url", "postgresql://dev-user:dev-secret@dev-db:5432/app", "postgresql://staging-user:staging-secret@staging-db:5432/app", "postgresql://prod-user:prod-secret@prod-db:5432/app", "string", true)
+	addEntriesForAllEnvs(customerPortal, customerSecurity, "auth.jwt.issuer", "customer-portal-dev", "customer-portal-staging", "customer-portal", "string", false)
 
 	addEntriesForAllEnvs(billingAPI, billingService, "service.port", "8081", "8081", "8080", "number", false)
 	addEntriesForAllEnvs(billingAPI, billingService, "log.level", "debug", "info", "warn", "string", false)
-	addEntry(billingAPI, billingRuntime, "prod", "logging.level.root", "INFO", "string", false)
-	addEntry(billingAPI, billingRuntime, "prod", "observability.metrics.enabled", "true", "boolean", false)
-	addEntry(billingAPI, billingPayment, "prod", "payment.provider", "stripe", "string", false)
-	addEntry(billingAPI, billingPayment, "prod", "payment.apiKey", "sk_live_demo_secret", "string", true)
+	addEntriesForAllEnvs(billingAPI, billingService, "worker.concurrency", "2", "4", "8", "number", false)
+
+	addEntriesForAllEnvs(billingAPI, billingRuntime, "logging.level.root", "DEBUG", "INFO", "INFO", "string", false)
+	addEntriesForAllEnvs(billingAPI, billingRuntime, "observability.metrics.enabled", "false", "true", "true", "boolean", false)
+	addEntriesForAllEnvs(billingAPI, billingRuntime, "security.headers.enabled", "false", "true", "true", "boolean", false)
+
+	addEntriesForAllEnvs(billingAPI, billingPayment, "payment.provider", "stripe-sandbox", "stripe-sandbox", "stripe", "string", false)
+	addEntriesForAllEnvs(billingAPI, billingPayment, "payment.apiKey", "sk_test_dev_demo_secret", "sk_test_staging_demo_secret", "sk_live_demo_secret", "string", true)
+	addEntriesForAllEnvs(billingAPI, billingPayment, "payment.webhook.enabled", "false", "true", "true", "boolean", false)
 
 	for _, project := range []*model.Project{customerPortal, billingAPI} {
 		for _, env := range project.Environments {

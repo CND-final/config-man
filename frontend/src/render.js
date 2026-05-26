@@ -552,12 +552,9 @@ export function renderProjects() {
 export function renderTemplates() {
   const action = $("#openTemplateCreate");
   if (action) {
-    action.textContent = state.configSourcePickerActive ? "Cancel" : "New Template";
-    action.className = state.configSourcePickerActive
-      ? "secondary-action"
-      : "primary-action";
+    action.textContent = "New Template";
+    action.className = "primary-action";
     const canCreateSharedConfig =
-      !state.configSourcePickerActive &&
       state.libraryTab === "shared-config" &&
       isSystemView();
     action.textContent = canCreateSharedConfig
@@ -590,12 +587,10 @@ export function renderTemplates() {
 }
 
 function renderTemplateCard(template) {
-  const canPick = state.configSourcePickerActive && state.libraryTab === "templates" && template.body;
-  const tag = canPick ? "button" : "article";
-  const typeAttr = canPick ? ' type="button"' : "";
-  const pickAttr = canPick
-    ? ` data-pick-template="${escapeHtml(template.id)}"`
-    : "";
+  const canPick = false;
+  const tag = "article";
+  const typeAttr = "";
+  const pickAttr = "";
   const scope = libraryScopeLabel(template);
   return `
     <${tag} class="template-card ${canPick ? "template-card-button" : ""}"${typeAttr}${pickAttr}>
@@ -619,10 +614,10 @@ function renderTemplateCard(template) {
 
 function renderSharedConfigCard(item) {
   const scope = libraryScopeLabel(item);
-  const canPick = state.configSourcePickerActive && state.libraryTab === "shared-config";
-  const tag = canPick ? "button" : "article";
-  const typeAttr = canPick ? ' type="button"' : "";
-  const pickAttr = canPick ? ` data-pick-shared-config="${escapeHtml(item.id)}"` : "";
+  const canPick = false;
+  const tag = "article";
+  const typeAttr = "";
+  const pickAttr = "";
   return `
     <${tag} class="template-card shared-config-card ${canPick ? "template-card-button" : ""}"${typeAttr}${pickAttr}>
       <div class="card-top">
@@ -689,6 +684,8 @@ function projectTemplateName(templateId) {
 
 export function renderConfigFileList() {
   ensureActiveConfigFile(state);
+  renderConfigFileAddMenu();
+  renderConfigSourceModal();
   const createForm = state.configFileCreateOpen
     ? renderConfigFileCreateForm()
     : "";
@@ -713,25 +710,85 @@ export function renderConfigFileList() {
 }
 
 function renderConfigFileCreateForm() {
-  const sourceType = state.configFileSourceType || "blank";
   return `
     <form id="configFileCreateForm" class="config-file-create-form">
       <input id="newConfigFileName" type="text" autocomplete="off" placeholder="database.yaml" value="${escapeHtml(state.configFileDraftName || "")}" required />
-      <div class="template-choice-row config-source-choice">
-        <button class="secondary-action ${sourceType === "blank" ? "active" : ""}" type="button" data-config-source-type="blank">Blank</button>
-        <button class="secondary-action ${sourceType === "template" ? "active" : ""}" type="button" data-open-config-source-picker="template">Choose Template</button>
-        <button class="secondary-action ${sourceType === "shared-config" ? "active" : ""}" type="button" data-open-config-source-picker="shared-config">Choose Shared Config</button>
-      </div>
-      ${renderConfigFileSourcePicker(sourceType)}
     </form>
   `;
 }
 
-function renderConfigFileSourcePicker(sourceType) {
-  if (sourceType === "blank") return `<p class="project-meta">Blank config.</p>`;
-  const items = sourceType === "template" ? state.templates : state.sharedConfigs;
-  const selected = items.find((item) => item.id === state.configFileSourceId);
-  return `<p class="project-meta">${selected ? escapeHtml(selected.name || selected.id) : "No source selected."}</p>`;
+function renderConfigFileAddMenu() {
+  const menu = $("#configFileAddMenu");
+  if (!menu) return;
+  menu.classList.toggle("hidden", !state.configFileMenuOpen);
+}
+
+function renderConfigSourceModal() {
+  const modal = $("#configSourceModal");
+  if (!modal) return;
+  modal.classList.toggle("hidden", !state.configSourceModalOpen);
+  if (!state.configSourceModalOpen) return;
+
+  const sourceType = state.configSourceModalType;
+  const isShared = sourceType === "shared-config";
+  const project = activeProject();
+  const items = isShared ? state.sharedConfigs : state.templates;
+  const title = isShared
+    ? `Import Shared Config to ${project?.name || "Project"}`
+    : `Import Template to ${project?.name || "Project"}`;
+  const eyebrow = isShared ? "Link Shared Config" : "Import Template";
+  const rows = items
+    .map((item) => renderConfigSourceRow(item, sourceType))
+    .join("");
+
+  $("#configSourceModalEyebrow").textContent = eyebrow;
+  $("#configSourceModalTitle").textContent = title;
+  $("#configSourceModalList").innerHTML =
+    rows || `<p class="project-meta">No available ${isShared ? "shared configs" : "templates"}.</p>`;
+}
+
+function renderConfigSourceRow(item, sourceType) {
+  const imported = configSourceImportState(item, sourceType);
+  const scope = libraryScopeLabel(item);
+  const keyCount = item.entries?.length || item.keys?.length || item.variables?.length || 0;
+  const label = sourceType === "shared-config" ? "Import" : "Import";
+  return `
+    <div class="config-source-row ${imported.disabled ? "disabled" : ""}">
+      <div class="config-source-main">
+        <strong>${escapeHtml(item.name || item.id)}</strong>
+        <span>${escapeHtml(item.description || (sourceType === "shared-config" ? "Reusable shared config" : "Reusable template"))}</span>
+      </div>
+      <div class="config-source-meta">
+        <span class="library-pill scope ${escapeHtml(scope.toLowerCase())}">${escapeHtml(scope)}</span>
+        <span>${keyCount} ${keyCount === 1 ? "key" : "keys"}</span>
+        ${imported.disabled ? `<span class="status-pill neutral">${escapeHtml(imported.reason)}</span>` : ""}
+        <button class="primary-action compact-primary" type="button" data-import-config-source="${escapeHtml(sourceType)}" data-source-id="${escapeHtml(item.id)}" ${imported.disabled ? "disabled" : ""}>${label}</button>
+      </div>
+    </div>
+  `;
+}
+
+function configSourceImportState(item, sourceType) {
+  const existing = state.configFiles || [];
+  if (existing.some((file) => file.sourceType === sourceType && file.sourceId === item.id)) {
+    return { disabled: true, reason: "Already imported" };
+  }
+  const derivedName = configSourceFileName(item, sourceType);
+  if (existing.some((file) => String(file.name || "").toLowerCase() === derivedName.toLowerCase())) {
+    return { disabled: true, reason: "Name in use" };
+  }
+  return { disabled: false, reason: "" };
+}
+
+function configSourceFileName(item, sourceType) {
+  const id = item?.id || sourceType || "config";
+  const cleaned = id
+    .replace(/^(global|group|project)-/i, "")
+    .replace(/-template$/i, "")
+    .replace(/[^a-z0-9._-]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase();
+  return `${cleaned || "config"}.yaml`;
 }
 
 
@@ -832,13 +889,201 @@ export function renderProjectFormOptions() {
 }
 
 
+
+function projectTabButton(tab, label) {
+  return `<button class="project-tab ${state.projectDetailTab === tab ? "active" : ""}" type="button" data-project-tab="${tab}">${label}</button>`;
+}
+
+function renderProjectTabs() {
+  const target = $("#projectTabs");
+  if (!target) return;
+  target.innerHTML = `
+    ${projectTabButton("configs", "Configs")}
+    ${projectTabButton("members", "Members")}
+  `;
+  $("#projectConfigsPanel")?.classList.toggle(
+    "hidden",
+    state.projectDetailTab !== "configs",
+  );
+  $("#projectMembersPanel")?.classList.toggle(
+    "hidden",
+    state.projectDetailTab !== "members",
+  );
+}
+
+
+function projectGroupMembers(project = activeProject()) {
+  const group = state.groups.find((item) => item.id === project?.groupId);
+  if (!group?.members?.length) return state.users;
+  const groupIds = new Set(group.members.map((member) => member.id || member.userId));
+  return state.users.filter((user) => groupIds.has(user.id));
+}
+
+function projectMembers(project = activeProject()) {
+  return project?.members || [];
+}
+
+function canEditProjectMembers(project = activeProject()) {
+  if (!project) return false;
+  if (state.user?.role === "system_admin") return true;
+  if (state.user?.role === "group_admin") {
+    const group = state.groups.find((item) => item.id === project.groupId);
+    return (group?.members || []).some((member) => {
+      const id = member.id || member.userId;
+      return id === state.user?.id && member.groupRole === "group_admin";
+    });
+  }
+  return (project.members || []).some((member) => {
+    const id = member.id || member.userId;
+    return id === state.user?.id && member.projectRole === "project_admin";
+  });
+}
+
+function projectRoleLabel(role) {
+  return {
+    project_admin: "Project Admin",
+    developer: "Developer",
+    reviewer: "Reviewer",
+    viewer: "Viewer",
+  }[role] || "Viewer";
+}
+
+function renderProjectRoleControl(member, editAllowed) {
+  const id = member.id || member.userId;
+  const role = member.projectRole || "viewer";
+  if (!editAllowed) {
+    return `<span class="group-role-text">${projectRoleLabel(role)}</span>`;
+  }
+  const roles = ["project_admin", "developer", "reviewer", "viewer"];
+  const isOpen = state.projectRoleMenuUserId === id;
+  return `
+    <div class="group-role-dropdown-container" style="position: relative;">
+      <button type="button" class="group-role-button" data-toggle-project-role-menu="${escapeHtml(id)}">
+        <span>${projectRoleLabel(role)}</span>
+        <svg viewBox="0 0 24 24" width="14" height="14" stroke="#86868b" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" class="chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      </button>
+      ${isOpen ? `
+        <div class="apple-menu project-role-menu">
+          ${roles.map((item) => `
+            <button type="button" class="apple-menu-item ${role === item ? "active" : ""}" data-set-project-role="${item}" data-user-id="${escapeHtml(id)}">
+              <span class="apple-menu-icon" aria-hidden="true">${role === item ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>' : ""}</span>
+              <span>${projectRoleLabel(item)}</span>
+            </button>
+          `).join("")}
+        </div>
+      ` : ""}
+    </div>
+  `;
+}
+
+function renderProjectMemberRows(members, editAllowed) {
+  if (!members.length) {
+    return `<p class="group-empty-state">No members in this project.</p>`;
+  }
+  return `
+    <div class="group-plain-list group-member-list">
+      ${members.map((member) => {
+        const id = member.id || member.userId;
+        const isCurrentUser = state.user?.id === id;
+        return `
+          <article class="group-member-row ${isCurrentUser ? "current-user-row" : ""}">
+            <div class="member-avatar">${escapeHtml(initials(member.name || id || "--"))}</div>
+            <div>
+              <strong>${escapeHtml(member.name || id || "Unknown user")}</strong>
+              <p class="project-meta">
+                ${isCurrentUser ? `<span>You</span>` : member.email ? `<span>${escapeHtml(member.email)}</span>` : ""}
+              </p>
+            </div>
+            <div class="group-member-controls">
+              ${renderProjectRoleControl(member, editAllowed)}
+              ${editAllowed ? `<button class="member-remove-button" type="button" data-remove-project-member="${escapeHtml(id)}" aria-label="Remove ${escapeHtml(member.name || id || "member")}"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-.7 11H7.7L7 9Zm3 2v7h2v-7h-2Zm4 0v7h2v-7h-2Z"></path></svg></button>` : ""}
+            </div>
+          </article>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+export function renderProjectMemberPicker() {
+  const target = $("#projectMemberTools");
+  if (!target) return;
+  const memberIds = new Set(projectMembers().map((member) => member.id || member.userId));
+  target.classList.toggle(
+    "hidden",
+    !canEditProjectMembers() || !state.projectMemberPickerOpen,
+  );
+  target.innerHTML = state.projectMemberPickerOpen
+    ? `
+      <div class="group-member-picker-header project-member-picker-header">
+        <button type="button" id="closeProjectMemberPicker" class="picker-back-button" aria-label="Go back">
+          <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+        </button>
+        <h2>Add Members</h2>
+      </div>
+      ${renderMemberPicker({
+        users: projectGroupMembers(),
+        selectedIds: state.projectMemberSelection,
+        search: state.projectMemberSearch,
+        disabledIds: memberIds,
+        searchId: "projectMemberSearch",
+        optionAttribute: "data-project-member-option",
+        removeAttribute: "data-remove-selected-project-member",
+        submitId: "addProjectMember",
+        emptyLabel: "No users in this project group.",
+      })}
+    `
+    : "";
+}
+
+export function renderProjectMembersPanel() {
+  renderProjectTabs();
+  const panel = $("#projectMembersPanel");
+  if (!panel || state.projectDetailTab !== "members") return;
+  const project = activeProject();
+  const members = projectMembers(project);
+  const editAllowed = canEditProjectMembers(project);
+  const tools = $("#projectMemberTools");
+  const content = $("#projectMembersContent");
+  if (!content || !tools) return;
+
+  if (state.projectMemberPickerOpen) {
+    renderProjectMemberPicker();
+    content.innerHTML = "";
+    return;
+  }
+
+  tools.classList.add("hidden");
+  tools.innerHTML = "";
+  content.innerHTML = `
+    <div class="project-members-head">
+      <div>
+        <h2>Members</h2>
+        <p class="project-meta"><span>${members.length} project member${members.length === 1 ? "" : "s"}</span></p>
+      </div>
+      <button id="openProjectMemberPicker" class="add-member-button ${editAllowed ? "" : "hidden"}" type="button">
+        <span aria-hidden="true">+</span>
+        Add Member
+      </button>
+    </div>
+    ${renderProjectMemberRows(members, editAllowed)}
+  `;
+}
+
 export function renderConfigRows(renderShell = true) {
   const project = activeProject();
   if (renderShell) {
     $("#configTitle").textContent = project?.name || "Project Config";
     renderConfigVersionLabel();
+    renderProjectTabs();
     renderConfigFileList();
     renderEnvironmentTabs();
+  }
+
+  if (state.projectDetailTab === "members") {
+    renderProjectMembersPanel();
+    renderReviewDock();
+    return;
   }
 
   if (state.configMode === "compare") {
@@ -1086,6 +1331,18 @@ export function renderReviewDock() {
     `${count} ${count === 1 ? "change" : "changes"}`;
 }
 
+
+function canApproveProjectRequest(request) {
+  if (state.user?.role === "system_admin") return true;
+  const project = state.projects.find((item) => item.id === request.projectId);
+  return (project?.members || []).some((member) => {
+    const id = member.id || member.userId;
+    return (
+      id === state.user?.id &&
+      ["project_admin", "reviewer"].includes(member.projectRole)
+    );
+  });
+}
 export function renderRequests() {
   $("#notificationCount").textContent = String(
     state.notifications.filter((notification) => !notification.read).length,
@@ -1109,7 +1366,7 @@ export function renderRequests() {
               <span class="status-pill ${statusClass(request.status)}">${escapeHtml(request.status)}</span>
               ${
                 request.status === "pending" &&
-                ["system_admin", "reviewer"].includes(state.user?.role)
+                canApproveProjectRequest(request)
                   ? `<button class="secondary-action" type="button" data-approve="${escapeHtml(request.id)}">Approve</button>
                      <button class="ghost-action" type="button" data-reject="${escapeHtml(request.id)}">Reject</button>`
                   : ""
@@ -1368,9 +1625,9 @@ export function renderReviewModal() {
   $("#reviewModalMeta").innerHTML = project
     ? `<span>${escapeHtml(project.name)}</span><span>${escapeHtml(state.activeEnvironment)}</span>`
     : "";
-  $("#reviewReason").value ||= project
-    ? `Review ${state.activeEnvironment} config changes for ${project.name}`
-    : "Review config changes";
+  if (!$("#reviewReason").dataset.touched) {
+    $("#reviewReason").value = $("#reviewReason").value || "";
+  }
   $("#reviewChangeList").innerHTML =
     state.pendingReviewChanges.map(renderReviewChange).join("") ||
     '<p class="project-meta">No pending changes.</p>';
@@ -1384,20 +1641,15 @@ function renderReviewChange(change) {
   const beforeValue = baseline?.value ?? "";
   const afterValue = current?.value ?? "";
   const keyChanged = beforeKey !== afterKey;
-  const valueChanged = beforeValue !== afterValue;
+  const title = keyChanged ? `${beforeKey} -> ${afterKey}` : afterKey;
 
   return `
     <article class="review-change-item">
-      <div>
-        <strong>${escapeHtml(afterKey)}</strong>
-        <p class="project-meta">
-          <span>${keyChanged ? `key: ${escapeHtml(beforeKey)} -> ${escapeHtml(afterKey)}` : "key unchanged"}</span>
-          <span>${valueChanged ? "value changed" : "value unchanged"}</span>
-        </p>
-      </div>
+      <strong>${escapeHtml(title)}</strong>
       <div class="review-value-pair">
-        <code>${escapeHtml(beforeValue || "(empty)")}</code>
-        <code>${escapeHtml(afterValue || "(empty)")}</code>
+        <code class="review-old-value">${escapeHtml(beforeValue || "(empty)")}</code>
+        <span class="review-diff-arrow" aria-hidden="true">➔</span>
+        <code class="review-new-value">${escapeHtml(afterValue || "(empty)")}</code>
       </div>
     </article>
   `;
@@ -1907,6 +2159,8 @@ export function renderAll() {
   renderSharedConfigCreateModal();
   renderSharedConfigEditModal();
   renderConfigRows();
+  renderProjectMembersPanel();
+  renderConfigSourceModal();
   renderConfigCreateDrawer();
   renderReviewDock();
   renderExportModal();

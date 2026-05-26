@@ -6,6 +6,7 @@ import {
   createGroup,
   createProject,
   createTemplate,
+  addProjectMembers,
   createReviewRequest,
   createSharedConfig,
   updateSharedConfig,
@@ -15,21 +16,23 @@ import {
   addGroupMember,
   applyImportPreview,
   applyTemplate,
-  cancelConfigSourcePicker,
-  chooseConfigSource,
   openExportConfig,
   openGroupPanel,
   openConfigSourcePicker,
   openVersionHistory,
+  importConfigSource,
   rollbackLatestVersion,
   setConfigCreateDrawer,
   setCompareEnvironment,
   setConfigFileCreate,
+  setConfigFileMenu,
   setConfigMode,
   setExportModal,
   removeGroupMember,
+  removeProjectMember,
   removeSelectedCreateMember,
   removeSelectedGroupMember,
+  removeSelectedProjectMember,
   selectGroup,
   setGroupDetailTab,
   setGroupModal,
@@ -37,6 +40,7 @@ import {
   setLibraryTab,
   setImportModal,
   setImportPreviewModal,
+  setProjectDetailTab,
   setProjectModal,
   setReviewModal,
   setTemplateCreateModal,
@@ -47,6 +51,10 @@ import {
   toggleGroupCreate,
   toggleGroupCreateMemberSelection,
   toggleGroupMemberPicker,
+  toggleConfigFileMenu,
+  toggleProjectMemberPicker,
+  toggleProjectMemberSelection,
+  toggleProjectRoleMenu,
   toggleGroupMemberSelection,
   submitReviewChanges,
   switchView,
@@ -54,6 +62,8 @@ import {
   updateConfigFileDraftName,
   updateConfigFileSourceType,
   updateGroupMemberRole,
+  updateProjectMemberRole,
+  updateProjectMemberSearch,
   updateGroupMemberSearch,
   updateNewConfigValueType,
   updateTemplateValue,
@@ -103,6 +113,18 @@ export function bindEvents() {
       return;
     }
 
+    const projectMemberSearch = event.target.closest("#projectMemberSearch");
+    if (projectMemberSearch) {
+      updateProjectMemberSearch(projectMemberSearch.value);
+      return;
+    }
+
+    const reviewReason = event.target.closest("#reviewReason");
+    if (reviewReason) {
+      reviewReason.dataset.touched = "true";
+      return;
+    }
+
     const target = event.target.closest("[data-template-variable]");
     if (!target) return;
     updateTemplateValue(target.dataset.templateVariable, target.value);
@@ -123,6 +145,12 @@ export function bindEvents() {
     const member = event.target.closest("[data-group-member-option]");
     if (member) {
       toggleGroupMemberSelection(member.value, member.checked);
+      return;
+    }
+
+    const projectMember = event.target.closest("[data-project-member-option]");
+    if (projectMember) {
+      toggleProjectMemberSelection(projectMember.value, projectMember.checked);
       return;
     }
 
@@ -224,6 +252,13 @@ async function handleDocumentClick(event) {
       const { toggleGroupRoleMenu } = await import("./actions.js");
       toggleGroupRoleMenu("");
     }
+    if (state.projectRoleMenuUserId) {
+      toggleProjectRoleMenu("");
+    }
+  }
+
+  if (!event.target.closest(".config-file-add-wrap") && state.configFileMenuOpen) {
+    setConfigFileMenu(false);
   }
 
   if (!target) return;
@@ -297,6 +332,11 @@ async function handleDocumentClick(event) {
       return;
     }
 
+    if (target.dataset.removeSelectedProjectMember) {
+      removeSelectedProjectMember(target.dataset.removeSelectedProjectMember);
+      return;
+    }
+
     if (target.dataset.removeGroupMember) {
       await removeGroupMember(target.dataset.removeGroupMember);
       return;
@@ -313,6 +353,19 @@ async function handleDocumentClick(event) {
       await updateGroupMemberRole(
         target.dataset.userId,
         target.dataset.setRole,
+      );
+      return;
+    }
+
+    if (target.dataset.toggleProjectRoleMenu) {
+      toggleProjectRoleMenu(target.dataset.toggleProjectRoleMenu);
+      return;
+    }
+
+    if (target.dataset.setProjectRole) {
+      await updateProjectMemberRole(
+        target.dataset.userId,
+        target.dataset.setProjectRole,
       );
       return;
     }
@@ -339,6 +392,11 @@ async function handleDocumentClick(event) {
 
     if (target.dataset.closeModal === "import-preview") {
       setImportPreviewModal(false);
+      return;
+    }
+
+    if (target.dataset.closeModal === "config-source") {
+      openConfigSourcePicker("");
       return;
     }
 
@@ -378,7 +436,17 @@ async function handleDocumentClick(event) {
     }
 
     if (target.id === "openConfigFileCreate") {
+      toggleConfigFileMenu();
+      return;
+    }
+
+    if (target.dataset.configFileMenuAction === "blank") {
       setConfigFileCreate(true);
+      return;
+    }
+
+    if (target.dataset.configFileMenuAction) {
+      openConfigSourcePicker(target.dataset.configFileMenuAction);
       return;
     }
 
@@ -392,8 +460,36 @@ async function handleDocumentClick(event) {
       return;
     }
 
+    if (target.dataset.importConfigSource) {
+      await importConfigSource(
+        target.dataset.importConfigSource,
+        target.dataset.sourceId,
+      );
+      return;
+    }
+
     if (target.dataset.configMode) {
       await setConfigMode(target.dataset.configMode);
+      return;
+    }
+
+    if (target.dataset.projectTab) {
+      await setProjectDetailTab(target.dataset.projectTab);
+      return;
+    }
+
+    if (target.id === "openProjectMemberPicker" || target.id === "closeProjectMemberPicker") {
+      toggleProjectMemberPicker();
+      return;
+    }
+
+    if (target.id === "addProjectMember") {
+      await addProjectMembers();
+      return;
+    }
+
+    if (target.dataset.removeProjectMember) {
+      await removeProjectMember(target.dataset.removeProjectMember);
       return;
     }
 
@@ -406,10 +502,6 @@ async function handleDocumentClick(event) {
     if (target.id === "openTemplateCreate") {
       if (state.libraryTab === "shared-config") {
         setSharedConfigCreateModal(true);
-        return;
-      }
-      if (state.configSourcePickerActive) {
-        cancelConfigSourcePicker();
         return;
       }
       setTemplateCreateModal(true);
@@ -428,16 +520,6 @@ async function handleDocumentClick(event) {
 
     if (target.dataset.submitSharedConfig) {
       await submitSharedConfigUpdate(target.dataset.submitSharedConfig);
-      return;
-    }
-
-    if (target.dataset.pickTemplate) {
-      chooseConfigSource("template", target.dataset.pickTemplate);
-      return;
-    }
-
-    if (target.dataset.pickSharedConfig) {
-      chooseConfigSource("shared-config", target.dataset.pickSharedConfig);
       return;
     }
 
@@ -496,6 +578,8 @@ async function handleDocumentClick(event) {
     if (projectId) {
       state.activeProjectId = projectId;
       state.activeConfigFile = "";
+      state.projectDetailTab = "configs";
+      state.projectMemberPickerOpen = false;
       const project = activeProject();
       state.activeEnvironment = project.environments.includes("prod")
         ? "prod"
@@ -552,6 +636,18 @@ async function handleDocumentKeydown(event) {
   if (event.key === "Escape" && event.target.closest("#configFileCreateForm")) {
     event.preventDefault();
     setConfigFileCreate(false);
+    return;
+  }
+
+  if (event.key === "Escape" && state.configFileMenuOpen) {
+    event.preventDefault();
+    setConfigFileMenu(false);
+    return;
+  }
+
+  if (event.key === "Escape" && state.configSourceModalOpen) {
+    event.preventDefault();
+    openConfigSourcePicker("");
     return;
   }
 

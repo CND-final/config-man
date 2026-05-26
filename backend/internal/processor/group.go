@@ -11,8 +11,8 @@ import (
 )
 
 func (p *Processor) ListUsers(ctx appctx.RequestContext) ([]model.User, *model.ErrorDetail) {
-	if ctx.Actor.Role != model.RoleSystemAdmin && ctx.Actor.Role != model.RoleUserGroupAdmin {
-		return nil, model.Forbidden("Only system_admin or group_admin can list users")
+	if ctx.Actor.Role != model.RoleSystemAdmin && ctx.Actor.Role != model.RoleUserGroupAdmin && ctx.Actor.Role != model.RoleProjectAdmin {
+		return nil, model.Forbidden("Only system_admin, group_admin, or project_admin can list users")
 	}
 	return p.store.ListUsers(), nil
 }

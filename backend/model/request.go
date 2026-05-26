@@ -109,10 +109,11 @@ type SubmitSharedConfigUpdateRequest struct {
 }
 
 type CreateReviewRequest struct {
-	ProjectID   string `json:"projectId"`
-	Environment string `json:"environment"`
-	ConfigKey   string `json:"configKey"`
-	Reason      string `json:"reason"`
+	ProjectID       string               `json:"projectId"`
+	Environment     string               `json:"environment"`
+	ConfigKey       string               `json:"configKey"`
+	Reason          string               `json:"reason"`
+	ProposedChanges []ReviewConfigChange `json:"proposedChanges"`
 }
 
 type ReviewDecisionRequest struct {

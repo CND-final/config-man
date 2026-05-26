@@ -6,6 +6,7 @@ import {
   loadConfigsAndHistory,
   reloadGroupDetail,
   reloadGroups,
+  reloadProjectMembers,
   reloadProjects,
   reloadTemplates,
   reloadSharedConfigs,
@@ -25,6 +26,8 @@ import {
   renderGroupMemberPicker,
   renderGroupModal,
   renderProjectFormOptions,
+  renderProjectMemberPicker,
+  renderProjectMembersPanel,
   renderRequests,
   renderReviewModal,
   renderReviewDock,
@@ -37,6 +40,224 @@ import {
 } from "./render.js";
 import { activeProject, state } from "./state.js";
 import { parseEnvironmentInput } from "./utils.js";
+
+
+function clearProjectMemberPicker() {
+  state.projectMemberPickerOpen = false;
+  state.projectMemberSearch = "";
+  state.projectMemberSelection = new Set();
+  state.projectRoleMenuUserId = "";
+}
+
+export function canEditProjectMembers(project = activeProject()) {
+  if (!project) return false;
+  if (state.user?.role === "system_admin") return true;
+  if (state.user?.role === "group_admin") {
+    const group = state.groups.find((item) => item.id === project.groupId);
+    return (group?.members || []).some((member) => {
+      const id = member.id || member.userId;
+      return id === state.user?.id && member.groupRole === "group_admin";
+    });
+  }
+  return (project.members || []).some((member) => {
+    const id = member.id || member.userId;
+    return id === state.user?.id && member.projectRole === "project_admin";
+  });
+}
+
+export async function setProjectDetailTab(tab) {
+  if (!["configs", "members"].includes(tab)) return;
+  state.projectDetailTab = tab;
+  clearProjectMemberPicker();
+  if (tab === "members") {
+    await Promise.all([
+      reloadProjectMembers(activeProject()?.id),
+      reloadUsers({ silent: true }),
+      reloadGroups({ silent: true }),
+    ]);
+  }
+  renderConfigRows();
+}
+
+export function toggleProjectMemberPicker(open = !state.projectMemberPickerOpen) {
+  state.projectMemberPickerOpen = open;
+  state.projectMemberSearch = "";
+  state.projectMemberSelection = new Set();
+  state.projectRoleMenuUserId = "";
+  renderProjectMembersPanel();
+}
+
+export function updateProjectMemberSearch(value) {
+  state.projectMemberSearch = value;
+  renderPreservingMemberPicker(
+    "projectMemberTools",
+    "projectMemberSearch",
+    renderProjectMemberPicker,
+  );
+}
+
+export function toggleProjectMemberSelection(userId, selected) {
+  if (!userId) return;
+  if (selected) {
+    state.projectMemberSelection.add(userId);
+  } else {
+    state.projectMemberSelection.delete(userId);
+  }
+  renderPreservingMemberPicker(
+    "projectMemberTools",
+    "projectMemberSearch",
+    renderProjectMemberPicker,
+  );
+}
+
+export function removeSelectedProjectMember(userId) {
+  state.projectMemberSelection.delete(userId);
+  renderPreservingMemberPicker(
+    "projectMemberTools",
+    "projectMemberSearch",
+    renderProjectMemberPicker,
+  );
+}
+
+function projectMemberPayload(project, overrides = new Map()) {
+  return (project?.members || []).map((member) => {
+    const id = member.id || member.userId;
+    return {
+      userId: id,
+      projectRole: overrides.get(id) || member.projectRole || "viewer",
+    };
+  });
+}
+
+async function saveProjectMembers(members) {
+  const project = activeProject();
+  if (!project) return [];
+  const payload = await api(`/projects/${encodeURIComponent(project.id)}/members`, {
+    method: "PUT",
+    body: JSON.stringify({ members }),
+  });
+  const updatedMembers = payload.members || [];
+  state.projects = state.projects.map((item) =>
+    item.id === project.id
+      ? { ...item, members: updatedMembers, memberCount: updatedMembers.length }
+      : item,
+  );
+  return updatedMembers;
+}
+
+export async function addProjectMembers() {
+  const project = activeProject();
+  if (!canEditProjectMembers(project)) {
+    showToast("Only group admins or project admins can edit project members");
+    return;
+  }
+  const selected = Array.from(state.projectMemberSelection);
+  if (!project || selected.length === 0) return;
+  const existing = projectMemberPayload(project);
+  const existingIds = new Set(existing.map((member) => member.userId));
+  const additions = selected
+    .filter((userId) => !existingIds.has(userId))
+    .map((userId) => ({ userId, projectRole: "viewer" }));
+  await saveProjectMembers([...existing, ...additions]);
+  clearProjectMemberPicker();
+  renderConfigRows();
+  showToast(`${additions.length} member${additions.length === 1 ? "" : "s"} added`);
+}
+
+export async function removeProjectMember(userId) {
+  const project = activeProject();
+  if (!canEditProjectMembers(project) || !project || !userId) return;
+  const members = projectMemberPayload(project).filter((member) => member.userId !== userId);
+  await saveProjectMembers(members);
+  renderConfigRows();
+  showToast("Member removed");
+}
+
+export function toggleProjectRoleMenu(userId) {
+  state.projectRoleMenuUserId =
+    state.projectRoleMenuUserId === userId ? "" : userId;
+  renderProjectMembersPanel();
+}
+
+export async function updateProjectMemberRole(userId, projectRole) {
+  const project = activeProject();
+  if (!canEditProjectMembers(project) || !project || !userId) return;
+  const members = projectMemberPayload(project, new Map([[userId, projectRole]]));
+  await saveProjectMembers(members);
+  state.projectRoleMenuUserId = "";
+  renderConfigRows();
+  showToast("Project role updated");
+}
+
+
+function projectRoleForCurrentUser(project = activeProject()) {
+  if (!project) return "";
+  if (state.user?.role === "system_admin") return "system_admin";
+  const member = (project.members || []).find((item) => {
+    const id = item.id || item.userId;
+    return id === state.user?.id;
+  });
+  return member?.projectRole || "";
+}
+
+function canDirectWriteEnvironment(project, environment) {
+  const role = projectRoleForCurrentUser(project);
+  if (role === "system_admin" || role === "project_admin") return true;
+  return role === "developer" && String(environment).toLowerCase() !== "prod";
+}
+
+function canCreateProjectReview(project = activeProject()) {
+  const role = projectRoleForCurrentUser(project);
+  return ["system_admin", "project_admin", "developer", "reviewer"].includes(role);
+}
+
+function shouldStageReviewChange(project, environment) {
+  return (
+    String(environment).toLowerCase() === "prod" &&
+    !canDirectWriteEnvironment(project, environment) &&
+    canCreateProjectReview(project)
+  );
+}
+
+function stageLocalConfigChange(configId, field, value) {
+  state.configs = state.configs.map((entry) =>
+    entry.id === configId
+      ? {
+          ...entry,
+          [field]: value,
+        }
+      : entry,
+  );
+  syncPendingReviewChanges();
+}
+
+function stageLocalConfigCreate(project, request, bodyBase) {
+  const id = `draft-${project.id}-${request.environment}-${bodyBase.key}`.replace(/[^a-z0-9_-]+/gi, "-");
+  const existing = state.configs.find(
+    (entry) =>
+      entry.environment === request.environment &&
+      entry.key === bodyBase.key &&
+      entry.configId === bodyBase.configId,
+  );
+  if (existing) {
+    stageLocalConfigChange(existing.id, "value", request.value);
+    return;
+  }
+  state.configs = [
+    ...state.configs,
+    {
+      id,
+      projectId: project.id,
+      environment: request.environment,
+      configId: bodyBase.configId,
+      key: bodyBase.key,
+      value: request.value,
+      valueType: bodyBase.valueType,
+      isSensitive: bodyBase.isSensitive,
+    },
+  ];
+  syncPendingReviewChanges();
+}
 
 export function switchView(viewId) {
   state.activeView = viewId;
@@ -107,6 +328,7 @@ export function setUserMenu(open) {
 
 export function setConfigFileCreate(open) {
   state.configFileCreateOpen = open;
+  state.configFileMenuOpen = false;
   if (open) {
     state.configFileSourceType = "blank";
     state.configFileSourceId = "";
@@ -116,6 +338,23 @@ export function setConfigFileCreate(open) {
   if (open) {
     window.setTimeout(() => $("#newConfigFileName")?.focus(), 0);
   }
+}
+
+export function setConfigFileMenu(open) {
+  state.configFileMenuOpen = Boolean(open);
+  renderConfigRows();
+}
+
+export function toggleConfigFileMenu() {
+  setConfigFileMenu(!state.configFileMenuOpen);
+}
+
+export function setConfigSourceModal(sourceType = "", open = false) {
+  state.configSourceModalOpen = Boolean(open);
+  state.configSourceModalType = open ? sourceType : "";
+  state.configFileMenuOpen = false;
+  state.configFileCreateOpen = false;
+  renderConfigRows();
 }
 
 export function updateConfigFileDraftName(name) {
@@ -172,6 +411,7 @@ function configFileSource(sourceType, sourceId) {
     return {
       type: sourceType,
       id: sourceId,
+      item: template,
       label: template ? `Template: ${template.name}` : "Template source",
     };
   }
@@ -182,12 +422,13 @@ function configFileSource(sourceType, sourceId) {
     return {
       type: sourceType,
       id: sourceId,
+      item: sharedConfig,
       label: sharedConfig
         ? `Shared: ${sharedConfig.name}`
         : "Shared config source",
     };
   }
-  return { type: "blank", id: "", label: "Custom config file" };
+  return { type: "blank", id: "", item: null, label: "Custom config file" };
 }
 
 export async function setConfigMode(mode) {
@@ -276,21 +517,47 @@ export async function createConfigKey(event) {
     changeReason: reason,
   };
 
-  for (const request of requests) {
+  const directRequests = requests.filter((request) =>
+    canDirectWriteEnvironment(project, request.environment),
+  );
+  const stagedRequests = requests.filter((request) =>
+    shouldStageReviewChange(project, request.environment),
+  );
+  const blockedRequests = requests.filter(
+    (request) =>
+      !canDirectWriteEnvironment(project, request.environment) &&
+      !shouldStageReviewChange(project, request.environment),
+  );
+
+  if (blockedRequests.length) {
+    showToast("You cannot change one or more selected environments");
+    return;
+  }
+
+  for (const request of directRequests) {
     await api(`/projects/${project.id}/configs`, {
       method: "POST",
       body: JSON.stringify({ ...bodyBase, ...request }),
     });
   }
 
-  await loadConfigsAndHistory();
+  if (directRequests.length) {
+    await loadConfigsAndHistory();
+  }
+  stagedRequests.forEach((request) =>
+    stageLocalConfigCreate(project, request, bodyBase),
+  );
+
   if (state.configMode === "compare") {
     await loadCompareConfigs();
   }
   setConfigCreateDrawer(false);
   renderAll();
+  const stagedCopy = stagedRequests.length
+    ? ` (${stagedRequests.length} pending review)`
+    : "";
   showToast(
-    `${key} created in ${requests.length} environment${requests.length === 1 ? "" : "s"}`,
+    `${key} created in ${requests.length} environment${requests.length === 1 ? "" : "s"}${stagedCopy}`,
   );
 }
 
@@ -547,31 +814,60 @@ export function setProjectModal(open) {
 }
 
 export function openConfigSourcePicker(sourceType) {
-  state.configFileDraftName =
-    $("#newConfigFileName")?.value || state.configFileDraftName || "";
-  state.configFileSourceType = sourceType;
-  state.configFileSourceId = "";
-  state.configFileCreateOpen = false;
-  state.configSourcePickerActive = true;
-  state.libraryTab = sourceType === "shared-config" ? "shared-config" : "templates";
-  switchView("templates");
-  renderAll();
+  if (!sourceType) {
+    setConfigSourceModal("", false);
+    return;
+  }
+  setConfigSourceModal(sourceType, true);
 }
 
 export function cancelConfigSourcePicker() {
-  state.configSourcePickerActive = false;
-  switchView("config");
-  setConfigFileCreate(true);
-  renderAll();
+  setConfigSourceModal("", false);
 }
 
 export function chooseConfigSource(sourceType, sourceId) {
   state.configFileSourceType = sourceType;
   state.configFileSourceId = sourceId || "";
-  state.configSourcePickerActive = false;
-  switchView("config");
   setConfigFileCreate(true);
+}
+
+export async function importConfigSource(sourceType, sourceId) {
+  const project = activeProject();
+  if (!project) {
+    showToast("Choose a project first");
+    return;
+  }
+  const source = configFileSource(sourceType, sourceId);
+  if (!source.id) {
+    showToast("Choose a source first");
+    return;
+  }
+  const created = await api(`/projects/${project.id}/configs`, {
+    method: "POST",
+    body: JSON.stringify({
+      name: configFileNameForSource(sourceType, source.item),
+      sourceType,
+      sourceId,
+      description: source.label,
+    }),
+  });
+  await loadConfigsAndHistory();
+  state.activeConfigFile = created.id;
+  state.configSourceModalOpen = false;
+  state.configSourceModalType = "";
   renderAll();
+  showToast(`${created.name} imported`);
+}
+
+function configFileNameForSource(sourceType, item) {
+  const id = item?.id || sourceType;
+  const cleaned = id
+    .replace(/^(global|group|project)-/i, "")
+    .replace(/-template$/i, "")
+    .replace(/[^a-z0-9._-]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase();
+  return `${cleaned || "config"}.yaml`;
 }
 
 function readProjectDraft() {
@@ -787,6 +1083,13 @@ export function setHistoryModal(open) {
 
 export function setReviewModal(open) {
   state.reviewModalOpen = open;
+  if (open) {
+    const reason = $("#reviewReason");
+    if (reason) {
+      reason.value = "";
+      reason.dataset.touched = "";
+    }
+  }
   renderReviewModal();
   if (open) {
     window.setTimeout(() => $("#reviewReason").focus(), 0);
@@ -1022,6 +1325,15 @@ export async function commitInlineEdit(input) {
     return;
   }
 
+  const project = activeProject();
+  if (shouldStageReviewChange(project, config.environment)) {
+    stageLocalConfigChange(config.id, edit.field, nextValue);
+    state.inlineEdit = null;
+    renderAll();
+    showToast(`${config.key} staged for review`);
+    return;
+  }
+
   state.inlineSaving = true;
   try {
     const body =
@@ -1245,6 +1557,27 @@ export async function createReviewRequest() {
   setReviewModal(true);
 }
 
+
+function proposedReviewChanges() {
+  return state.pendingReviewChanges
+    .map((change) => {
+      const config = state.configs.find((entry) => entry.id === change.configId);
+      if (!config) return null;
+      const entryId = String(config.id || "").startsWith("draft-")
+        ? ""
+        : config.id;
+      return {
+        configEntryId: entryId,
+        configId: config.configId,
+        key: config.key,
+        value: config.value,
+        valueType: config.valueType || "string",
+        isSensitive: Boolean(config.isSensitive),
+        environment: config.environment || state.activeEnvironment,
+      };
+    })
+    .filter(Boolean);
+}
 export async function submitReviewChanges() {
   const project = activeProject();
   if (!project) return;
@@ -1256,6 +1589,7 @@ export async function submitReviewChanges() {
     return;
   }
 
+  const proposedChanges = proposedReviewChanges();
   await api("/review-requests", {
     method: "POST",
     body: JSON.stringify({
@@ -1263,12 +1597,14 @@ export async function submitReviewChanges() {
       environment: state.activeEnvironment,
       configKey: pending.key,
       reason,
+      proposedChanges,
     }),
   });
 
   state.requests = await api("/review-requests");
-  acceptCurrentConfigsAsBaseline();
+  state.pendingReviewChanges = [];
   state.reviewModalOpen = false;
+  await loadConfigsAndHistory();
   renderAll();
   showToast("Review request created");
 }
@@ -1279,8 +1615,8 @@ export async function handleReviewDecision(id, action) {
     body: JSON.stringify({ comment: `${action} from frontend` }),
   });
   state.requests = await api("/review-requests");
-  renderDashboard();
-  renderRequests();
+  await loadConfigsAndHistory();
+  renderAll();
   showToast(`Review request ${action}d`);
 }
 
