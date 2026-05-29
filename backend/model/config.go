@@ -30,6 +30,10 @@ type ConfigEntry struct {
 	ValueType   string    `json:"valueType"`
 	IsSensitive bool      `json:"isSensitive"`
 	UpdatedBy   string    `json:"updatedBy"`
+	Inherited   bool      `json:"inherited,omitempty"`
+	Overridden  bool      `json:"overridden,omitempty"`
+	SourceType  string    `json:"sourceType,omitempty"`
+	SourceID    string    `json:"sourceId,omitempty"`
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
 }

@@ -1,4 +1,5 @@
 import { api } from "./api.js";
+import { ensureActiveConfigFile } from "./configFiles.js";
 import { activeProject, normalizeProject, state } from "./state.js";
 
 export async function loadInitialData() {
@@ -99,12 +100,13 @@ export async function loadConfigs(revealSensitive = false) {
     )}${revealSensitive ? "&revealSensitive=true" : ""}`,
   );
   state.configFiles = configsFromPayload(data);
+  ensureActiveConfigFile(state);
   state.configs = entriesFromConfigPayload(data).map((entry) => ({
     ...entry,
     updated: entry.updatedBy,
   }));
 
-  const context = `${project.id}:${state.activeEnvironment}`;
+  const context = `${project.id}:${state.activeEnvironment}:${state.activeConfigFile}`;
   if (state.configBaselineContext !== context) {
     state.configBaselineContext = context;
     state.configBaseline = new Map(
@@ -142,7 +144,8 @@ function baselineConfig(entry) {
 }
 
 export async function loadConfigsAndHistory(revealSensitive = false) {
-  await Promise.all([loadConfigs(revealSensitive), loadConfigHistory()]);
+  await loadConfigs(revealSensitive);
+  await loadConfigHistory();
 }
 
 export async function loadCompareConfigs() {

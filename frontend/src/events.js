@@ -21,7 +21,7 @@ import {
   openConfigSourcePicker,
   openVersionHistory,
   importConfigSource,
-  rollbackLatestVersion,
+  rollbackConfigRevision,
   setConfigCreateDrawer,
   setCompareEnvironment,
   setConfigFileCreate,
@@ -37,12 +37,14 @@ import {
   setGroupDetailTab,
   setGroupModal,
   setHistoryModal,
+  setNotificationPopover,
   setLibraryTab,
   setImportModal,
   setImportPreviewModal,
   setProjectDetailTab,
   setProjectModal,
   setReviewModal,
+  setRequestDetailModal,
   setTemplateCreateModal,
   setSharedConfigCreateModal,
   setSharedConfigEditModal,
@@ -75,11 +77,12 @@ import {
 import { api } from "./api.js";
 import { loadCompareConfigs, loadConfigsAndHistory, loadInitialData } from "./data.js";
 import { $, setAuthenticated, showToast } from "./dom.js";
-import { renderAll, renderConfigRows } from "./render.js";
+import { hydrateHistoryRevisionDetails, renderAll, renderConfigRows } from "./render.js";
 import { activeProject, state } from "./state.js";
 
 export function bindEvents() {
   document.addEventListener("click", handleDocumentClick);
+  document.addEventListener("toggle", handleDocumentToggle, true);
   document.addEventListener("keydown", handleDocumentKeydown);
   document.addEventListener("focusout", handleDocumentFocusOut);
 
@@ -261,9 +264,24 @@ async function handleDocumentClick(event) {
     setConfigFileMenu(false);
   }
 
+  if (!event.target.closest(".notification-wrap") && state.notificationPopoverOpen) {
+    setNotificationPopover(false);
+  }
+
+  const requestItem = event.target.closest("[data-open-request]");
+  if (requestItem && !event.target.closest("button")) {
+    setRequestDetailModal(true, requestItem.dataset.openRequest);
+    return;
+  }
+
   if (!target) return;
 
   try {
+    if (target.id === "notificationButton") {
+      setNotificationPopover(!state.notificationPopoverOpen);
+      return;
+    }
+
     if (target.dataset.userMenuAction === "groups") {
       await openGroupPanel();
       return;
@@ -377,6 +395,11 @@ async function handleDocumentClick(event) {
 
     if (target.dataset.closeModal === "history") {
       setHistoryModal(false);
+      return;
+    }
+
+    if (target.dataset.closeModal === "request-detail") {
+      setRequestDetailModal(false);
       return;
     }
 
@@ -528,8 +551,10 @@ async function handleDocumentClick(event) {
       return;
     }
 
-    if (target.id === "rollbackLatest") {
-      await rollbackLatestVersion();
+    if (target.dataset.rollbackRevision) {
+      event.preventDefault();
+      event.stopPropagation();
+      await rollbackConfigRevision(target.dataset.rollbackRevision);
       return;
     }
 
@@ -555,6 +580,7 @@ async function handleDocumentClick(event) {
 
     const jump = target.dataset.jump;
     if (jump) {
+      setNotificationPopover(false);
       switchView(jump);
       if (target.dataset.openProjectForm) {
         setProjectModal(true);
@@ -564,13 +590,15 @@ async function handleDocumentClick(event) {
 
     const viewTarget = target.dataset.viewTarget;
     if (viewTarget) {
+      setNotificationPopover(false);
       switchView(viewTarget);
       return;
     }
 
     if (target.dataset.selectConfigFile) {
       state.activeConfigFile = target.dataset.selectConfigFile;
-      renderConfigRows();
+      await loadConfigsAndHistory();
+      renderAll();
       return;
     }
 
@@ -626,10 +654,22 @@ async function handleDocumentClick(event) {
 
     if (target.dataset.reject) {
       await handleReviewDecision(target.dataset.reject, "reject");
+      return;
+    }
+
+    if (target.dataset.viewRequest) {
+      setRequestDetailModal(true, target.dataset.viewRequest);
+      return;
     }
   } catch (error) {
     showToast(error.message);
   }
+}
+
+function handleDocumentToggle(event) {
+  const details = event.target.closest?.(".version-timeline-item");
+  if (!details || !details.open) return;
+  hydrateHistoryRevisionDetails(details);
 }
 
 async function handleDocumentKeydown(event) {

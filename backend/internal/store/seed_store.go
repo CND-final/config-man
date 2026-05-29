@@ -194,9 +194,43 @@ func demoSeedData() seedData {
 	addEntriesForAllEnvs(billingAPI, billingPayment, "payment.apiKey", "sk_test_dev_demo_secret", "sk_test_staging_demo_secret", "sk_live_demo_secret", "string", true)
 	addEntriesForAllEnvs(billingAPI, billingPayment, "payment.webhook.enabled", "false", "true", "true", "boolean", false)
 
+	addSeedRevision := func(projectID, environment, changedBy, reason string, entries []model.ConfigEntry, createdAt time.Time) {
+		revision := configRevisionFromEntries(projectID, environment, changedBy, reason, entries, "")
+		revision.CreatedAt = createdAt
+		seed.revisions = append(seed.revisions, revision)
+	}
+	previousProdEntries := func(entries []model.ConfigEntry) []model.ConfigEntry {
+		previous := make([]model.ConfigEntry, 0, len(entries))
+		for _, entry := range entries {
+			copy := entry
+			switch copy.Key {
+			case "api.baseUrl":
+				copy.Value = "https://api-v1.example.com"
+			case "log.level", "logging.level.root":
+				copy.Value = "WARN"
+			case "observability.metrics.enabled", "security.headers.enabled", "payment.webhook.enabled":
+				copy.Value = "false"
+			case "database.url":
+				copy.Value = "postgresql://prod-user:old-secret@prod-db:5432/app"
+			case "service.port":
+				copy.Value = "8081"
+			case "payment.provider":
+				copy.Value = "stripe-sandbox"
+			case "payment.apiKey":
+				copy.Value = "sk_live_previous_demo_secret"
+			}
+			previous = append(previous, copy)
+		}
+		return previous
+	}
+
 	for _, project := range []*model.Project{customerPortal, billingAPI} {
 		for _, env := range project.Environments {
-			seed.revisions = append(seed.revisions, configRevisionFromEntries(project.ID, env.Name, "seed-admin", "seed demo config", entriesForProjectEnv(seed.configs, project.ID, env.Name), ""))
+			entries := entriesForProjectEnv(seed.configs, project.ID, env.Name)
+			if env.Name == "prod" {
+				addSeedRevision(project.ID, env.Name, "seed-admin", "previous prod config", previousProdEntries(entries), now.Add(-2*time.Hour))
+			}
+			addSeedRevision(project.ID, env.Name, "seed-admin", "seed demo config", entries, now.Add(-1*time.Hour))
 		}
 		seed.audits = append(seed.audits, model.AuditLog{
 			ID:           util.NewID("aud"),

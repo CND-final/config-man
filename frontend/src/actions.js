@@ -21,6 +21,7 @@ import {
   renderDashboard,
   renderExportModal,
   renderNav,
+  renderNotifications,
   renderImportPreview,
   renderGroupCreateMemberPicker,
   renderGroupMemberPicker,
@@ -29,6 +30,7 @@ import {
   renderProjectMemberPicker,
   renderProjectMembersPanel,
   renderRequests,
+  renderRequestDetailModal,
   renderReviewModal,
   renderReviewDock,
   renderTemplateCreateModal,
@@ -225,6 +227,8 @@ function stageLocalConfigChange(configId, field, value) {
       ? {
           ...entry,
           [field]: value,
+          inherited: false,
+          overridden: entry.inherited || entry.overridden,
         }
       : entry,
   );
@@ -321,6 +325,11 @@ function renderPreservingMemberPicker(containerId, inputId, renderFn) {
   }
 }
 
+export function setNotificationPopover(open) {
+  state.notificationPopoverOpen = open;
+  renderNotifications();
+}
+
 export function setUserMenu(open) {
   state.userMenuOpen = open;
   renderUserMenu();
@@ -397,8 +406,8 @@ export async function createConfigFile(event) {
       description: source.label,
     }),
   });
-  await loadConfigsAndHistory();
   state.activeConfigFile = created.id;
+  await loadConfigsAndHistory();
   state.configFileCreateOpen = false;
   state.configFileDraftName = "";
   renderAll();
@@ -543,6 +552,9 @@ export async function createConfigKey(event) {
 
   if (directRequests.length) {
     await loadConfigsAndHistory();
+    if (!stagedRequests.length) {
+      acceptCurrentConfigsAsBaseline();
+    }
   }
   stagedRequests.forEach((request) =>
     stageLocalConfigCreate(project, request, bodyBase),
@@ -1096,6 +1108,13 @@ export function setReviewModal(open) {
   }
 }
 
+export function setRequestDetailModal(open, requestId = state.activeRequestId) {
+  state.requestDetailOpen = open;
+  state.activeRequestId = open ? requestId : "";
+  renderRequestDetailModal();
+}
+
+
 export function setTemplateModal(open, templateId = "") {
   state.templateModalOpen = open;
   if (open) {
@@ -1239,16 +1258,68 @@ export async function openVersionHistory() {
   }
 }
 
-export async function rollbackLatestVersion() {
+
+function stageRollbackRevision(project, revision) {
+  const revisionEntries = revision?.entries || [];
+  for (const entry of revisionEntries) {
+    const existing = state.configs.find(
+      (config) =>
+        config.key === entry.key &&
+        (config.configId || "") === (entry.configId || ""),
+    );
+    if (existing) {
+      state.configs = state.configs.map((config) =>
+        config.id === existing.id
+          ? {
+              ...config,
+              configId: entry.configId || config.configId,
+              key: entry.key,
+              value: entry.value,
+              valueType: entry.valueType || config.valueType || "string",
+              isSensitive: Boolean(entry.isSensitive),
+            }
+          : config,
+      );
+      continue;
+    }
+    const id = `draft-rollback-${project.id}-${state.activeEnvironment}-${entry.key}`.replace(/[^a-z0-9_-]+/gi, "-");
+    state.configs = [
+      ...state.configs,
+      {
+        id,
+        projectId: project.id,
+        environment: state.activeEnvironment,
+        configId: entry.configId || state.activeConfigFile,
+        key: entry.key,
+        value: entry.value,
+        valueType: entry.valueType || "string",
+        isSensitive: Boolean(entry.isSensitive),
+      },
+    ];
+  }
+  syncPendingReviewChanges();
+}
+
+export async function rollbackConfigRevision(revisionId) {
   const project = activeProject();
-  const previous = state.configHistory[1];
-  if (!project || !previous) {
-    showToast("No previous config revision to restore");
+  const revision = state.configHistory.find((item) => item.id === revisionId);
+  if (!project || !revision) {
+    showToast("Choose a config revision to restore");
     return;
   }
 
+  if (shouldStageReviewChange(project, state.activeEnvironment)) {
+    stageRollbackRevision(project, revision);
+    state.historyModalOpen = false;
+    renderAll();
+    setReviewModal(true);
+    showToast("Rollback staged for review");
+    return;
+  }
+
+  const version = String(revision.id || "").replace(/^rev-/, "").slice(0, 7);
   const confirmed = window.confirm(
-    `Rollback ${project.name} ${state.activeEnvironment} config to the previous revision?`,
+    `Rollback ${project.name} ${state.activeEnvironment} config to version ${version}?`,
   );
   if (!confirmed) return;
 
@@ -1256,8 +1327,8 @@ export async function rollbackLatestVersion() {
     method: "POST",
     body: JSON.stringify({
       environment: state.activeEnvironment,
-      revisionId: previous.id,
-      changeReason: "rollback config revision from frontend history",
+      revisionId: revision.id,
+      changeReason: `rollback project config to ${version}`,
     }),
   });
 
@@ -1269,6 +1340,11 @@ export async function rollbackLatestVersion() {
 export function startInlineEdit(configId, field) {
   const config = state.configs.find((entry) => entry.id === configId);
   if (!config) return;
+
+  if (config.inherited && field === "key") {
+    showToast("Shared config keys can be overridden by value only");
+    return;
+  }
 
   if (field === "value" && config.isSensitive) {
     const revealKey = `${config.projectId}:${config.environment}:${config.key}`;
@@ -1336,20 +1412,36 @@ export async function commitInlineEdit(input) {
 
   state.inlineSaving = true;
   try {
-    const body =
-      edit.field === "key"
-        ? { key: nextValue, changeReason: "inline key edit from frontend" }
-        : { value: nextValue, changeReason: "inline value edit from frontend" };
-    const updated = await api(
-      `/projects/${config.projectId}/configs/${config.id}`,
-      {
-        method: "PUT",
-        body: JSON.stringify(body),
-      },
-    );
+    let updated;
+    if (config.inherited) {
+      updated = await api(`/projects/${config.projectId}/configs`, {
+        method: "POST",
+        body: JSON.stringify({
+          environment: config.environment,
+          configId: config.configId,
+          key: config.key,
+          value: nextValue,
+          valueType: config.valueType || "string",
+          isSensitive: Boolean(config.isSensitive),
+          changeReason: "local override for shared config",
+        }),
+      });
+    } else {
+      const body =
+        edit.field === "key"
+          ? { key: nextValue, changeReason: "inline key edit from frontend" }
+          : { value: nextValue, changeReason: "inline value edit from frontend" };
+      updated = await api(
+        `/projects/${config.projectId}/configs/${config.id}`,
+        {
+          method: "PUT",
+          body: JSON.stringify(body),
+        },
+      );
+    }
     state.inlineEdit = null;
     await loadConfigsAndHistory();
-    syncPendingReviewChanges();
+    acceptCurrentConfigsAsBaseline();
     renderAll();
     showToast(`${updated.key} updated`);
   } finally {
@@ -1458,7 +1550,7 @@ export async function applyImportPreview() {
     });
 
     await loadConfigsAndHistory();
-    syncPendingReviewChanges();
+    acceptCurrentConfigsAsBaseline();
     state.importPreviewOpen = false;
     state.importPreview = null;
     showToast(
@@ -1563,7 +1655,8 @@ function proposedReviewChanges() {
     .map((change) => {
       const config = state.configs.find((entry) => entry.id === change.configId);
       if (!config) return null;
-      const entryId = String(config.id || "").startsWith("draft-")
+      const id = String(config.id || "");
+      const entryId = id.startsWith("draft-") || id.startsWith("inherited-")
         ? ""
         : config.id;
       return {
@@ -1615,6 +1708,8 @@ export async function handleReviewDecision(id, action) {
     body: JSON.stringify({ comment: `${action} from frontend` }),
   });
   state.requests = await api("/review-requests");
+  state.requestDetailOpen = false;
+  state.activeRequestId = "";
   await loadConfigsAndHistory();
   renderAll();
   showToast(`Review request ${action}d`);

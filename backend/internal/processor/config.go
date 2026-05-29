@@ -124,14 +124,15 @@ func (p *Processor) ListConfigEntries(ctx appctx.RequestContext, projectID, envi
 		return nil, err
 	}
 
-	entries := p.store.ListConfigEntries(projectID, environment)
+	localEntries := p.store.ListConfigEntries(projectID, environment)
+	configs := p.store.ListConfigs(projectID)
+	entries := p.entriesWithSharedConfigInheritance(configs, localEntries, environment)
 	for index := range entries {
 		if entries[index].IsSensitive && !revealSensitive {
 			entries[index].Value = maskedValue
 		}
 	}
 
-	configs := p.store.ListConfigs(projectID)
 	payload := map[string]any{
 		"projectId":    projectID,
 		"environment":  environment,
@@ -143,6 +144,72 @@ func (p *Processor) ListConfigEntries(ctx appctx.RequestContext, projectID, envi
 	}
 	logger.Config.Info("configs listed")
 	return payload, nil
+}
+
+func (p *Processor) entriesWithSharedConfigInheritance(configs []model.Config, localEntries []model.ConfigEntry, environment string) []model.ConfigEntry {
+	entries := make([]model.ConfigEntry, 0, len(localEntries))
+	localByConfigKey := make(map[string]model.ConfigEntry, len(localEntries))
+	for _, entry := range localEntries {
+		localByConfigKey[configEntryIdentity(entry.ConfigID, entry.Key)] = entry
+	}
+
+	for _, config := range configs {
+		if config.SourceType != "shared-config" || strings.TrimSpace(config.SourceID) == "" {
+			continue
+		}
+		sharedConfig, ok := p.store.FindSharedConfig(config.SourceID)
+		if !ok {
+			continue
+		}
+		for _, sharedEntry := range sharedConfig.Entries {
+			if sharedEntry.Environment != environment {
+				continue
+			}
+			identity := configEntryIdentity(config.ID, sharedEntry.Key)
+			if localEntry, ok := localByConfigKey[identity]; ok {
+				localEntry.Overridden = true
+				localEntry.SourceType = config.SourceType
+				localEntry.SourceID = config.SourceID
+				localByConfigKey[identity] = localEntry
+				continue
+			}
+			entries = append(entries, model.ConfigEntry{
+				ID:          inheritedConfigEntryID(config.ID, environment, sharedEntry.Key),
+				ProjectID:   config.ProjectID,
+				Environment: environment,
+				ConfigID:    config.ID,
+				Key:         sharedEntry.Key,
+				Value:       sharedEntry.Value,
+				ValueType:   sharedEntry.ValueType,
+				IsSensitive: sharedEntry.IsSensitive,
+				UpdatedBy:   sharedConfig.UpdatedBy,
+				Inherited:   true,
+				SourceType:  config.SourceType,
+				SourceID:    config.SourceID,
+				CreatedAt:   sharedConfig.CreatedAt,
+				UpdatedAt:   sharedConfig.UpdatedAt,
+			})
+		}
+	}
+
+	for _, entry := range localEntries {
+		if updated, ok := localByConfigKey[configEntryIdentity(entry.ConfigID, entry.Key)]; ok {
+			entries = append(entries, updated)
+			continue
+		}
+		entries = append(entries, entry)
+	}
+	return entries
+}
+
+func configEntryIdentity(configID, key string) string {
+	return configID + "\x00" + key
+}
+
+func inheritedConfigEntryID(configID, environment, key string) string {
+	value := strings.ToLower(configID + "-" + environment + "-" + key)
+	replacer := strings.NewReplacer(" ", "-", ":", "-", "/", "-", ".", "-", "_", "-")
+	return "inherited-" + strings.Trim(replacer.Replace(value), "-")
 }
 
 func configsWithEntries(configs []model.Config, entries []model.ConfigEntry) []model.Config {
@@ -387,7 +454,8 @@ func (p *Processor) RollbackConfigEntry(ctx appctx.RequestContext, projectID, co
 		logger.Config.Warn("rollback config not found")
 		return model.ConfigEntry{}, model.NotFound(fmt.Sprintf("Config %q not found for project %q", configID, projectID))
 	}
-	if _, err := p.requireWritableProjectEnvironment(ctx, projectID, entry.Environment); err != nil {
+	project, err := p.requireWritableProjectEnvironment(ctx, projectID, entry.Environment)
+	if err != nil {
 		logger.Config.Warn("rollback config denied")
 		return model.ConfigEntry{}, err
 	}
@@ -419,6 +487,8 @@ func (p *Processor) RollbackConfigEntry(ctx appctx.RequestContext, projectID, co
 		logger.Config.Error("rollback config persistence failed")
 		return model.ConfigEntry{}, model.InternalError("database persistence failed: " + err.Error())
 	}
+
+	_ = p.notifyProjectRollback(ctx, project, entry.Environment, entry.Key)
 
 	logger.Config.Info("config rolled back")
 	return entry, nil
@@ -471,7 +541,8 @@ func (p *Processor) RollbackConfigRevision(ctx appctx.RequestContext, projectID 
 		logger.Config.Warn("rollback config revision invalid")
 		return nil, model.InvalidInput("environment and revisionId are required")
 	}
-	if _, err := p.requireWritableProjectEnvironment(ctx, projectID, environment); err != nil {
+	project, err := p.requireWritableProjectEnvironment(ctx, projectID, environment)
+	if err != nil {
 		logger.Config.Warn("rollback config revision denied")
 		return nil, err
 	}
@@ -497,6 +568,8 @@ func (p *Processor) RollbackConfigRevision(ctx appctx.RequestContext, projectID 
 		return nil, model.InternalError("database persistence failed: " + err.Error())
 	}
 
+	_ = p.notifyProjectRollback(ctx, project, environment, "config revision")
+
 	logger.Config.Info("config revision rolled back")
 	return map[string]any{
 		"restored":    true,
@@ -505,6 +578,27 @@ func (p *Processor) RollbackConfigRevision(ctx appctx.RequestContext, projectID 
 		"revisionId":  revision.ID,
 		"entryCount":  len(revision.Entries),
 	}, nil
+}
+
+func (p *Processor) notifyProjectRollback(ctx appctx.RequestContext, project model.Project, environment, target string) error {
+	now := time.Now().UTC()
+	notifications := make([]model.Notification, 0, len(project.Members))
+	for _, member := range project.Members {
+		if member.ID == "" || member.ID == ctx.Actor.ID {
+			continue
+		}
+		notifications = append(notifications, model.Notification{
+			ID:        util.NewID("not"),
+			UserID:    member.ID,
+			Title:     "Config rollback applied",
+			Message:   fmt.Sprintf("%s %s %s was rolled back by %s", project.Name, environment, target, ctx.ActorName()),
+			CreatedAt: now,
+		})
+	}
+	if len(notifications) == 0 {
+		return nil
+	}
+	return p.store.SaveNotifications(notifications)
 }
 
 func maskRevisionValues(revisions []model.ConfigRevision) {

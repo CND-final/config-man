@@ -10,13 +10,14 @@ CONFIG_MAN_HOST ?= 0.0.0.0
 CONFIG_MAN_PORT ?= 3000
 export DATABASE_URL CONFIG_MAN_HOST CONFIG_MAN_PORT
 
-.PHONY: help env db-up db-down db-logs run dev test fmt tidy clean
+.PHONY: help env db-up db-down db-reset db-logs run dev test fmt tidy clean
 
 help:
 	@echo "config-man backend commands"
 	@echo "  make env      Create .env from .env.example if it does not exist"
-	@echo "  make db-up    Start PostgreSQL with Docker Compose"
-	@echo "  make db-down  Stop PostgreSQL"
+	@echo "  make db-up     Start PostgreSQL with Docker Compose"
+	@echo "  make db-down   Stop PostgreSQL"
+	@echo "  make db-reset  Reset PostgreSQL volume and restart postgres"
 	@echo "  make run      Run backend with .env exported"
 	@echo "  make dev      Start DB, then run backend"
 	@echo "  make test     Run Go tests"
@@ -36,6 +37,13 @@ db-up:
 
 db-down:
 	docker compose down
+
+db-reset:
+	docker compose down -v
+	docker compose up -d postgres
+	@until docker compose exec -T postgres pg_isready -U config_man -d config_man; do \
+		sleep 1; \
+	done
 
 db-logs:
 	docker compose logs -f postgres

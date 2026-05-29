@@ -188,6 +188,62 @@ export function renderUserMenu() {
   `;
 }
 
+export function renderNotifications() {
+  const button = $("#notificationButton");
+  const count = $("#notificationCount");
+  const popover = $("#notificationPopover");
+  if (!button || !count || !popover) return;
+
+  const unread = state.notifications.filter((notification) => !notification.read);
+  count.textContent = String(unread.length);
+  count.classList.toggle("hidden", unread.length === 0);
+  button.setAttribute("aria-expanded", state.notificationPopoverOpen ? "true" : "false");
+  button.classList.toggle("active", state.notificationPopoverOpen);
+  popover.classList.toggle("hidden", !state.notificationPopoverOpen);
+
+  const latest = state.notifications.slice(0, 8);
+  popover.innerHTML = `
+    <div class="notification-popover-header">
+      <div>
+        <h2>Notifications</h2>
+        <p>${unread.length ? `${unread.length} unread updates` : "You're all caught up"}</p>
+      </div>
+      <span>${state.notifications.length}</span>
+    </div>
+    <div class="notification-list">
+      ${latest.length ? latest.map(renderNotificationItem).join("") : renderEmptyNotifications()}
+    </div>
+    <div class="notification-popover-footer">
+      <button class="text-button" type="button" data-jump="requests">Open Requests</button>
+    </div>
+  `;
+}
+
+function renderNotificationItem(notification) {
+  return `
+    <article class="notification-item ${notification.read ? "read" : "unread"}">
+      <span class="notification-state-dot" aria-hidden="true"></span>
+      <div>
+        <div class="notification-item-header">
+          <strong>${escapeHtml(notification.title || "Notification")}</strong>
+          <time>${escapeHtml(formatDateTime(notification.createdAt))}</time>
+        </div>
+        <p>${escapeHtml(notification.message || "No details provided.")}</p>
+      </div>
+    </article>
+  `;
+}
+
+function renderEmptyNotifications() {
+  return `
+    <div class="notification-empty">
+      <strong>No notifications</strong>
+      <p>Review updates and shared config changes will appear here.</p>
+    </div>
+  `;
+}
+
+
 function pendingReviewRequests() {
   return filteredRequests().filter((request) => request.status === "pending");
 }
@@ -695,7 +751,10 @@ export function renderConfigFileList() {
       return `
         <button class="compact-item config-file-item ${file.id === state.activeConfigFile ? "active" : ""}" type="button" data-select-config-file="${escapeHtml(file.id)}">
           <div>
-            <h3>${escapeHtml(file.name)}</h3>
+            <h3>
+              <span>${escapeHtml(file.name)}</span>
+              ${renderConfigFileSourceIcon(file)}
+            </h3>
             <p class="project-meta">
               <span>${count} ${count === 1 ? "key" : "keys"}</span>
               <span>${escapeHtml(file.description || file.detail || file.sourceType || "Config file")}</span>
@@ -707,6 +766,15 @@ export function renderConfigFileList() {
     .join("");
   const empty = !files && !createForm ? `<p class="project-meta config-empty-state">No configs yet.</p>` : "";
   $("#configProjectList").innerHTML = `${createForm}${files}${empty}`;
+}
+
+function renderConfigFileSourceIcon(file) {
+  if (file.sourceType !== "shared-config") return "";
+  const shared = state.sharedConfigs.find((item) => item.id === file.sourceId);
+  const isGlobal = shared?.scope === "global";
+  const title = isGlobal ? "Global shared config" : "Linked shared config";
+  const iconClass = isGlobal ? "globe" : "link";
+  return `<span class="config-file-source-icon ${iconClass}" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}"></span>`;
 }
 
 function renderConfigFileCreateForm() {
@@ -1293,9 +1361,9 @@ function renderEditableConfigCell(
       <span class="editable-value">${escapeHtml(value)}</span>
       <span class="cell-tools">
         ${renderRevealToggle(config, valueIsMasked, valueIsRevealed, revealKey)}
-        <button class="cell-icon-button cell-edit-button" type="button" data-start-inline-edit="${escapeHtml(config.id)}" data-field="${field}" aria-label="${label}" title="${label}">
+        ${config.inherited && field === "key" ? '<span class="inherited-lock" title="Inherited shared key" aria-label="Inherited shared key"></span>' : `<button class="cell-icon-button cell-edit-button" type="button" data-start-inline-edit="${escapeHtml(config.id)}" data-field="${field}" aria-label="${label}" title="${label}">
           <span class="pencil-icon" aria-hidden="true"></span>
-        </button>
+        </button>`}
       </span>
     </td>
   `;
@@ -1344,19 +1412,17 @@ function canApproveProjectRequest(request) {
   });
 }
 export function renderRequests() {
-  $("#notificationCount").textContent = String(
-    state.notifications.filter((notification) => !notification.read).length,
-  );
   $("#requestList").innerHTML =
     filteredRequests()
       .map(
         (request) => `
-          <article class="request-item">
+          <article class="request-item request-clickable" data-open-request="${escapeHtml(request.id)}">
             <div>
               <div class="project-meta">
                 <span>${escapeHtml(request.id.slice(0, 8))}</span>
                 <span>${escapeHtml(request.projectName)}</span>
                 <span>${escapeHtml(request.environment)}</span>
+                <span>${(request.proposedChanges || []).length} changes</span>
                 ${request.configKey ? `<span>${escapeHtml(request.configKey)}</span>` : ""}
               </div>
               <h3>${escapeHtml(request.reason)}</h3>
@@ -1364,6 +1430,7 @@ export function renderRequests() {
             </div>
             <div class="request-actions">
               <span class="status-pill ${statusClass(request.status)}">${escapeHtml(request.status)}</span>
+              <button class="ghost-action" type="button" data-view-request="${escapeHtml(request.id)}">View changes</button>
               ${
                 request.status === "pending" &&
                 canApproveProjectRequest(request)
@@ -1378,59 +1445,282 @@ export function renderRequests() {
       .join("") || '<p class="project-meta">No review requests yet.</p>';
 }
 
+export function renderRequestDetailModal() {
+  const modal = $("#requestDetailModal");
+  if (!modal) return;
+  modal.classList.toggle("hidden", !state.requestDetailOpen);
+  if (!state.requestDetailOpen) return;
+
+  const request = state.requests.find((item) => item.id === state.activeRequestId);
+  if (!request) {
+    $("#requestDetailTitle").textContent = "Request not found";
+    $("#requestDetailMeta").textContent = "";
+    $("#requestDetailBody").innerHTML = '<p class="project-meta">This request is no longer available.</p>';
+    $("#requestDetailActions").innerHTML = '<button class="secondary-action" type="button" data-close-modal="request-detail">Close</button>';
+    return;
+  }
+
+  const changes = request.proposedChanges || [];
+  $("#requestDetailTitle").textContent = request.reason || "Review Request";
+  $("#requestDetailMeta").innerHTML = `
+    <span>${escapeHtml(request.id.slice(0, 8))}</span>
+    <span>${escapeHtml(request.projectName)}</span>
+    <span>${escapeHtml(request.environment)}</span>
+    <span>${escapeHtml(request.requester)}</span>
+    <span class="status-pill ${statusClass(request.status)}">${escapeHtml(request.status)}</span>
+  `;
+  $("#requestDetailBody").innerHTML = `
+    <section class="request-detail-summary">
+      <div>
+        <span>Reason</span>
+        <strong>${escapeHtml(request.reason || "No reason provided")}</strong>
+      </div>
+      <div>
+        <span>Changes</span>
+        <strong>${changes.length}</strong>
+      </div>
+      <div>
+        <span>Updated</span>
+        <strong>${escapeHtml(formatDateTime(request.updatedAt || request.createdAt))}</strong>
+      </div>
+    </section>
+    <section class="request-change-section">
+      <h3>Proposed Changes</h3>
+      <div class="request-change-list">
+        ${changes.length ? changes.map(renderRequestChange).join("") : '<p class="project-meta">No proposed changes were attached to this request.</p>'}
+      </div>
+    </section>
+  `;
+  $("#requestDetailActions").innerHTML = `
+    <button class="secondary-action" type="button" data-close-modal="request-detail">Close</button>
+    ${request.status === "pending" && canApproveProjectRequest(request)
+      ? `<button class="ghost-action" type="button" data-reject="${escapeHtml(request.id)}">Reject</button>
+         <button class="primary-action" type="button" data-approve="${escapeHtml(request.id)}">Approve</button>`
+      : ""}
+  `;
+}
+
+function renderRequestChange(change) {
+  const current = currentConfigForRequestChange(change);
+  const hasCurrent = current && current.value !== undefined;
+  return `
+    <article class="request-change-row">
+      <div class="request-change-key">
+        <span class="scope-pill project">${escapeHtml(configFileName(change.configId))}</span>
+        <strong>${escapeHtml(change.key || "unknown key")}</strong>
+        <span>${escapeHtml(change.valueType || "string")}</span>
+        ${change.isSensitive ? '<span class="status-pill warning">Sensitive</span>' : ""}
+      </div>
+      <div class="request-change-values">
+        ${hasCurrent ? `<code class="review-old-value">${escapeHtml(current.value || "(empty)")}</code><span class="review-diff-arrow" aria-hidden="true">➔</span>` : '<span class="request-current-missing">Current value not loaded</span>'}
+        <code class="review-new-value">${escapeHtml(change.value || "(empty)")}</code>
+      </div>
+    </article>
+  `;
+}
+
+function currentConfigForRequestChange(change) {
+  return state.configs.find(
+    (config) =>
+      config.projectId === state.activeProjectId &&
+      config.environment === change.environment &&
+      config.configId === change.configId &&
+      config.key === change.key,
+  );
+}
+
 export function renderVersionHistory() {
   $("#historyModal").classList.toggle("hidden", !state.historyModalOpen);
   if (!state.historyModalOpen) return;
 
   const project = activeProject();
-  const current = state.configHistory[0];
-  const previous = state.configHistory[1];
-  $("#historyTitle").textContent = `${project?.name || "Config"} History`;
+  $("#historyTitle").textContent = "Project Config History";
   $("#historyMeta").innerHTML = project
-    ? `<span>${escapeHtml(project.name)}</span><span>${escapeHtml(state.activeEnvironment)}</span>`
+    ? `<span>${escapeHtml(project.name)}</span><span>${escapeHtml(state.activeEnvironment)}</span><span>Project-wide versions</span>`
     : "";
 
   if (state.historyLoading) {
     $("#historySummary").innerHTML =
       '<p class="project-meta">Loading config history...</p>';
     $("#versionList").innerHTML = "";
-    $("#rollbackLatest").disabled = true;
     return;
   }
 
-  $("#rollbackLatest").disabled = !previous;
-  $("#historySummary").innerHTML = current
-    ? `
-      <div class="history-previous current">
-        <span>Current Config</span>
-        <code>${current.entries.length} keys · ${escapeHtml(current.changeReason)}</code>
-      </div>
-      <div class="history-previous">
-        <span>Previous Config</span>
-        <code>${previous ? `${previous.entries.length} keys · ${escapeHtml(previous.changeReason)}` : "No previous revision"}</code>
-      </div>
-    `
+  $("#historySummary").innerHTML = "";
+  $("#versionList").innerHTML = state.configHistory.length
+    ? state.configHistory
+        .map((revision, index, revisions) =>
+          renderRevisionRecord(revision, revisions[index + 1], index),
+        )
+        .join("")
     : '<p class="project-meta">No config history yet.</p>';
+}
 
-  $("#versionList").innerHTML = state.configHistory
-    .map((revision, index) => {
-      const version = formatRevisionVersion(revision.id);
-      return `
-          <article class="version-item version-record">
-            <div class="version-record-line">
+function renderRevisionRecord(revision, previousRevision, index) {
+  const version = formatRevisionVersion(revision.id);
+  const canRollback = index > 0;
+  return `
+    <details class="version-timeline-item" data-history-revision="${escapeHtml(revision.id)}" data-history-loaded="false">
+      <summary class="version-timeline-summary">
+        <span class="timeline-dot" aria-hidden="true"></span>
+        <div class="version-timeline-main">
+          <div class="version-timeline-header">
+            <div class="version-title-row">
               <strong>${escapeHtml(revision.changedBy)}</strong>
-              <span>${index === 0 ? "current version" : "version"}</span>
-              <code>${escapeHtml(version)}</code>
               <span>${escapeHtml(formatDateTime(revision.createdAt))}</span>
+              <span>Commit <code>${escapeHtml(version)}</code></span>
+              ${index === 0 ? '<span class="current-version-pill">Current</span>' : ""}
             </div>
-            <div class="version-record-meta">
-              <span>${revision.entries.length} keys</span>
-              <span>${escapeHtml(revision.changeReason)}</span>
-            </div>
-          </article>
-        `;
-    })
-    .join("");
+            ${canRollback ? `<button class="ghost-action version-rollback-action" type="button" data-rollback-revision="${escapeHtml(revision.id)}">Rollback to this version</button>` : ""}
+          </div>
+          <div class="version-reason-row">
+            <span>${escapeHtml(revision.changeReason || "Config revision")}</span>
+            <span data-history-change-count>View changes</span>
+          </div>
+        </div>
+        <span class="version-expand" aria-hidden="true">⌄</span>
+      </summary>
+      <div class="revision-file-groups" data-history-detail></div>
+    </details>
+  `;
+}
+
+export function hydrateHistoryRevisionDetails(details) {
+  if (!details || details.dataset.historyLoaded === "true") return;
+  const revisionID = details.dataset.historyRevision;
+  const index = state.configHistory.findIndex((revision) => revision.id === revisionID);
+  if (index < 0) return;
+
+  const revision = state.configHistory[index];
+  const previousRevision = state.configHistory[index + 1];
+  const changes = revisionDiff(revision, previousRevision);
+  const groupedChanges = groupRevisionChangesByFile(changes);
+  const container = details.querySelector("[data-history-detail]");
+  if (container) {
+    container.innerHTML = renderRevisionDetails(groupedChanges);
+  }
+  const count = details.querySelector("[data-history-change-count]");
+  if (count) {
+    count.textContent = `(${changes.length} changes)`;
+  }
+  details.dataset.historyLoaded = "true";
+}
+
+function renderRevisionDetails(groupedChanges) {
+  return groupedChanges.length
+    ? groupedChanges.map(renderRevisionFileGroup).join("")
+    : '<p class="project-meta">No entry-level changes from the previous version.</p>';
+}
+
+function revisionDiff(revision, previousRevision) {
+  const before = revisionEntryMap(previousRevision?.entries || []);
+  const after = revisionEntryMap(revision?.entries || []);
+  const identities = new Set([...before.keys(), ...after.keys()]);
+  const changes = [];
+  for (const identity of identities) {
+    const oldEntry = before.get(identity);
+    const newEntry = after.get(identity);
+    if (!oldEntry && newEntry) {
+      changes.push({ status: "added", before: null, after: newEntry });
+      continue;
+    }
+    if (oldEntry && !newEntry) {
+      changes.push({ status: "removed", before: oldEntry, after: null });
+      continue;
+    }
+    if (
+      oldEntry.value !== newEntry.value ||
+      oldEntry.valueType !== newEntry.valueType ||
+      Boolean(oldEntry.isSensitive) !== Boolean(newEntry.isSensitive)
+    ) {
+      changes.push({ status: "modified", before: oldEntry, after: newEntry });
+    }
+  }
+  return changes.sort((a, b) => {
+    const left = revisionChangeSortKey(a);
+    const right = revisionChangeSortKey(b);
+    return left.localeCompare(right);
+  });
+}
+
+function revisionEntryMap(entries) {
+  const map = new Map();
+  for (const entry of entries) {
+    map.set(`${entry.configId || ""}\u0000${entry.key}`, entry);
+  }
+  return map;
+}
+
+function revisionChangeSortKey(change) {
+  const entry = change.after || change.before || {};
+  return `${configFileName(entry.configId)} ${entry.key || ""}`;
+}
+
+function groupRevisionChangesByFile(changes) {
+  const groups = new Map();
+  for (const change of changes) {
+    const entry = change.after || change.before || {};
+    const configId = entry.configId || "";
+    if (!groups.has(configId)) {
+      groups.set(configId, {
+        configId,
+        fileName: configFileName(configId),
+        changes: [],
+      });
+    }
+    groups.get(configId).changes.push(change);
+  }
+  return [...groups.values()].sort((a, b) => a.fileName.localeCompare(b.fileName));
+}
+
+function renderRevisionFileGroup(group) {
+  return `
+    <section class="revision-file-group">
+      <div class="revision-file-title">
+        <span class="file-dot" aria-hidden="true"></span>
+        <strong>${escapeHtml(group.fileName)}</strong>
+        <span>${group.changes.length} changes</span>
+      </div>
+      <div class="revision-file-change-list">
+        ${group.changes.map(renderRevisionChange).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderRevisionChange(change) {
+  const entry = change.after || change.before || {};
+  return `
+    <article class="revision-change-row ${escapeHtml(change.status)}">
+      <strong class="revision-change-key">${escapeHtml(entry.key || "unknown key")}</strong>
+      <div class="revision-change-values">
+        ${renderRevisionValueDiff(change)}
+      </div>
+      <span class="revision-status">${escapeHtml(change.status)}</span>
+    </article>
+  `;
+}
+
+function renderRevisionValueDiff(change) {
+  if (change.status === "added") {
+    return `<code class="revision-after">${escapeHtml(change.after?.value || "(empty)")}</code>`;
+  }
+  if (change.status === "removed") {
+    return `<code class="revision-before">${escapeHtml(change.before?.value || "(empty)")}</code>`;
+  }
+  return `
+    <code class="revision-before">${escapeHtml(change.before?.value || "(empty)")}</code>
+    <span class="review-diff-arrow" aria-hidden="true">➔</span>
+    <code class="revision-after">${escapeHtml(change.after?.value || "(empty)")}</code>
+  `;
+}
+
+function configFileName(configId) {
+  return (
+    (state.configFiles || []).find((file) => file.id === configId)?.name ||
+    configId ||
+    "Config"
+  );
 }
 
 function renderConfigVersionLabel() {
@@ -2149,6 +2439,7 @@ export function renderGroupModal() {
 
 export function renderAll() {
   renderUser();
+  renderNotifications();
   renderNav();
   renderDashboard();
   renderProjects();
@@ -2166,6 +2457,7 @@ export function renderAll() {
   renderExportModal();
   renderReviewModal();
   renderRequests();
+  renderRequestDetailModal();
   renderVersionHistory();
   renderImportPreview();
   renderGroupModal();

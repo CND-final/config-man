@@ -148,6 +148,9 @@ func configRevisionFromEntries(projectID, environment, changedBy, reason string,
 		})
 	}
 	sort.Slice(revisionEntries, func(i, j int) bool {
+		if revisionEntries[i].ConfigID != revisionEntries[j].ConfigID {
+			return revisionEntries[i].ConfigID < revisionEntries[j].ConfigID
+		}
 		return revisionEntries[i].Key < revisionEntries[j].Key
 	})
 	return model.ConfigRevision{
@@ -172,6 +175,9 @@ func configRevisionFromRevision(projectID, environment, changedBy, reason string
 		CreatedAt:    time.Now().UTC(),
 	}
 	sort.Slice(revision.Entries, func(i, j int) bool {
+		if revision.Entries[i].ConfigID != revision.Entries[j].ConfigID {
+			return revision.Entries[i].ConfigID < revision.Entries[j].ConfigID
+		}
 		return revision.Entries[i].Key < revision.Entries[j].Key
 	})
 	return revision
@@ -180,7 +186,7 @@ func configRevisionFromRevision(projectID, environment, changedBy, reason string
 func buildRestoreChanges(projectID, environment string, revision model.ConfigRevision, currentEntries []model.ConfigEntry, actor, reason string) ([]model.ConfigEntry, []string, []model.ConfigVersion) {
 	currentByKey := make(map[string]model.ConfigEntry, len(currentEntries))
 	for _, entry := range currentEntries {
-		currentByKey[entry.Key] = entry
+		currentByKey[configEntryRevisionKey(entry.ConfigID, entry.Key)] = entry
 	}
 
 	now := time.Now().UTC()
@@ -188,8 +194,9 @@ func buildRestoreChanges(projectID, environment string, revision model.ConfigRev
 	versions := make([]model.ConfigVersion, 0)
 	restoredKeys := make(map[string]bool, len(revision.Entries))
 	for _, revisionEntry := range revision.Entries {
-		restoredKeys[revisionEntry.Key] = true
-		entry, ok := currentByKey[revisionEntry.Key]
+		identity := configEntryRevisionKey(revisionEntry.ConfigID, revisionEntry.Key)
+		restoredKeys[identity] = true
+		entry, ok := currentByKey[identity]
 		if !ok {
 			newEntry := model.ConfigEntry{
 				ID:          util.NewID("cfg"),
@@ -226,11 +233,15 @@ func buildRestoreChanges(projectID, environment string, revision model.ConfigRev
 
 	deleteIDs := make([]string, 0)
 	for _, entry := range currentEntries {
-		if !restoredKeys[entry.Key] {
+		if !restoredKeys[configEntryRevisionKey(entry.ConfigID, entry.Key)] {
 			deleteIDs = append(deleteIDs, entry.ID)
 		}
 	}
 	return upserts, deleteIDs, versions
+}
+
+func configEntryRevisionKey(configID, key string) string {
+	return configID + "\x00" + key
 }
 
 func newConfigVersion(configEntryID string, oldValue *string, newValue, changedBy, reason string) model.ConfigVersion {
