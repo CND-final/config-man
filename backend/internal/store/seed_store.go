@@ -58,6 +58,7 @@ func demoSeedData() seedData {
 			{User: model.User{ID: "paul"}, GroupRole: model.RoleGroupAdmin},
 			{User: model.User{ID: "nora"}, GroupRole: model.RoleGroupMember},
 			{User: model.User{ID: "rachel"}, GroupRole: model.RoleGroupMember},
+			{User: model.User{ID: "grace"}, GroupRole: model.RoleGroupMember},
 			{User: model.User{ID: "vincent"}, GroupRole: model.RoleGroupMember},
 			{User: model.User{ID: "oliver"}, GroupRole: model.RoleGroupMember},
 		},
@@ -117,8 +118,7 @@ func demoSeedData() seedData {
 			{ID: "brn-billing-eu", Name: "eu", SortOrder: 3},
 		},
 		Members: []model.ProjectMember{
-			{User: model.User{ID: "grace"}, ProjectRole: model.RoleProjectMemberAdmin},
-			{User: model.User{ID: "ethan"}, ProjectRole: model.RoleProjectDeveloper},
+			{User: model.User{ID: "ethan"}, ProjectRole: model.RoleProjectMemberAdmin},
 			{User: model.User{ID: "sophia"}, ProjectRole: model.RoleProjectReviewer},
 			{User: model.User{ID: "mia"}, ProjectRole: model.RoleProjectViewer},
 		},
