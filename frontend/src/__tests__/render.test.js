@@ -32,7 +32,7 @@ describe("render", () => {
 
     const nav = document.querySelector("#navList").innerHTML;
     expect(nav).toContain('data-view-target="requests"');
-    expect(nav).toContain('nav-item active');
+    expect(nav).toContain("nav-item active");
   });
 
   it("renders notification count and popover state", () => {

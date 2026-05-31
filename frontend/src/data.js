@@ -1,6 +1,12 @@
 import { api } from "./api.js";
 import { ensureActiveConfigFile } from "./configFiles.js";
-import { activeProject, defaultBranchForProject, normalizeProject, projectBranches, state } from "./state.js";
+import {
+  activeProject,
+  defaultBranchForProject,
+  normalizeProject,
+  projectBranches,
+  state,
+} from "./state.js";
 
 export async function loadInitialData() {
   const [projects, templates, sharedConfigs, notifications, requests] =
@@ -14,7 +20,9 @@ export async function loadInitialData() {
 
   state.projects = listFromPayload(projects, "projects").map(normalizeProject);
   state.templates = normalizeTemplates(listFromPayload(templates, "templates"));
-  state.sharedConfigs = normalizeSharedConfigs(listFromPayload(sharedConfigs, "sharedConfigs"));
+  state.sharedConfigs = normalizeSharedConfigs(
+    listFromPayload(sharedConfigs, "sharedConfigs"),
+  );
   state.notifications = listFromPayload(notifications, "notifications");
   state.requests = listFromPayload(requests, "requests");
   await reloadGroups({ silent: true });
@@ -58,13 +66,17 @@ function normalizeSharedConfigs(items) {
 }
 
 export async function reloadNotifications() {
-  state.notifications = listFromPayload(await api("/notifications"), "notifications");
+  state.notifications = listFromPayload(
+    await api("/notifications"),
+    "notifications",
+  );
 }
-
 
 export async function reloadProjectMembers(projectId = activeProject()?.id) {
   if (!projectId) return [];
-  const payload = await api(`/projects/${encodeURIComponent(projectId)}/members`);
+  const payload = await api(
+    `/projects/${encodeURIComponent(projectId)}/members`,
+  );
   const members = listFromPayload(payload, "members");
   state.projects = state.projects.map((project) =>
     project.id === projectId
@@ -86,7 +98,9 @@ export async function reloadTemplates() {
 
 export async function reloadSharedConfigs() {
   const sharedConfigs = await api("/shared-configs");
-  state.sharedConfigs = normalizeSharedConfigs(listFromPayload(sharedConfigs, "sharedConfigs"));
+  state.sharedConfigs = normalizeSharedConfigs(
+    listFromPayload(sharedConfigs, "sharedConfigs"),
+  );
 }
 
 export async function loadConfigs(revealSensitive = false) {
@@ -123,7 +137,9 @@ export async function loadConfigs(revealSensitive = false) {
 }
 
 function configsFromPayload(data) {
-  const configs = Array.isArray(data?.configs) ? data.configs : data?.files || [];
+  const configs = Array.isArray(data?.configs)
+    ? data.configs
+    : data?.files || [];
   return configs.map((config) => ({
     ...config,
     entries: (config.entries || []).map((entry) => ({

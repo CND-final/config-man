@@ -76,9 +76,17 @@ import {
   openSharedConfigEdit,
 } from "./actions.js";
 import { api } from "./api.js";
-import { loadCompareConfigs, loadConfigsAndHistory, loadInitialData } from "./data.js";
+import {
+  loadCompareConfigs,
+  loadConfigsAndHistory,
+  loadInitialData,
+} from "./data.js";
 import { $, setAuthenticated, showToast } from "./dom.js";
-import { hydrateHistoryRevisionDetails, renderAll, renderConfigRows } from "./render.js";
+import {
+  hydrateHistoryRevisionDetails,
+  renderAll,
+  renderConfigRows,
+} from "./render.js";
 import { activeProject, state } from "./state.js";
 
 export function bindEvents() {
@@ -160,7 +168,9 @@ export function bindEvents() {
 
     const branchSelect = event.target.closest("[data-branch-select]");
     if (branchSelect) {
-      setActiveBranch(branchSelect.value).catch((error) => showToast(error.message));
+      setActiveBranch(branchSelect.value).catch((error) =>
+        showToast(error.message),
+      );
       return;
     }
 
@@ -176,7 +186,10 @@ export function bindEvents() {
     const sharedConfigScope = event.target.closest("#sharedConfigScope");
     if (sharedConfigScope) {
       const groupField = document.querySelector("#sharedConfigGroupField");
-      groupField?.classList.toggle("hidden", sharedConfigScope.value !== "group");
+      groupField?.classList.toggle(
+        "hidden",
+        sharedConfigScope.value !== "group",
+      );
       return;
     }
 
@@ -274,11 +287,17 @@ async function handleDocumentClick(event) {
     }
   }
 
-  if (!event.target.closest(".config-file-add-wrap") && state.configFileMenuOpen) {
+  if (
+    !event.target.closest(".config-file-add-wrap") &&
+    state.configFileMenuOpen
+  ) {
     setConfigFileMenu(false);
   }
 
-  if (!event.target.closest(".notification-wrap") && state.notificationPopoverOpen) {
+  if (
+    !event.target.closest(".notification-wrap") &&
+    state.notificationPopoverOpen
+  ) {
     setNotificationPopover(false);
   }
 
@@ -515,7 +534,10 @@ async function handleDocumentClick(event) {
       return;
     }
 
-    if (target.id === "openProjectMemberPicker" || target.id === "closeProjectMemberPicker") {
+    if (
+      target.id === "openProjectMemberPicker" ||
+      target.id === "closeProjectMemberPicker"
+    ) {
       toggleProjectMemberPicker();
       return;
     }

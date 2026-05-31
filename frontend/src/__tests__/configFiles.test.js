@@ -13,10 +13,12 @@ describe("configFiles", () => {
   ];
 
   it("selects config file for entry or falls back to first file", () => {
-    expect(configFileForEntry({ configId: "cfg-2" }, { configFiles: files }))
-      .toEqual(files[1]);
-    expect(configFileForEntry({ configId: "missing" }, { configFiles: files }))
-      .toEqual(files[0]);
+    expect(
+      configFileForEntry({ configId: "cfg-2" }, { configFiles: files }),
+    ).toEqual(files[1]);
+    expect(
+      configFileForEntry({ configId: "missing" }, { configFiles: files }),
+    ).toEqual(files[0]);
     expect(configFileForEntry(null, { configFiles: [] })).toBeNull();
   });
 

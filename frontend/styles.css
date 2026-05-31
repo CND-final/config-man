@@ -2971,7 +2971,6 @@ td {
   background: #005bb5;
 }
 
-
 .branch-select {
   min-height: 38px;
   border: 1px solid rgba(210, 210, 215, 0.72);
@@ -3294,7 +3293,6 @@ tbody tr:hover td {
   border-color: rgba(0, 113, 227, 0.36);
   box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.1);
 }
-
 
 .config-source-panel {
   width: min(720px, calc(100vw - 32px));
@@ -3622,7 +3620,6 @@ tbody tr:hover td {
 .review-modal-actions .review-submit-action:hover {
   background: #0066cc;
 }
-
 
 .history-panel {
   width: min(980px, 100%);
@@ -4482,7 +4479,8 @@ tbody tr:hover td {
   margin-left: 8px;
   border-radius: 999px;
   padding: 2px 7px;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
   font-size: 11px;
   font-weight: 850;
   vertical-align: middle;
