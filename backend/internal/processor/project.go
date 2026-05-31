@@ -68,6 +68,7 @@ func (p *Processor) CreateProject(ctx appctx.RequestContext, req model.CreatePro
 	}
 
 	envs := util.NormalizeEnvironments(req.Environments)
+	branches := util.NormalizeBranches(req.Branches)
 	now := time.Now().UTC()
 	project := model.Project{
 		ID:           util.NewID("prj"),
@@ -77,6 +78,7 @@ func (p *Processor) CreateProject(ctx appctx.RequestContext, req model.CreatePro
 		TemplateID:   templateID,
 		GroupID:      groupID,
 		Environments: make([]model.ProjectEnvironment, 0, len(envs)),
+		Branches:     make([]model.ProjectBranch, 0, len(branches)),
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
@@ -84,6 +86,13 @@ func (p *Processor) CreateProject(ctx appctx.RequestContext, req model.CreatePro
 		project.Environments = append(project.Environments, model.ProjectEnvironment{
 			ID:        util.NewID("env"),
 			Name:      env,
+			SortOrder: index + 1,
+		})
+	}
+	for index, branch := range branches {
+		project.Branches = append(project.Branches, model.ProjectBranch{
+			ID:        util.NewID("brn"),
+			Name:      branch,
 			SortOrder: index + 1,
 		})
 	}
@@ -142,6 +151,20 @@ func (p *Processor) requireEnvironment(projectID, environment string) *model.Err
 		}
 	}
 	return model.NotFound(fmt.Sprintf("Environment %q not found for project %q", environment, projectID))
+}
+
+func (p *Processor) requireBranch(projectID, branch string) *model.ErrorDetail {
+	project, err := p.requireProject(projectID)
+	if err != nil {
+		return err
+	}
+	branch = util.NormalizeBranch(branch)
+	for _, item := range project.Branches {
+		if item.Name == branch {
+			return nil
+		}
+	}
+	return model.NotFound(fmt.Sprintf("Branch %q not found for project %q", branch, projectID))
 }
 
 func (p *Processor) requireReadableProject(ctx appctx.RequestContext, projectID string) (model.Project, *model.ErrorDetail) {

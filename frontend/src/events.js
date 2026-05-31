@@ -23,6 +23,7 @@ import {
   importConfigSource,
   rollbackConfigRevision,
   setConfigCreateDrawer,
+  setActiveBranch,
   setCompareEnvironment,
   setConfigFileCreate,
   setConfigFileMenu,
@@ -157,12 +158,25 @@ export function bindEvents() {
       return;
     }
 
+    const branchSelect = event.target.closest("[data-branch-select]");
+    if (branchSelect) {
+      setActiveBranch(branchSelect.value).catch((error) => showToast(error.message));
+      return;
+    }
+
     const compareEnv = event.target.closest("[data-compare-env]");
     if (compareEnv) {
       setCompareEnvironment(
         compareEnv.dataset.compareEnv,
         compareEnv.value,
       ).catch((error) => showToast(error.message));
+      return;
+    }
+
+    const sharedConfigScope = event.target.closest("#sharedConfigScope");
+    if (sharedConfigScope) {
+      const groupField = document.querySelector("#sharedConfigGroupField");
+      groupField?.classList.toggle("hidden", sharedConfigScope.value !== "group");
       return;
     }
 
@@ -612,6 +626,9 @@ async function handleDocumentClick(event) {
       state.activeEnvironment = project.environments.includes("prod")
         ? "prod"
         : project.environments[0];
+      state.activeBranch = project.branches?.includes("default")
+        ? "default"
+        : project.branches?.[0] || "default";
       await loadConfigsAndHistory();
       state.compareConfigs = {};
       if (state.configMode === "compare") {

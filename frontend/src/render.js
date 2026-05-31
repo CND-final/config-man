@@ -4,7 +4,7 @@ import {
   configsForActiveFile,
   ensureActiveConfigFile,
 } from "./configFiles.js";
-import { activeProject, navItems, state } from "./state.js";
+import { activeProject, navItems, projectBranches, state } from "./state.js";
 import { escapeHtml, formatDateTime, initials, statusClass } from "./utils.js";
 
 function searchTerm() {
@@ -22,6 +22,26 @@ function includesSearch(values, term = searchTerm()) {
 
 function isSystemView() {
   return state.user?.role === "system_admin";
+}
+
+function manageableSharedConfigGroups() {
+  if (state.user?.role === "system_admin") return state.groups;
+  return state.groups.filter((group) =>
+    (group.members || []).some((member) => {
+      const id = member.id || member.userId;
+      return id === state.user?.id && member.groupRole === "group_admin";
+    }),
+  );
+}
+
+function canCreateSharedConfig() {
+  return state.user?.role === "system_admin" || manageableSharedConfigGroups().length > 0;
+}
+
+function canManageSharedConfig(item) {
+  if (state.user?.role === "system_admin") return true;
+  if (item?.scope !== "group") return false;
+  return manageableSharedConfigGroups().some((group) => group.id === item.scopeId);
 }
 
 function isReadOnlyView() {
@@ -610,18 +630,18 @@ export function renderTemplates() {
   if (action) {
     action.textContent = "New Template";
     action.className = "primary-action";
-    const canCreateSharedConfig =
+    const createAllowed =
       state.libraryTab === "shared-config" &&
-      isSystemView();
-    action.textContent = canCreateSharedConfig
-      ? "New Global Shared Config"
+      canCreateSharedConfig();
+    action.textContent = createAllowed
+      ? "New Shared Config"
       : action.textContent;
-    action.className = canCreateSharedConfig
+    action.className = createAllowed
       ? "primary-action"
       : action.className;
     action.classList.toggle(
       "hidden",
-      state.libraryTab === "shared-config" && !isSystemView(),
+      state.libraryTab === "shared-config" && !canCreateSharedConfig(),
     );
   }
 
@@ -682,22 +702,22 @@ function renderSharedConfigCard(item) {
           <p>${escapeHtml(item.description || "Config inherited by projects")}</p>
         </div>
         <div class="template-badges shared-card-tools">
-          ${!canPick && isSystemView() && scope === "Global" ? `<button class="icon-button small-icon-button" type="button" aria-label="Edit ${escapeHtml(item.name)}" title="Edit" data-edit-shared-config="${escapeHtml(item.id)}"><span aria-hidden="true">✎</span></button>` : ""}
+          ${!canPick && canManageSharedConfig(item) ? `<button class="icon-button small-icon-button" type="button" aria-label="Edit ${escapeHtml(item.name)}" title="Edit" data-edit-shared-config="${escapeHtml(item.id)}"><span aria-hidden="true">✎</span></button>` : ""}
           <span class="library-pill type">Shared Config</span>
           ${renderLibraryScopePill(scope)}
         </div>
       </div>
       <div class="shared-config-summary">
-        <span>${item.entries.length} keys</span>
+        <span>${uniqueSharedConfigKeys(item).length} keys</span>
         <span>${escapeHtml(item.scopeName || scope)}</span>
         <span>${item.inheritedBy || 0} projects</span>
       </div>
       <div class="template-list">
-        ${renderTemplateKeys(item)}
+        ${renderSharedConfigKeys(item)}
       </div>
       <p class="project-meta"><span>Updated by ${escapeHtml(item.updatedBy || "System")}</span></p>
       <div class="template-card-actions">
-        ${!canPick && isSystemView() && scope === "Global" ? `<button class="ghost-action danger-action" type="button" data-delete-shared-config="${escapeHtml(item.id)}">Delete</button>` : ""}
+        ${!canPick && canManageSharedConfig(item) ? `<button class="ghost-action danger-action" type="button" data-delete-shared-config="${escapeHtml(item.id)}">Delete</button>` : ""}
       </div>
     </${tag}>
   `;
@@ -727,6 +747,28 @@ function renderTemplateKeys(template) {
         </div>
       `,
     )
+    .join("");
+}
+
+function uniqueSharedConfigKeys(item) {
+  return Array.from(new Set((item.entries || []).map((entry) => entry.key)));
+}
+
+function renderSharedConfigKeys(item) {
+  return uniqueSharedConfigKeys(item)
+    .map((key) => {
+      const environments = (item.entries || [])
+        .filter((entry) => entry.key === key)
+        .map((entry) => entry.environment)
+        .filter(Boolean);
+      const uniqueEnvironments = Array.from(new Set(environments));
+      return `
+        <div class="template-key shared-config-key">
+          <span>${escapeHtml(key)}</span>
+          ${uniqueEnvironments.length ? `<small>${escapeHtml(uniqueEnvironments.join(" / "))}</small>` : ""}
+        </div>
+      `;
+    })
     .join("");
 }
 
@@ -874,6 +916,10 @@ export function renderEnvironmentTabs() {
   if (!project.environments.includes(state.activeEnvironment)) {
     state.activeEnvironment = project.environments[0];
   }
+  const branches = projectBranches(project);
+  if (!branches.includes(state.activeBranch)) {
+    state.activeBranch = branches.includes("default") ? "default" : branches[0];
+  }
   ensureCompareEnvironments(project.environments);
 
   if (modeTabs) {
@@ -892,6 +938,7 @@ export function renderEnvironmentTabs() {
     environmentTabs.classList.add("hidden");
     compareControls.classList.remove("hidden");
     compareControls.innerHTML = `
+      ${renderBranchSelect(branches)}
       <select data-compare-env="source" aria-label="Source environment">
         ${renderEnvironmentOptions(project.environments, state.compareSourceEnv)}
       </select>
@@ -906,7 +953,7 @@ export function renderEnvironmentTabs() {
   compareControls.classList.add("hidden");
   compareControls.innerHTML = "";
   environmentTabs.classList.remove("hidden");
-  environmentTabs.innerHTML = project.environments
+  environmentTabs.innerHTML = renderBranchSelect(branches) + project.environments
     .map(
       (environment) => `
         <button class="${environment === state.activeEnvironment ? "active" : ""}" type="button" data-env="${environment}">
@@ -915,6 +962,19 @@ export function renderEnvironmentTabs() {
       `,
     )
     .join("");
+}
+
+function renderBranchSelect(branches) {
+  return `
+    <select class="branch-select" data-branch-select aria-label="Project branch">
+      ${branches
+        .map(
+          (branch) =>
+            `<option value="${escapeHtml(branch)}" ${branch === state.activeBranch ? "selected" : ""}>${escapeHtml(branch)}</option>`,
+        )
+        .join("")}
+    </select>
+  `;
 }
 
 function ensureCompareEnvironments(environments) {
@@ -1275,7 +1335,7 @@ function renderCompareValueCell(entry, missing) {
   }
   if (!entry) return `<td class="value-cell missing-value"><span>-</span></td>`;
   const value = entry.isSensitive ? "******" : entry.value;
-  return `<td class="value-cell">${escapeHtml(value)}</td>`;
+  return `<td class="value-cell">${renderConfigValueDisplay(entry, value, true)}</td>`;
 }
 
 function renderCompareStatus(row) {
@@ -1338,6 +1398,7 @@ function renderEditableConfigCell(
   const label = field === "key" ? "Edit key" : "Edit value";
   const inputType =
     field === "value" && config.isSensitive ? "password" : "text";
+  const keyLocked = field === "key" && isSharedConfigEntry(config);
 
   if (isEditing) {
     return `
@@ -1358,15 +1419,54 @@ function renderEditableConfigCell(
 
   return `
     <td class="${className} editable-cell">
-      <span class="editable-value">${escapeHtml(value)}</span>
+      ${renderConfigCellValue(config, field, value)}
       <span class="cell-tools">
         ${renderRevealToggle(config, valueIsMasked, valueIsRevealed, revealKey)}
-        ${config.inherited && field === "key" ? '<span class="inherited-lock" title="Inherited shared key" aria-label="Inherited shared key"></span>' : `<button class="cell-icon-button cell-edit-button" type="button" data-start-inline-edit="${escapeHtml(config.id)}" data-field="${field}" aria-label="${label}" title="${label}">
+        ${keyLocked ? '<span class="inherited-lock" title="Shared config keys can be overridden by value only" aria-label="Shared config key locked"></span>' : `<button class="cell-icon-button cell-edit-button" type="button" data-start-inline-edit="${escapeHtml(config.id)}" data-field="${field}" aria-label="${label}" title="${label}">
           <span class="pencil-icon" aria-hidden="true"></span>
         </button>`}
       </span>
     </td>
   `;
+}
+
+function renderConfigCellValue(config, field, value) {
+  if (field === "value") {
+    return renderConfigValueDisplay(config, value);
+  }
+  const badges = renderConfigStateBadges(config, field);
+  return `<span class="editable-value">${escapeHtml(value)}${badges}</span>`;
+}
+
+function renderConfigValueDisplay(config, value, compact = false) {
+  const badges = renderConfigStateBadges(config, "value");
+  if (config.overridden && Object.prototype.hasOwnProperty.call(config, "sharedValue")) {
+    const sharedValue = config.sharedSensitive ? "******" : config.sharedValue;
+    return `
+      <span class="override-diff-value ${compact ? "compact" : ""}">
+        <code class="shared-default-value">${escapeHtml(sharedValue || "(empty)")}</code>
+        <span class="review-diff-arrow" aria-hidden="true">➔</span>
+        <code class="local-override-value">${escapeHtml(value || "(empty)")}</code>
+        ${badges}
+      </span>
+    `;
+  }
+  return `<span class="editable-value">${escapeHtml(value)}${badges}</span>`;
+}
+
+function renderConfigStateBadges(config, field) {
+  if (field !== "key" && field !== "value") return "";
+  if (config.overridden && field === "value") {
+    return '<span class="config-state-badge overridden">Overridden</span>';
+  }
+  if (isSharedConfigEntry(config) && field === "key") {
+    return '<span class="config-state-badge inherited">Shared</span>';
+  }
+  return "";
+}
+
+function isSharedConfigEntry(config) {
+  return config.inherited || config.sourceType === "shared-config" || Boolean(config.sourceId);
 }
 
 function renderRevealToggle(config, valueIsMasked, valueIsRevealed, revealKey) {
@@ -1421,6 +1521,7 @@ export function renderRequests() {
               <div class="project-meta">
                 <span>${escapeHtml(request.id.slice(0, 8))}</span>
                 <span>${escapeHtml(request.projectName)}</span>
+                <span>${escapeHtml(request.branch || "default")}</span>
                 <span>${escapeHtml(request.environment)}</span>
                 <span>${(request.proposedChanges || []).length} changes</span>
                 ${request.configKey ? `<span>${escapeHtml(request.configKey)}</span>` : ""}
@@ -1465,6 +1566,7 @@ export function renderRequestDetailModal() {
   $("#requestDetailMeta").innerHTML = `
     <span>${escapeHtml(request.id.slice(0, 8))}</span>
     <span>${escapeHtml(request.projectName)}</span>
+    <span>${escapeHtml(request.branch || "default")}</span>
     <span>${escapeHtml(request.environment)}</span>
     <span>${escapeHtml(request.requester)}</span>
     <span class="status-pill ${statusClass(request.status)}">${escapeHtml(request.status)}</span>
@@ -1487,7 +1589,7 @@ export function renderRequestDetailModal() {
     <section class="request-change-section">
       <h3>Proposed Changes</h3>
       <div class="request-change-list">
-        ${changes.length ? changes.map(renderRequestChange).join("") : '<p class="project-meta">No proposed changes were attached to this request.</p>'}
+        ${changes.length ? renderRequestChangeGroups(changes) : '<p class="project-meta">No proposed changes were attached to this request.</p>'}
       </div>
     </section>
   `;
@@ -1500,29 +1602,71 @@ export function renderRequestDetailModal() {
   `;
 }
 
+function renderRequestChangeGroups(changes) {
+  const groups = new Map();
+  changes.forEach((change) => {
+    const id = change.configId || "unknown";
+    if (!groups.has(id)) {
+      groups.set(id, []);
+    }
+    groups.get(id).push(change);
+  });
+  return Array.from(groups.entries())
+    .map(
+      ([configId, groupChanges]) => `
+        <section class="request-change-group">
+          <div class="request-change-group-header">
+            <span class="file-glyph" aria-hidden="true"></span>
+            <strong>${escapeHtml(configFileName(configId))}</strong>
+            <span>${groupChanges.length} ${groupChanges.length === 1 ? "change" : "changes"}</span>
+          </div>
+          <div class="request-change-group-body">
+            ${groupChanges.map(renderRequestChange).join("")}
+          </div>
+        </section>
+      `,
+    )
+    .join("");
+}
+
 function renderRequestChange(change) {
   const current = currentConfigForRequestChange(change);
-  const hasCurrent = current && current.value !== undefined;
+  const hasKnownOldValue = Object.prototype.hasOwnProperty.call(change, "oldValue") || (current && current.value !== undefined);
+  const oldValue = change.oldValue ?? current?.value ?? "";
+  const isCreate = hasKnownOldValue && oldValue === "";
+  const status = !hasKnownOldValue
+    ? "Proposed"
+    : isCreate
+      ? "Added"
+      : oldValue === change.value
+        ? "Unchanged"
+        : "Modified";
   return `
     <article class="request-change-row">
       <div class="request-change-key">
-        <span class="scope-pill project">${escapeHtml(configFileName(change.configId))}</span>
         <strong>${escapeHtml(change.key || "unknown key")}</strong>
         <span>${escapeHtml(change.valueType || "string")}</span>
         ${change.isSensitive ? '<span class="status-pill warning">Sensitive</span>' : ""}
       </div>
       <div class="request-change-values">
-        ${hasCurrent ? `<code class="review-old-value">${escapeHtml(current.value || "(empty)")}</code><span class="review-diff-arrow" aria-hidden="true">➔</span>` : '<span class="request-current-missing">Current value not loaded</span>'}
+        ${!hasKnownOldValue || isCreate ? "" : `<code class="review-old-value">${escapeHtml(oldValue || "(empty)")}</code><span class="review-diff-arrow" aria-hidden="true">➔</span>`}
         <code class="review-new-value">${escapeHtml(change.value || "(empty)")}</code>
+        <span class="request-change-status ${status.toLowerCase()}">${status}</span>
       </div>
     </article>
   `;
+}
+
+function requestBranchFallback() {
+  const request = state.requests.find((item) => item.id === state.activeRequestId);
+  return request?.branch || state.activeBranch;
 }
 
 function currentConfigForRequestChange(change) {
   return state.configs.find(
     (config) =>
       config.projectId === state.activeProjectId &&
+      (config.branch || state.activeBranch) === (change.branch || requestBranchFallback()) &&
       config.environment === change.environment &&
       config.configId === change.configId &&
       config.key === change.key,
@@ -1536,7 +1680,7 @@ export function renderVersionHistory() {
   const project = activeProject();
   $("#historyTitle").textContent = "Project Config History";
   $("#historyMeta").innerHTML = project
-    ? `<span>${escapeHtml(project.name)}</span><span>${escapeHtml(state.activeEnvironment)}</span><span>Project-wide versions</span>`
+    ? `<span>${escapeHtml(project.name)}</span><span>${escapeHtml(state.activeBranch)}</span><span>${escapeHtml(state.activeEnvironment)}</span><span>Project-wide versions</span>`
     : "";
 
   if (state.historyLoading) {
@@ -1735,12 +1879,12 @@ function renderConfigVersionLabel() {
 
   const current = state.configHistory[0];
   if (!current) {
-    label.textContent = `${state.activeEnvironment} · No saved version yet`;
+    label.textContent = `${state.activeBranch} · ${state.activeEnvironment} · No saved version yet`;
     return;
   }
 
   const version = formatRevisionVersion(current.id);
-  label.textContent = `${state.activeEnvironment} · Version ${version} · ${formatDateTime(current.createdAt)} · ${current.entries.length} keys`;
+  label.textContent = `${state.activeBranch} · ${state.activeEnvironment} · Version ${version} · ${formatDateTime(current.createdAt)} · ${current.entries.length} keys`;
 }
 
 export function renderConfigCreateDrawer() {
@@ -1816,6 +1960,8 @@ export function renderSharedConfigEditModal() {
   const item = state.sharedConfigs.find(
     (config) => config.id === state.activeSharedConfigId,
   );
+  const eyebrow = $("#sharedConfigEditEyebrow");
+  if (eyebrow) eyebrow.textContent = item?.scope === "group" ? "Group Shared Config" : "Global Shared Config";
   const affected = item?.inheritedBy || item?.affectedProjects?.length || 0;
   const prod = item?.prodEnvironmentCount || 0;
   const impact = $("#sharedConfigImpact");
@@ -1828,6 +1974,9 @@ export function renderSharedConfigCreateModal() {
   const modal = $("#sharedConfigCreateModal");
   if (!modal) return;
   modal.classList.toggle("hidden", !state.sharedConfigCreateModalOpen);
+  if (!state.sharedConfigCreateModalOpen) return;
+  const eyebrow = $("#sharedConfigCreateEyebrow");
+  if (eyebrow) eyebrow.textContent = state.user?.role === "system_admin" ? "Shared Config" : "Group Shared Config";
 }
 
 export function renderTemplateModal() {

@@ -9,7 +9,7 @@ import (
 func (s *Store) ListProjects() []model.Project {
 	projects, err := s.db.ListProjects(context.Background())
 	if err != nil {
-		return nil
+		return []model.Project{}
 	}
 	for index := range projects {
 		s.hydrateProjectMembers(&projects[index])

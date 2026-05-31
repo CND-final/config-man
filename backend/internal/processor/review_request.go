@@ -176,6 +176,7 @@ func (p *Processor) normalizeReviewChanges(project model.Project, req model.Crea
 			ConfigEntryID: strings.TrimSpace(change.ConfigEntryID),
 			ConfigID:      configID,
 			Key:           key,
+			OldValue:      change.OldValue,
 			Value:         change.Value,
 			ValueType:     valueType,
 			IsSensitive:   change.IsSensitive,
@@ -198,7 +199,7 @@ func (p *Processor) applyApprovedReviewChanges(ctx appctx.RequestContext, projec
 			entry, ok = p.store.FindConfigEntry(project.ID, change.ConfigEntryID)
 		}
 		if !ok {
-			entry, ok = p.store.FindConfigEntryByKey(project.ID, change.Environment, change.Key)
+			entry, ok = p.store.FindConfigEntryByKey(project.ID, change.Environment, util.NormalizeBranch(change.Branch), change.Key)
 		}
 		oldValue := ""
 		if ok {

@@ -17,6 +17,12 @@ type ProjectEnvironment struct {
 	SortOrder int    `json:"sortOrder"`
 }
 
+type ProjectBranch struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	SortOrder int    `json:"sortOrder"`
+}
+
 type ProjectMember struct {
 	User
 	ProjectRole ProjectRole `json:"projectRole"`
@@ -30,6 +36,7 @@ type Project struct {
 	TemplateID   string               `json:"templateId,omitempty"`
 	GroupID      string               `json:"groupId,omitempty"`
 	Environments []ProjectEnvironment `json:"environments"`
+	Branches     []ProjectBranch      `json:"branches"`
 	Members      []ProjectMember      `json:"members,omitempty"`
 	MemberCount  int                  `json:"memberCount"`
 	ConfigCount  int                  `json:"configCount"`

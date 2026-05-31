@@ -30,6 +30,14 @@ func upsertProjectTx(ctx context.Context, tx *sql.Tx, project model.Project) err
 			return err
 		}
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM project_branches WHERE project_id = $1`, project.ID); err != nil {
+		return err
+	}
+	for _, branch := range project.Branches {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO project_branches (id, project_id, name, sort_order) VALUES ($1,$2,$3,$4)`, branch.ID, project.ID, branch.Name, branch.SortOrder); err != nil {
+			return err
+		}
+	}
 	if project.Members != nil {
 		if err := replaceProjectMembersTx(ctx, tx, project.ID, project.Members); err != nil {
 			return err
@@ -80,6 +88,10 @@ func (s *Store) ListProjects(ctx context.Context) ([]model.Project, error) {
 		if err != nil {
 			return nil, err
 		}
+		project.Branches, err = s.listProjectBranches(ctx, project.ID)
+		if err != nil {
+			return nil, err
+		}
 		project.Members, err = s.listProjectMembers(ctx, project.ID)
 		if err != nil {
 			return nil, err
@@ -104,6 +116,10 @@ func (s *Store) FindProject(ctx context.Context, projectID string) (model.Projec
 		return model.Project{}, false, err
 	}
 	project.Environments, err = s.listProjectEnvironments(ctx, project.ID)
+	if err != nil {
+		return model.Project{}, false, err
+	}
+	project.Branches, err = s.listProjectBranches(ctx, project.ID)
 	if err != nil {
 		return model.Project{}, false, err
 	}
@@ -141,6 +157,30 @@ func (s *Store) listProjectEnvironments(ctx context.Context, projectID string) (
 		envs = append(envs, env)
 	}
 	return envs, rows.Err()
+}
+
+func (s *Store) listProjectBranches(ctx context.Context, projectID string) ([]model.ProjectBranch, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, sort_order FROM project_branches WHERE project_id = $1 ORDER BY sort_order ASC`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	branches := make([]model.ProjectBranch, 0)
+	for rows.Next() {
+		branch := model.ProjectBranch{}
+		if err := rows.Scan(&branch.ID, &branch.Name, &branch.SortOrder); err != nil {
+			return nil, err
+		}
+		branches = append(branches, branch)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(branches) == 0 {
+		branches = append(branches, model.ProjectBranch{ID: projectID + "-default", Name: "default", SortOrder: 1})
+	}
+	return branches, nil
 }
 
 func (s *Store) listProjectMembers(ctx context.Context, projectID string) ([]model.ProjectMember, error) {

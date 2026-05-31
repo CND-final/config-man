@@ -3,13 +3,15 @@ package model
 import "time"
 
 type ReviewConfigChange struct {
-	ConfigEntryID string `json:"configEntryId,omitempty"`
-	ConfigID      string `json:"configId"`
-	Key           string `json:"key"`
-	Value         string `json:"value"`
-	ValueType     string `json:"valueType"`
-	IsSensitive   bool   `json:"isSensitive"`
-	Environment   string `json:"environment"`
+	ConfigEntryID string  `json:"configEntryId,omitempty"`
+	ConfigID      string  `json:"configId"`
+	Key           string  `json:"key"`
+	OldValue      *string `json:"oldValue,omitempty"`
+	Value         string  `json:"value"`
+	ValueType     string  `json:"valueType"`
+	IsSensitive   bool    `json:"isSensitive"`
+	Environment   string  `json:"environment"`
+	Branch        string  `json:"branch"`
 }
 
 type ReviewRequest struct {
@@ -17,6 +19,7 @@ type ReviewRequest struct {
 	ProjectID       string               `json:"projectId"`
 	ProjectName     string               `json:"projectName"`
 	Environment     string               `json:"environment"`
+	Branch          string               `json:"branch"`
 	ConfigKey       string               `json:"configKey,omitempty"`
 	Requester       string               `json:"requester"`
 	Reviewer        string               `json:"reviewer,omitempty"`

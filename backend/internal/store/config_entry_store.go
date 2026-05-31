@@ -10,8 +10,8 @@ import (
 	"config-man/backend/pkg/util"
 )
 
-func (s *Store) ListConfigEntries(projectID, environment string) []model.ConfigEntry {
-	entries, err := s.db.ListConfigEntries(context.Background(), projectID, environment)
+func (s *Store) ListConfigEntries(projectID, environment, branch string) []model.ConfigEntry {
+	entries, err := s.db.ListConfigEntries(context.Background(), projectID, environment, branch)
 	if err != nil {
 		return nil
 	}
@@ -26,8 +26,8 @@ func (s *Store) FindConfigEntry(projectID, configID string) (model.ConfigEntry, 
 	return entry, ok
 }
 
-func (s *Store) FindConfigEntryByKey(projectID, environment, key string) (model.ConfigEntry, bool) {
-	entry, ok, err := s.db.FindConfigEntryByKey(context.Background(), projectID, environment, key)
+func (s *Store) FindConfigEntryByKey(projectID, environment, branch, key string) (model.ConfigEntry, bool) {
+	entry, ok, err := s.db.FindConfigEntryByKey(context.Background(), projectID, environment, branch, key)
 	if err != nil {
 		return model.ConfigEntry{}, false
 	}
@@ -55,7 +55,7 @@ func (s *Store) DeleteConfigEntry(projectID, configID string, audit model.AuditL
 	if err != nil || !ok {
 		return model.ConfigEntry{}, ok, err
 	}
-	entries, err := s.db.ListConfigEntries(context.Background(), deleted.ProjectID, deleted.Environment)
+	entries, err := s.db.ListConfigEntries(context.Background(), deleted.ProjectID, deleted.Environment, util.NormalizeBranch(deleted.Branch))
 	if err != nil {
 		return model.ConfigEntry{}, false, err
 	}
@@ -63,8 +63,8 @@ func (s *Store) DeleteConfigEntry(projectID, configID string, audit model.AuditL
 	return deleted, true, s.db.DeleteConfigEntry(context.Background(), configID, revision, audit)
 }
 
-func (s *Store) ListConfigRevisions(projectID, environment string) []model.ConfigRevision {
-	revisions, err := s.db.ListConfigRevisions(context.Background(), projectID, environment)
+func (s *Store) ListConfigRevisions(projectID, environment, branch string) []model.ConfigRevision {
+	revisions, err := s.db.ListConfigRevisions(context.Background(), projectID, environment, branch)
 	if err != nil {
 		return nil
 	}
@@ -72,7 +72,7 @@ func (s *Store) ListConfigRevisions(projectID, environment string) []model.Confi
 }
 
 func (s *Store) RestoreConfigRevision(projectID, environment string, revision model.ConfigRevision, actor, reason string, audit model.AuditLog) error {
-	currentEntries, err := s.db.ListConfigEntries(context.Background(), projectID, environment)
+	currentEntries, err := s.db.ListConfigEntries(context.Background(), projectID, environment, util.NormalizeBranch(revision.Branch))
 	if err != nil {
 		return err
 	}
@@ -94,7 +94,7 @@ func (s *Store) revisionForConfigChanges(entries []model.ConfigEntry, versions [
 	}
 	projectID := entries[0].ProjectID
 	environment := entries[0].Environment
-	currentEntries, err := s.db.ListConfigEntries(context.Background(), projectID, environment)
+	currentEntries, err := s.db.ListConfigEntries(context.Background(), projectID, environment, util.NormalizeBranch(entries[0].Branch))
 	if err != nil {
 		return model.ConfigRevision{}, err
 	}
@@ -141,6 +141,7 @@ func configRevisionFromEntries(projectID, environment, changedBy, reason string,
 		}
 		revisionEntries = append(revisionEntries, model.ConfigRevisionEntry{
 			ConfigID:    entry.ConfigID,
+			Branch:      entry.Branch,
 			Key:         entry.Key,
 			Value:       entry.Value,
 			ValueType:   entry.ValueType,
@@ -157,6 +158,7 @@ func configRevisionFromEntries(projectID, environment, changedBy, reason string,
 		ID:           util.NewID("rev"),
 		ProjectID:    projectID,
 		Environment:  environment,
+		Branch:       branchFromEntries(entries),
 		Entries:      revisionEntries,
 		ChangedBy:    changedBy,
 		ChangeReason: reason,
@@ -164,11 +166,19 @@ func configRevisionFromEntries(projectID, environment, changedBy, reason string,
 	}
 }
 
+func branchFromEntries(entries []model.ConfigEntry) string {
+	if len(entries) == 0 {
+		return "default"
+	}
+	return util.NormalizeBranch(entries[0].Branch)
+}
+
 func configRevisionFromRevision(projectID, environment, changedBy, reason string, sourceRevision model.ConfigRevision) model.ConfigRevision {
 	revision := model.ConfigRevision{
 		ID:           util.NewID("rev"),
 		ProjectID:    projectID,
 		Environment:  environment,
+		Branch:       util.NormalizeBranch(sourceRevision.Branch),
 		Entries:      append([]model.ConfigRevisionEntry(nil), sourceRevision.Entries...),
 		ChangedBy:    changedBy,
 		ChangeReason: reason,
@@ -217,6 +227,7 @@ func buildRestoreChanges(projectID, environment string, revision model.ConfigRev
 		}
 
 		oldValue := entry.Value
+		entry.Branch = util.NormalizeBranch(revision.Branch)
 		if revisionEntry.ConfigID != "" {
 			entry.ConfigID = revisionEntry.ConfigID
 		}

@@ -86,6 +86,11 @@ func demoSeedData() seedData {
 			{ID: "env-customer-staging", Name: "staging", SortOrder: 2},
 			{ID: "env-customer-prod", Name: "prod", SortOrder: 3},
 		},
+		Branches: []model.ProjectBranch{
+			{ID: "brn-customer-default", Name: "default", SortOrder: 1},
+			{ID: "brn-customer-asia", Name: "asia", SortOrder: 2},
+			{ID: "brn-customer-eu", Name: "eu", SortOrder: 3},
+		},
 		Members: []model.ProjectMember{
 			{User: model.User{ID: "paul"}, ProjectRole: model.RoleProjectMemberAdmin},
 			{User: model.User{ID: "nora"}, ProjectRole: model.RoleProjectDeveloper},
@@ -105,6 +110,11 @@ func demoSeedData() seedData {
 			{ID: "env-billing-dev", Name: "dev", SortOrder: 1},
 			{ID: "env-billing-staging", Name: "staging", SortOrder: 2},
 			{ID: "env-billing-prod", Name: "prod", SortOrder: 3},
+		},
+		Branches: []model.ProjectBranch{
+			{ID: "brn-billing-default", Name: "default", SortOrder: 1},
+			{ID: "brn-billing-asia", Name: "asia", SortOrder: 2},
+			{ID: "brn-billing-eu", Name: "eu", SortOrder: 3},
 		},
 		Members: []model.ProjectMember{
 			{User: model.User{ID: "grace"}, ProjectRole: model.RoleProjectMemberAdmin},
@@ -141,11 +151,12 @@ func demoSeedData() seedData {
 	billingRuntime := addConfig(billingAPI, "runtime-defaults.yaml", "Shared global runtime defaults", "shared-config", "global-runtime-defaults", 2)
 	billingPayment := addConfig(billingAPI, "payment.yaml", "Payment provider settings", "seed", "", 3)
 
-	addEntry := func(project *model.Project, configID, environment, key, value, valueType string, sensitive bool) {
+	addEntryForBranch := func(project *model.Project, configID, branch, environment, key, value, valueType string, sensitive bool) {
 		entry := model.ConfigEntry{
 			ID:          util.NewID("cfg"),
 			ProjectID:   project.ID,
 			Environment: environment,
+			Branch:      branch,
 			ConfigID:    configID,
 			Key:         key,
 			Value:       value,
@@ -165,6 +176,9 @@ func demoSeedData() seedData {
 			CreatedAt:     now,
 		})
 	}
+	addEntry := func(project *model.Project, configID, environment, key, value, valueType string, sensitive bool) {
+		addEntryForBranch(project, configID, "default", environment, key, value, valueType, sensitive)
+	}
 	addEntriesForAllEnvs := func(project *model.Project, configID, key, dev, staging, prod, valueType string, sensitive bool) {
 		addEntry(project, configID, "dev", key, dev, valueType, sensitive)
 		addEntry(project, configID, "staging", key, staging, valueType, sensitive)
@@ -175,9 +189,15 @@ func demoSeedData() seedData {
 	addEntriesForAllEnvs(customerPortal, customerApp, "log.level", "debug", "info", "info", "string", false)
 	addEntriesForAllEnvs(customerPortal, customerApp, "feature.checkout.enabled", "true", "true", "true", "boolean", false)
 
-	addEntriesForAllEnvs(customerPortal, customerRuntime, "logging.level.root", "DEBUG", "INFO", "INFO", "string", false)
-	addEntriesForAllEnvs(customerPortal, customerRuntime, "observability.metrics.enabled", "false", "true", "true", "boolean", false)
-	addEntriesForAllEnvs(customerPortal, customerRuntime, "security.headers.enabled", "false", "true", "true", "boolean", false)
+	// Local overrides for a linked global shared config. Values not listed here remain inherited from global-runtime-defaults.
+	addEntry(customerPortal, customerRuntime, "dev", "logging.level.root", "TRACE", "string", false)
+	addEntry(customerPortal, customerRuntime, "staging", "logging.level.root", "DEBUG", "string", false)
+	addEntry(customerPortal, customerRuntime, "prod", "logging.level.root", "WARN", "string", false)
+	addEntry(customerPortal, customerRuntime, "dev", "runtime.local.debugBanner", "true", "boolean", false)
+	addEntry(customerPortal, customerRuntime, "staging", "runtime.local.debugBanner", "false", "boolean", false)
+	addEntry(customerPortal, customerRuntime, "prod", "runtime.local.debugBanner", "false", "boolean", false)
+	addEntryForBranch(customerPortal, customerRuntime, "asia", "prod", "logging.level.root", "ERROR", "string", false)
+	addEntryForBranch(customerPortal, customerRuntime, "eu", "prod", "runtime.local.privacyMode", "strict", "string", false)
 
 	addEntriesForAllEnvs(customerPortal, customerSecurity, "database.url", "postgresql://dev-user:dev-secret@dev-db:5432/app", "postgresql://staging-user:staging-secret@staging-db:5432/app", "postgresql://prod-user:prod-secret@prod-db:5432/app", "string", true)
 	addEntriesForAllEnvs(customerPortal, customerSecurity, "auth.jwt.issuer", "customer-portal-dev", "customer-portal-staging", "customer-portal", "string", false)
@@ -186,9 +206,9 @@ func demoSeedData() seedData {
 	addEntriesForAllEnvs(billingAPI, billingService, "log.level", "debug", "info", "warn", "string", false)
 	addEntriesForAllEnvs(billingAPI, billingService, "worker.concurrency", "2", "4", "8", "number", false)
 
-	addEntriesForAllEnvs(billingAPI, billingRuntime, "logging.level.root", "DEBUG", "INFO", "INFO", "string", false)
-	addEntriesForAllEnvs(billingAPI, billingRuntime, "observability.metrics.enabled", "false", "true", "true", "boolean", false)
-	addEntriesForAllEnvs(billingAPI, billingRuntime, "security.headers.enabled", "false", "true", "true", "boolean", false)
+	// Billing reuses the same global shared config and only overrides prod logging.
+	addEntry(billingAPI, billingRuntime, "prod", "logging.level.root", "ERROR", "string", false)
+	addEntry(billingAPI, billingRuntime, "prod", "runtime.local.auditSink", "billing-ledger", "string", false)
 
 	addEntriesForAllEnvs(billingAPI, billingPayment, "payment.provider", "stripe-sandbox", "stripe-sandbox", "stripe", "string", false)
 	addEntriesForAllEnvs(billingAPI, billingPayment, "payment.apiKey", "sk_test_dev_demo_secret", "sk_test_staging_demo_secret", "sk_live_demo_secret", "string", true)

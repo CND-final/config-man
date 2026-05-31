@@ -77,6 +77,13 @@ func (s *Store) InitSchema(ctx context.Context) error {
 			sort_order INTEGER NOT NULL,
 			UNIQUE(project_id, name)
 		)`,
+		`CREATE TABLE IF NOT EXISTS project_branches (
+			id TEXT PRIMARY KEY,
+			project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+			name TEXT NOT NULL,
+			sort_order INTEGER NOT NULL,
+			UNIQUE(project_id, name)
+		)`,
 		`CREATE TABLE IF NOT EXISTS project_members (
 			project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
 			user_id TEXT NOT NULL,
@@ -147,6 +154,7 @@ func (s *Store) InitSchema(ctx context.Context) error {
 			id TEXT PRIMARY KEY,
 			project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
 			environment TEXT NOT NULL,
+			branch TEXT NOT NULL DEFAULT 'default',
 			config_id TEXT NOT NULL DEFAULT '',
 			key TEXT NOT NULL,
 			value TEXT NOT NULL,
@@ -154,10 +162,12 @@ func (s *Store) InitSchema(ctx context.Context) error {
 			is_sensitive BOOLEAN NOT NULL DEFAULT false,
 			updated_by TEXT NOT NULL,
 			created_at TIMESTAMPTZ NOT NULL,
-			updated_at TIMESTAMPTZ NOT NULL,
-			UNIQUE(project_id, environment, key)
+			updated_at TIMESTAMPTZ NOT NULL
 		)`,
+		`ALTER TABLE config_entries ADD COLUMN IF NOT EXISTS branch TEXT NOT NULL DEFAULT 'default'`,
 		`ALTER TABLE config_entries ADD COLUMN IF NOT EXISTS config_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE config_entries DROP CONSTRAINT IF EXISTS config_entries_project_id_environment_key_key`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS config_entries_project_branch_environment_key_idx ON config_entries(project_id, branch, environment, key)`,
 		`DO $$
 		BEGIN
 			IF EXISTS (
@@ -190,16 +200,19 @@ func (s *Store) InitSchema(ctx context.Context) error {
 			id TEXT PRIMARY KEY,
 			project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
 			environment TEXT NOT NULL,
+			branch TEXT NOT NULL DEFAULT 'default',
 			entries JSONB NOT NULL DEFAULT '[]'::jsonb,
 			changed_by TEXT NOT NULL,
 			change_reason TEXT NOT NULL,
 			created_at TIMESTAMPTZ NOT NULL
 		)`, configRevisionTable),
+		fmt.Sprintf(`ALTER TABLE %s ADD COLUMN IF NOT EXISTS branch TEXT NOT NULL DEFAULT 'default'`, configRevisionTable),
 		`CREATE TABLE IF NOT EXISTS review_requests (
 			id TEXT PRIMARY KEY,
 			project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
 			project_name TEXT NOT NULL,
 			environment TEXT NOT NULL,
+			branch TEXT NOT NULL DEFAULT 'default',
 			config_key TEXT NOT NULL DEFAULT '',
 			requester TEXT NOT NULL,
 			reviewer TEXT NOT NULL DEFAULT '',
@@ -211,6 +224,7 @@ func (s *Store) InitSchema(ctx context.Context) error {
 			updated_at TIMESTAMPTZ NOT NULL
 		)`,
 		`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS proposed_changes JSONB NOT NULL DEFAULT '[]'::jsonb`,
+		`ALTER TABLE review_requests ADD COLUMN IF NOT EXISTS branch TEXT NOT NULL DEFAULT 'default'`,
 		`CREATE TABLE IF NOT EXISTS app_notifications (
 			id TEXT PRIMARY KEY,
 			user_id TEXT NOT NULL,

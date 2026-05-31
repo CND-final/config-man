@@ -1,6 +1,6 @@
 import { api } from "./api.js";
 import { ensureActiveConfigFile } from "./configFiles.js";
-import { activeProject, normalizeProject, state } from "./state.js";
+import { activeProject, defaultBranchForProject, normalizeProject, projectBranches, state } from "./state.js";
 
 export async function loadInitialData() {
   const [projects, templates, sharedConfigs, notifications, requests] =
@@ -12,11 +12,11 @@ export async function loadInitialData() {
       api("/review-requests"),
     ]);
 
-  state.projects = projects.map(normalizeProject);
-  state.templates = normalizeTemplates(templates);
-  state.sharedConfigs = normalizeSharedConfigs(sharedConfigs);
-  state.notifications = notifications;
-  state.requests = requests;
+  state.projects = listFromPayload(projects, "projects").map(normalizeProject);
+  state.templates = normalizeTemplates(listFromPayload(templates, "templates"));
+  state.sharedConfigs = normalizeSharedConfigs(listFromPayload(sharedConfigs, "sharedConfigs"));
+  state.notifications = listFromPayload(notifications, "notifications");
+  state.requests = listFromPayload(requests, "requests");
   await reloadGroups({ silent: true });
 
   if (!state.activeProjectId && state.projects[0]) {
@@ -25,6 +25,9 @@ export async function loadInitialData() {
   const project = activeProject();
   if (project && !project.environments.includes(state.activeEnvironment)) {
     state.activeEnvironment = project.environments[0];
+  }
+  if (project && !projectBranches(project).includes(state.activeBranch)) {
+    state.activeBranch = defaultBranchForProject(project);
   }
 
   await loadConfigsAndHistory();
@@ -41,18 +44,21 @@ function normalizeTemplates(templates) {
 }
 
 function normalizeSharedConfigs(items) {
-  return items.map((item) => ({
-    ...item,
-    itemType: "shared_config",
-    format: item.format || "yaml",
-    entries: item.entries || [],
-    keys: (item.entries || []).map((entry) => entry.key),
-    affectedProjects: item.affectedProjects || [],
-  }));
+  return items.map((item) => {
+    const entries = item.entries || [];
+    return {
+      ...item,
+      itemType: "shared_config",
+      format: item.format || "yaml",
+      entries,
+      keys: Array.from(new Set(entries.map((entry) => entry.key))),
+      affectedProjects: item.affectedProjects || [],
+    };
+  });
 }
 
 export async function reloadNotifications() {
-  state.notifications = await api("/notifications");
+  state.notifications = listFromPayload(await api("/notifications"), "notifications");
 }
 
 
@@ -70,17 +76,17 @@ export async function reloadProjectMembers(projectId = activeProject()?.id) {
 
 export async function reloadProjects() {
   const projects = await api("/projects");
-  state.projects = projects.map(normalizeProject);
+  state.projects = listFromPayload(projects, "projects").map(normalizeProject);
 }
 
 export async function reloadTemplates() {
   const templates = await api("/templates");
-  state.templates = normalizeTemplates(templates);
+  state.templates = normalizeTemplates(listFromPayload(templates, "templates"));
 }
 
 export async function reloadSharedConfigs() {
   const sharedConfigs = await api("/shared-configs");
-  state.sharedConfigs = normalizeSharedConfigs(sharedConfigs);
+  state.sharedConfigs = normalizeSharedConfigs(listFromPayload(sharedConfigs, "sharedConfigs"));
 }
 
 export async function loadConfigs(revealSensitive = false) {
@@ -97,7 +103,7 @@ export async function loadConfigs(revealSensitive = false) {
   const data = await api(
     `/projects/${project.id}/configs?env=${encodeURIComponent(
       state.activeEnvironment,
-    )}${revealSensitive ? "&revealSensitive=true" : ""}`,
+    )}&branch=${encodeURIComponent(state.activeBranch)}${revealSensitive ? "&revealSensitive=true" : ""}`,
   );
   state.configFiles = configsFromPayload(data);
   ensureActiveConfigFile(state);
@@ -106,7 +112,7 @@ export async function loadConfigs(revealSensitive = false) {
     updated: entry.updatedBy,
   }));
 
-  const context = `${project.id}:${state.activeEnvironment}:${state.activeConfigFile}`;
+  const context = `${project.id}:${state.activeBranch}:${state.activeEnvironment}:${state.activeConfigFile}`;
   if (state.configBaselineContext !== context) {
     state.configBaselineContext = context;
     state.configBaseline = new Map(
@@ -140,6 +146,7 @@ function baselineConfig(entry) {
     key: entry.key,
     value: entry.value,
     environment: entry.environment,
+    branch: entry.branch || state.activeBranch,
   };
 }
 
@@ -171,7 +178,9 @@ export async function loadCompareConfigs() {
           "/projects/" +
             project.id +
             "/configs?env=" +
-            encodeURIComponent(environment),
+            encodeURIComponent(environment) +
+            "&branch=" +
+            encodeURIComponent(state.activeBranch),
         );
         if (environment === state.activeEnvironment) {
           state.configFiles = configsFromPayload(data) || state.configFiles;
@@ -199,7 +208,7 @@ export async function loadConfigHistory() {
   }
 
   const data = await api(
-    `/projects/${project.id}/config-history?env=${encodeURIComponent(state.activeEnvironment)}`,
+    `/projects/${project.id}/config-history?env=${encodeURIComponent(state.activeEnvironment)}&branch=${encodeURIComponent(state.activeBranch)}`,
   );
   state.configHistory = data.revisions || [];
 }

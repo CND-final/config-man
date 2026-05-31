@@ -490,7 +490,7 @@
       >
         <div class="modal-header">
           <div>
-            <p class="eyebrow">Global Shared Config</p>
+            <p id="sharedConfigCreateEyebrow" class="eyebrow">Shared Config</p>
             <h2 id="sharedConfigCreateTitle">New Shared Config</h2>
           </div>
           <button
@@ -520,6 +520,17 @@
               <option value="json">json</option>
               <option value="properties">properties</option>
             </select>
+          </label>
+          <label>
+            <span>Scope</span>
+            <select id="sharedConfigScope">
+              <option value="global">Global</option>
+              <option value="group">Group</option>
+            </select>
+          </label>
+          <label id="sharedConfigGroupField">
+            <span>Group</span>
+            <select id="sharedConfigGroup"></select>
           </label>
           <label class="form-wide">
             <span>Description</span>
@@ -564,7 +575,7 @@
       <form id="sharedConfigEditForm" class="modal-panel template-create-panel">
         <div class="modal-header">
           <div>
-            <p class="eyebrow">Global Shared Config</p>
+            <p id="sharedConfigEditEyebrow" class="eyebrow">Shared Config</p>
             <h2 id="sharedConfigEditTitle">Edit Shared Config</h2>
           </div>
           <button
@@ -861,6 +872,16 @@
               id="projectEnvironments"
               type="text"
               value="dev, staging, prod"
+              autocomplete="off"
+            />
+          </label>
+          <label class="form-wide">
+            <span>Branches</span>
+            <input
+              id="projectBranches"
+              type="text"
+              value="default"
+              placeholder="default, asia, eu"
               autocomplete="off"
             />
           </label>

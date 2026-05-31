@@ -43,7 +43,7 @@ func (s *Store) ListReviewRequests(ctx context.Context, projectID string, filter
 	for rows.Next() {
 		request := model.ReviewRequest{}
 		var proposed []byte
-		if err := rows.Scan(&request.ID, &request.ProjectID, &request.ProjectName, &request.Environment, &request.ConfigKey, &request.Requester, &request.Reviewer, &request.Status, &request.Reason, &request.Comment, &proposed, &request.CreatedAt, &request.UpdatedAt); err != nil {
+		if err := rows.Scan(&request.ID, &request.ProjectID, &request.ProjectName, &request.Environment, &request.Branch, &request.ConfigKey, &request.Requester, &request.Reviewer, &request.Status, &request.Reason, &request.Comment, &proposed, &request.CreatedAt, &request.UpdatedAt); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal(proposed, &request.ProposedChanges)
@@ -55,7 +55,7 @@ func (s *Store) ListReviewRequests(ctx context.Context, projectID string, filter
 func (s *Store) FindReviewRequest(ctx context.Context, requestID string) (model.ReviewRequest, bool, error) {
 	request := model.ReviewRequest{}
 	var proposed []byte
-	err := s.db.QueryRowContext(ctx, `SELECT id, project_id, project_name, environment, config_key, requester, reviewer, status, reason, comment, proposed_changes, created_at, updated_at FROM review_requests WHERE id = $1`, requestID).Scan(&request.ID, &request.ProjectID, &request.ProjectName, &request.Environment, &request.ConfigKey, &request.Requester, &request.Reviewer, &request.Status, &request.Reason, &request.Comment, &proposed, &request.CreatedAt, &request.UpdatedAt)
+	err := s.db.QueryRowContext(ctx, `SELECT id, project_id, project_name, environment, branch, config_key, requester, reviewer, status, reason, comment, proposed_changes, created_at, updated_at FROM review_requests WHERE id = $1`, requestID).Scan(&request.ID, &request.ProjectID, &request.ProjectName, &request.Environment, &request.Branch, &request.ConfigKey, &request.Requester, &request.Reviewer, &request.Status, &request.Reason, &request.Comment, &proposed, &request.CreatedAt, &request.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return model.ReviewRequest{}, false, nil
 	}

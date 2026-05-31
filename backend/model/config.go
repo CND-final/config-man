@@ -21,21 +21,24 @@ type Config struct {
 }
 
 type ConfigEntry struct {
-	ID          string    `json:"id"`
-	ProjectID   string    `json:"projectId"`
-	Environment string    `json:"environment"`
-	ConfigID    string    `json:"configId"`
-	Key         string    `json:"key"`
-	Value       string    `json:"value"`
-	ValueType   string    `json:"valueType"`
-	IsSensitive bool      `json:"isSensitive"`
-	UpdatedBy   string    `json:"updatedBy"`
-	Inherited   bool      `json:"inherited,omitempty"`
-	Overridden  bool      `json:"overridden,omitempty"`
-	SourceType  string    `json:"sourceType,omitempty"`
-	SourceID    string    `json:"sourceId,omitempty"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	ID              string    `json:"id"`
+	ProjectID       string    `json:"projectId"`
+	Environment     string    `json:"environment"`
+	Branch          string    `json:"branch"`
+	ConfigID        string    `json:"configId"`
+	Key             string    `json:"key"`
+	Value           string    `json:"value"`
+	ValueType       string    `json:"valueType"`
+	IsSensitive     bool      `json:"isSensitive"`
+	UpdatedBy       string    `json:"updatedBy"`
+	Inherited       bool      `json:"inherited,omitempty"`
+	Overridden      bool      `json:"overridden,omitempty"`
+	SourceType      string    `json:"sourceType,omitempty"`
+	SourceID        string    `json:"sourceId,omitempty"`
+	SharedValue     string    `json:"sharedValue"`
+	SharedSensitive bool      `json:"sharedSensitive,omitempty"`
+	CreatedAt       time.Time `json:"createdAt"`
+	UpdatedAt       time.Time `json:"updatedAt"`
 }
 
 type ConfigVersion struct {
@@ -50,6 +53,7 @@ type ConfigVersion struct {
 
 type ConfigRevisionEntry struct {
 	ConfigID    string `json:"configId,omitempty"`
+	Branch      string `json:"branch,omitempty"`
 	Key         string `json:"key"`
 	Value       string `json:"value"`
 	ValueType   string `json:"valueType"`
@@ -60,6 +64,7 @@ type ConfigRevision struct {
 	ID           string                `json:"id"`
 	ProjectID    string                `json:"projectId"`
 	Environment  string                `json:"environment"`
+	Branch       string                `json:"branch"`
 	Entries      []ConfigRevisionEntry `json:"entries"`
 	ChangedBy    string                `json:"changedBy"`
 	ChangeReason string                `json:"changeReason"`

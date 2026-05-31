@@ -6,6 +6,7 @@ export const state = {
   activeView: "dashboard",
   activeProjectId: "",
   activeEnvironment: "prod",
+  activeBranch: "default",
   activeConfigFile: "",
   projectDetailTab: "configs",
   projectMemberPickerOpen: false,
@@ -90,6 +91,22 @@ export const navItems = [
   { id: "requests", label: "Requests", icon: "/nav-requests.svg" },
 ];
 
+export function projectBranches(project) {
+  const branches = project?.branches || project?.Branches || [];
+  const names = branches
+    .map((branch) =>
+      typeof branch === "string" ? branch : branch.name || branch.Name || branch.id || branch.ID,
+    )
+    .map((branch) => String(branch || "").trim().toLowerCase())
+    .filter(Boolean);
+  return names.length ? Array.from(new Set(names)) : ["default"];
+}
+
+export function defaultBranchForProject(project) {
+  const branches = projectBranches(project);
+  return branches.includes("default") ? "default" : branches[0];
+}
+
 export function activeProject() {
   return (
     state.projects.find((project) => project.id === state.activeProjectId) ||
@@ -99,6 +116,7 @@ export function activeProject() {
 
 export function normalizeProject(project) {
   const environments = project.environments || project.Environments || [];
+  const branches = projectBranches(project);
   return {
     ...project,
     id: project.id || project.ID,
@@ -107,6 +125,7 @@ export function normalizeProject(project) {
     environments: environments.map((environment) =>
       typeof environment === "string" ? environment : environment.name,
     ),
+    branches,
     lastChanged: "live API",
     configCount: project.configCount ?? 0,
   };

@@ -28,6 +28,34 @@ func NormalizeEnvironments(environments []string) []string {
 	return normalized
 }
 
+func NormalizeBranches(branches []string) []string {
+	if len(branches) == 0 {
+		return []string{"default"}
+	}
+	seen := map[string]bool{}
+	normalized := make([]string, 0, len(branches))
+	for _, branch := range branches {
+		name := strings.ToLower(strings.TrimSpace(branch))
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		normalized = append(normalized, name)
+	}
+	if len(normalized) == 0 {
+		return []string{"default"}
+	}
+	return normalized
+}
+
+func NormalizeBranch(branch string) string {
+	branch = strings.ToLower(strings.TrimSpace(branch))
+	if branch == "" {
+		return "default"
+	}
+	return branch
+}
+
 func NewID(prefix string) string {
 	buf := make([]byte, 6)
 	if _, err := rand.Read(buf); err != nil {

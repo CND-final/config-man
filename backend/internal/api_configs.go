@@ -128,7 +128,7 @@ func (s *Server) handleListConfigs(c *gin.Context) {
 
 	if strings.TrimSpace(c.Query("env")) != "" {
 		reveal := strings.EqualFold(c.Query("revealSensitive"), "true")
-		payload, appErr := s.processor.ListConfigEntries(reqCtx, c.Param("projectId"), c.Query("env"), reveal)
+		payload, appErr := s.processor.ListConfigEntries(reqCtx, c.Param("projectId"), c.Query("env"), c.Query("branch"), reveal)
 		if appErr != nil {
 			response.WriteError(c, appErr)
 			return
@@ -185,7 +185,7 @@ func (s *Server) handleListConfigEntries(c *gin.Context) {
 	reqCtx := requestContextFromGin(c)
 
 	reveal := strings.EqualFold(c.Query("revealSensitive"), "true")
-	payload, appErr := s.processor.ListConfigEntries(reqCtx, c.Param("projectId"), c.Query("env"), reveal)
+	payload, appErr := s.processor.ListConfigEntries(reqCtx, c.Param("projectId"), c.Query("env"), c.Query("branch"), reveal)
 	if appErr != nil {
 		response.WriteError(c, appErr)
 		return
@@ -197,7 +197,7 @@ func (s *Server) handleListConfigHistory(c *gin.Context) {
 	reqCtx := requestContextFromGin(c)
 
 	reveal := strings.EqualFold(c.Query("revealSensitive"), "true")
-	payload, appErr := s.processor.ListConfigHistory(reqCtx, c.Param("projectId"), c.Query("env"), reveal)
+	payload, appErr := s.processor.ListConfigHistory(reqCtx, c.Param("projectId"), c.Query("env"), c.Query("branch"), reveal)
 	if appErr != nil {
 		response.WriteError(c, appErr)
 		return

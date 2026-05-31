@@ -2971,6 +2971,22 @@ td {
   background: #005bb5;
 }
 
+
+.branch-select {
+  min-height: 38px;
+  border: 1px solid rgba(210, 210, 215, 0.72);
+  border-radius: 8px;
+  padding: 0 30px 0 12px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.84);
+  outline: none;
+  font-weight: 760;
+}
+
+.segmented-control .branch-select {
+  margin-right: 6px;
+}
+
 .compare-controls {
   display: inline-flex;
   align-items: center;
@@ -4241,15 +4257,71 @@ tbody tr:hover td {
   overflow: auto;
 }
 
+.request-change-group {
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid rgba(229, 229, 234, 0.82);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.request-change-group-header {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  background: #f9fafb;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.request-change-group-header strong {
+  color: #1d1d1f;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.file-glyph {
+  position: relative;
+  width: 14px;
+  height: 16px;
+  border: 1.5px solid #8e8e93;
+  border-radius: 3px;
+  flex: 0 0 auto;
+}
+
+.file-glyph::after {
+  content: "";
+  position: absolute;
+  top: -1.5px;
+  right: -1.5px;
+  width: 5px;
+  height: 5px;
+  border-left: 1.5px solid #8e8e93;
+  border-bottom: 1.5px solid #8e8e93;
+  border-radius: 0 2px 0 2px;
+  background: #f9fafb;
+}
+
+.request-change-group-body {
+  display: grid;
+  gap: 0;
+}
+
 .request-change-row {
   display: grid;
   grid-template-columns: minmax(210px, 0.42fr) minmax(0, 1fr);
   gap: 18px;
   align-items: center;
-  border: 1px solid rgba(229, 229, 234, 0.82);
-  border-radius: 8px;
+  border-top: 1px solid rgba(229, 229, 234, 0.72);
   padding: 12px;
-  background: #fff;
+}
+
+.request-change-row:first-child {
+  border-top: 0;
 }
 
 .request-change-key,
@@ -4278,6 +4350,26 @@ tbody tr:hover td {
   border-radius: 7px;
   padding: 5px 7px;
   font-size: 12px;
+}
+
+.request-change-status {
+  margin-left: auto;
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: rgba(142, 142, 147, 0.12);
+  color: #6e6e73;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.request-change-status.added {
+  background: rgba(52, 199, 89, 0.12);
+  color: #248a3d;
+}
+
+.request-change-status.modified {
+  background: rgba(255, 149, 0, 0.12);
+  color: #9a5a00;
 }
 
 .request-current-missing {
@@ -4381,4 +4473,73 @@ tbody tr:hover td {
   border-radius: 3px;
   background: currentColor;
   opacity: 0.72;
+}
+
+.config-state-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  margin-left: 8px;
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  font-size: 11px;
+  font-weight: 850;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.config-state-badge.inherited {
+  color: #6e6e73;
+  background: rgba(242, 242, 247, 0.92);
+}
+
+.config-state-badge.overridden {
+  color: #9a5a00;
+  background: rgba(255, 159, 10, 0.14);
+}
+
+.override-diff-value {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.override-diff-value code {
+  overflow-wrap: anywhere;
+  border-radius: 6px;
+  padding: 3px 6px;
+  font-size: 12px;
+}
+
+.shared-default-value {
+  color: #6e6e73;
+  background: rgba(242, 242, 247, 0.92);
+  text-decoration: line-through;
+  text-decoration-thickness: 1.4px;
+}
+
+.local-override-value {
+  color: #7a3f00;
+  background: rgba(255, 159, 10, 0.12);
+}
+
+.override-diff-value.compact .config-state-badge {
+  margin-left: 0;
+}
+
+.shared-config-key {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.shared-config-key small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 750;
+  white-space: nowrap;
 }

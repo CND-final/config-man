@@ -33,13 +33,14 @@ func (p *Processor) SharedConfigs(ctx appctx.RequestContext) []model.SharedConfi
 	return visible
 }
 
-func (p *Processor) CreateGlobalSharedConfig(ctx appctx.RequestContext, req model.CreateSharedConfigRequest) (model.SharedConfig, *model.ErrorDetail) {
-	if ctx.Actor.Role != model.RoleSystemAdmin {
-		return model.SharedConfig{}, model.Forbidden("Only system_admin can create global shared config")
-	}
+func (p *Processor) CreateSharedConfig(ctx appctx.RequestContext, req model.CreateSharedConfigRequest) (model.SharedConfig, *model.ErrorDetail) {
 	name := strings.TrimSpace(req.Name)
 	if len(name) < 2 {
 		return model.SharedConfig{}, model.InvalidInput("name is required")
+	}
+	scope, scopeID, scopeName, authErr := p.resolveSharedConfigScope(ctx, req.Scope, req.ScopeID)
+	if authErr != nil {
+		return model.SharedConfig{}, authErr
 	}
 	format := strings.ToLower(strings.TrimSpace(req.Format))
 	if format == "" {
@@ -57,30 +58,28 @@ func (p *Processor) CreateGlobalSharedConfig(ctx appctx.RequestContext, req mode
 		ID:          util.NewID("shc"),
 		Name:        name,
 		Description: strings.TrimSpace(req.Description),
-		Scope:       model.ScopeGlobal,
-		ScopeName:   "Global",
+		Scope:       scope,
+		ScopeID:     scopeID,
+		ScopeName:   scopeName,
 		Format:      format,
 		Entries:     entries,
 		UpdatedBy:   ctx.ActorName(),
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
-	if err := p.store.SaveSharedConfig(item, newAudit(ctx.ActorName(), "shared_config.create", "shared_config", item.ID, "", map[string]any{"scope": item.Scope, "entryCount": len(item.Entries)})); err != nil {
+	if err := p.store.SaveSharedConfig(item, newAudit(ctx.ActorName(), "shared_config.create", "shared_config", item.ID, "", map[string]any{"scope": item.Scope, "scopeId": item.ScopeID, "entryCount": len(item.Entries)})); err != nil {
 		return model.SharedConfig{}, model.InternalError("database persistence failed: " + err.Error())
 	}
 	return item, nil
 }
 
-func (p *Processor) UpdateGlobalSharedConfig(ctx appctx.RequestContext, id string, req model.UpdateSharedConfigRequest) (model.SharedConfig, *model.ErrorDetail) {
-	if ctx.Actor.Role != model.RoleSystemAdmin {
-		return model.SharedConfig{}, model.Forbidden("Only system_admin can update global shared config")
-	}
+func (p *Processor) UpdateSharedConfig(ctx appctx.RequestContext, id string, req model.UpdateSharedConfigRequest) (model.SharedConfig, *model.ErrorDetail) {
 	current, ok := p.store.FindSharedConfig(strings.TrimSpace(id))
 	if !ok {
 		return model.SharedConfig{}, model.NotFound(fmt.Sprintf("Shared config %q not found", id))
 	}
-	if current.Scope != model.ScopeGlobal {
-		return model.SharedConfig{}, model.Forbidden("Only global shared config update is supported here")
+	if !p.canManageSharedConfig(ctx, current) {
+		return model.SharedConfig{}, model.Forbidden("You cannot update this shared config")
 	}
 	changeReason := strings.TrimSpace(req.ChangeReason)
 	if changeReason == "" {
@@ -112,6 +111,7 @@ func (p *Processor) UpdateGlobalSharedConfig(ctx appctx.RequestContext, id strin
 
 	audit := newAudit(ctx.ActorName(), "shared_config.update", "shared_config", updated.ID, "", map[string]any{
 		"scope":                updated.Scope,
+		"scopeId":              updated.ScopeID,
 		"name":                 updated.Name,
 		"entryCount":           len(updated.Entries),
 		"changeReason":         changeReason,
@@ -125,21 +125,57 @@ func (p *Processor) UpdateGlobalSharedConfig(ctx appctx.RequestContext, id strin
 	return updated, nil
 }
 
-func (p *Processor) DeleteGlobalSharedConfig(ctx appctx.RequestContext, id string) *model.ErrorDetail {
-	if ctx.Actor.Role != model.RoleSystemAdmin {
-		return model.Forbidden("Only system_admin can delete global shared config")
-	}
+func (p *Processor) DeleteSharedConfig(ctx appctx.RequestContext, id string) *model.ErrorDetail {
 	item, ok := p.store.FindSharedConfig(strings.TrimSpace(id))
 	if !ok {
 		return model.NotFound(fmt.Sprintf("Shared config %q not found", id))
 	}
-	if item.Scope != model.ScopeGlobal {
-		return model.Forbidden("Only global shared config deletion is supported here")
+	if !p.canManageSharedConfig(ctx, item) {
+		return model.Forbidden("You cannot delete this shared config")
 	}
-	if err := p.store.DeleteSharedConfig(item.ID, newAudit(ctx.ActorName(), "shared_config.delete", "shared_config", item.ID, "", map[string]any{"scope": item.Scope, "name": item.Name})); err != nil {
+	if err := p.store.DeleteSharedConfig(item.ID, newAudit(ctx.ActorName(), "shared_config.delete", "shared_config", item.ID, "", map[string]any{"scope": item.Scope, "scopeId": item.ScopeID, "name": item.Name})); err != nil {
 		return model.InternalError("database persistence failed: " + err.Error())
 	}
 	return nil
+}
+
+func (p *Processor) resolveSharedConfigScope(ctx appctx.RequestContext, scope model.LibraryScope, scopeID string) (model.LibraryScope, string, string, *model.ErrorDetail) {
+	if scope == "" {
+		scope = model.ScopeGlobal
+	}
+	scopeID = strings.TrimSpace(scopeID)
+	switch scope {
+	case model.ScopeGlobal:
+		if ctx.Actor.Role != model.RoleSystemAdmin {
+			return "", "", "", model.Forbidden("Only system_admin can create global shared config")
+		}
+		return model.ScopeGlobal, "", "Global", nil
+	case model.ScopeGroup:
+		if scopeID == "" {
+			return "", "", "", model.InvalidInput("scopeId is required for group shared config")
+		}
+		group, ok := p.store.FindGroup(scopeID)
+		if !ok {
+			return "", "", "", model.NotFound(fmt.Sprintf("Group %q not found", scopeID))
+		}
+		if !util.CanManageGroup(ctx.Actor, group) {
+			return "", "", "", model.Forbidden("You cannot create shared config for this group")
+		}
+		return model.ScopeGroup, group.ID, group.Name, nil
+	default:
+		return "", "", "", model.InvalidInput("scope must be global or group")
+	}
+}
+
+func (p *Processor) canManageSharedConfig(ctx appctx.RequestContext, item model.SharedConfig) bool {
+	if ctx.Actor.Role == model.RoleSystemAdmin {
+		return true
+	}
+	if item.Scope != model.ScopeGroup {
+		return false
+	}
+	group, ok := p.store.FindGroup(item.ScopeID)
+	return ok && util.CanManageGroup(ctx.Actor, group)
 }
 
 func (p *Processor) SubmitSharedConfigUpdate(ctx appctx.RequestContext, id string, req model.SubmitSharedConfigUpdateRequest) (model.SharedConfigUpdateRequest, *model.ErrorDetail) {

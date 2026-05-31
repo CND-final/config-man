@@ -102,8 +102,9 @@ func (p *Processor) validateConfigSource(ctx appctx.RequestContext, sourceType, 
 	}
 }
 
-func (p *Processor) ListConfigEntries(ctx appctx.RequestContext, projectID, environment string, revealSensitive bool) (map[string]any, *model.ErrorDetail) {
+func (p *Processor) ListConfigEntries(ctx appctx.RequestContext, projectID, environment, branch string, revealSensitive bool) (map[string]any, *model.ErrorDetail) {
 	environment = strings.TrimSpace(environment)
+	branch = util.NormalizeBranch(branch)
 	logger.Config.Info("list configs requested")
 
 	if environment == "" {
@@ -123,13 +124,20 @@ func (p *Processor) ListConfigEntries(ctx appctx.RequestContext, projectID, envi
 		logger.Config.Warn("list configs failed")
 		return nil, err
 	}
+	if err := p.requireBranch(projectID, branch); err != nil {
+		logger.Config.Warn("list configs failed")
+		return nil, err
+	}
 
-	localEntries := p.store.ListConfigEntries(projectID, environment)
+	localEntries := p.store.ListConfigEntries(projectID, environment, branch)
 	configs := p.store.ListConfigs(projectID)
 	entries := p.entriesWithSharedConfigInheritance(configs, localEntries, environment)
 	for index := range entries {
 		if entries[index].IsSensitive && !revealSensitive {
 			entries[index].Value = maskedValue
+		}
+		if entries[index].SharedSensitive && !revealSensitive {
+			entries[index].SharedValue = maskedValue
 		}
 	}
 
@@ -161,33 +169,35 @@ func (p *Processor) entriesWithSharedConfigInheritance(configs []model.Config, l
 		if !ok {
 			continue
 		}
-		for _, sharedEntry := range sharedConfig.Entries {
-			if sharedEntry.Environment != environment {
-				continue
-			}
+		for _, sharedEntry := range sharedEntriesForEnvironment(sharedConfig.Entries, environment) {
 			identity := configEntryIdentity(config.ID, sharedEntry.Key)
 			if localEntry, ok := localByConfigKey[identity]; ok {
-				localEntry.Overridden = true
+				localEntry.Overridden = sharedConfigEntryDiffers(localEntry, sharedEntry)
 				localEntry.SourceType = config.SourceType
 				localEntry.SourceID = config.SourceID
+				localEntry.SharedValue = sharedEntry.Value
+				localEntry.SharedSensitive = sharedEntry.IsSensitive
 				localByConfigKey[identity] = localEntry
 				continue
 			}
 			entries = append(entries, model.ConfigEntry{
-				ID:          inheritedConfigEntryID(config.ID, environment, sharedEntry.Key),
-				ProjectID:   config.ProjectID,
-				Environment: environment,
-				ConfigID:    config.ID,
-				Key:         sharedEntry.Key,
-				Value:       sharedEntry.Value,
-				ValueType:   sharedEntry.ValueType,
-				IsSensitive: sharedEntry.IsSensitive,
-				UpdatedBy:   sharedConfig.UpdatedBy,
-				Inherited:   true,
-				SourceType:  config.SourceType,
-				SourceID:    config.SourceID,
-				CreatedAt:   sharedConfig.CreatedAt,
-				UpdatedAt:   sharedConfig.UpdatedAt,
+				ID:              inheritedConfigEntryID(config.ID, environment, sharedEntry.Key),
+				ProjectID:       config.ProjectID,
+				Environment:     environment,
+				Branch:          branchFromEntriesOrDefault(localEntries),
+				ConfigID:        config.ID,
+				Key:             sharedEntry.Key,
+				Value:           sharedEntry.Value,
+				ValueType:       sharedEntry.ValueType,
+				IsSensitive:     sharedEntry.IsSensitive,
+				UpdatedBy:       sharedConfig.UpdatedBy,
+				Inherited:       true,
+				SourceType:      config.SourceType,
+				SourceID:        config.SourceID,
+				SharedValue:     sharedEntry.Value,
+				SharedSensitive: sharedEntry.IsSensitive,
+				CreatedAt:       sharedConfig.CreatedAt,
+				UpdatedAt:       sharedConfig.UpdatedAt,
 			})
 		}
 	}
@@ -200,6 +210,38 @@ func (p *Processor) entriesWithSharedConfigInheritance(configs []model.Config, l
 		entries = append(entries, entry)
 	}
 	return entries
+}
+
+func branchFromEntriesOrDefault(entries []model.ConfigEntry) string {
+	if len(entries) == 0 {
+		return "default"
+	}
+	return util.NormalizeBranch(entries[0].Branch)
+}
+
+func sharedConfigEntryDiffers(localEntry model.ConfigEntry, sharedEntry model.SharedConfigEntry) bool {
+	return localEntry.Value != sharedEntry.Value ||
+		localEntry.ValueType != sharedEntry.ValueType ||
+		localEntry.IsSensitive != sharedEntry.IsSensitive
+}
+
+func sharedEntriesForEnvironment(entries []model.SharedConfigEntry, environment string) []model.SharedConfigEntry {
+	exact := make([]model.SharedConfigEntry, 0, len(entries))
+	fallback := make([]model.SharedConfigEntry, 0, len(entries))
+	fallbackSeen := make(map[string]bool, len(entries))
+	for _, entry := range entries {
+		if entry.Environment == environment {
+			exact = append(exact, entry)
+		}
+		if !fallbackSeen[entry.Key] {
+			fallback = append(fallback, entry)
+			fallbackSeen[entry.Key] = true
+		}
+	}
+	if len(exact) > 0 {
+		return exact
+	}
+	return fallback
 }
 
 func configEntryIdentity(configID, key string) string {
@@ -227,6 +269,7 @@ func configsWithEntries(configs []model.Config, entries []model.ConfigEntry) []m
 
 func (p *Processor) CreateConfigEntry(ctx appctx.RequestContext, projectID string, req model.CreateConfigEntryRequest) (model.ConfigEntry, *model.ErrorDetail) {
 	environment := strings.TrimSpace(req.Environment)
+	branch := util.NormalizeBranch(req.Branch)
 	key := strings.TrimSpace(req.Key)
 	logger.Config.Info("create config requested")
 
@@ -242,7 +285,11 @@ func (p *Processor) CreateConfigEntry(ctx appctx.RequestContext, projectID strin
 		logger.Config.Warn("create config failed")
 		return model.ConfigEntry{}, err
 	}
-	if _, ok := p.store.FindConfigEntryByKey(projectID, environment, key); ok {
+	if err := p.requireBranch(projectID, branch); err != nil {
+		logger.Config.Warn("create config failed")
+		return model.ConfigEntry{}, err
+	}
+	if _, ok := p.store.FindConfigEntryByKey(projectID, environment, branch, key); ok {
 		logger.Config.Warn("create config conflict")
 		return model.ConfigEntry{}, model.Conflict(fmt.Sprintf("Config key %q already exists in %q", key, environment))
 	}
@@ -262,6 +309,7 @@ func (p *Processor) CreateConfigEntry(ctx appctx.RequestContext, projectID strin
 		ID:          util.NewID("cfg"),
 		ProjectID:   projectID,
 		Environment: environment,
+		Branch:      branch,
 		ConfigID:    configFileID,
 		Key:         key,
 		Value:       req.Value,
@@ -320,7 +368,7 @@ func (p *Processor) UpdateConfigEntry(ctx appctx.RequestContext, projectID, conf
 			return model.ConfigEntry{}, model.InvalidInput("key is required")
 		}
 		if nextKey != entry.Key {
-			if existing, exists := p.store.FindConfigEntryByKey(projectID, entry.Environment, nextKey); exists && existing.ID != entry.ID {
+			if existing, exists := p.store.FindConfigEntryByKey(projectID, entry.Environment, util.NormalizeBranch(entry.Branch), nextKey); exists && existing.ID != entry.ID {
 				logger.Config.Warn("update config conflict")
 				return model.ConfigEntry{}, model.Conflict(fmt.Sprintf("Config key %q already exists in %q", nextKey, entry.Environment))
 			}
@@ -494,8 +542,9 @@ func (p *Processor) RollbackConfigEntry(ctx appctx.RequestContext, projectID, co
 	return entry, nil
 }
 
-func (p *Processor) ListConfigHistory(ctx appctx.RequestContext, projectID, environment string, revealSensitive bool) (map[string]any, *model.ErrorDetail) {
+func (p *Processor) ListConfigHistory(ctx appctx.RequestContext, projectID, environment, branch string, revealSensitive bool) (map[string]any, *model.ErrorDetail) {
 	environment = strings.TrimSpace(environment)
+	branch = util.NormalizeBranch(branch)
 	logger.Config.Info("list config history requested")
 
 	if environment == "" {
@@ -515,8 +564,12 @@ func (p *Processor) ListConfigHistory(ctx appctx.RequestContext, projectID, envi
 		logger.Config.Warn("list config history failed")
 		return nil, err
 	}
+	if err := p.requireBranch(projectID, branch); err != nil {
+		logger.Config.Warn("list config history failed")
+		return nil, err
+	}
 
-	revisions := p.store.ListConfigRevisions(projectID, environment)
+	revisions := p.store.ListConfigRevisions(projectID, environment, branch)
 	if !revealSensitive {
 		maskRevisionValues(revisions)
 	}
@@ -524,6 +577,7 @@ func (p *Processor) ListConfigHistory(ctx appctx.RequestContext, projectID, envi
 	payload := map[string]any{
 		"projectId":     projectID,
 		"environment":   environment,
+		"branch":        branch,
 		"revisions":     revisions,
 		"revisionCount": len(revisions),
 		"maskedValues":  !revealSensitive,
@@ -534,6 +588,7 @@ func (p *Processor) ListConfigHistory(ctx appctx.RequestContext, projectID, envi
 
 func (p *Processor) RollbackConfigRevision(ctx appctx.RequestContext, projectID string, req model.RollbackConfigRevisionRequest) (map[string]any, *model.ErrorDetail) {
 	environment := strings.TrimSpace(req.Environment)
+	branch := util.NormalizeBranch(req.Branch)
 	revisionID := strings.TrimSpace(req.RevisionID)
 	logger.Config.Info("rollback config revision requested")
 
@@ -550,8 +605,12 @@ func (p *Processor) RollbackConfigRevision(ctx appctx.RequestContext, projectID 
 		logger.Config.Warn("rollback config revision failed")
 		return nil, err
 	}
+	if err := p.requireBranch(projectID, branch); err != nil {
+		logger.Config.Warn("rollback config revision failed")
+		return nil, err
+	}
 
-	revision, ok := selectRevision(p.store.ListConfigRevisions(projectID, environment), revisionID)
+	revision, ok := selectRevision(p.store.ListConfigRevisions(projectID, environment, branch), revisionID)
 	if !ok {
 		logger.Config.Warn("rollback config revision not found")
 		return nil, model.NotFound("Config revision not found")
@@ -560,6 +619,7 @@ func (p *Processor) RollbackConfigRevision(ctx appctx.RequestContext, projectID 
 	changeReason := util.Fallback(req.ChangeReason, "rollback config revision")
 	audit := newAudit(ctx.ActorName(), "config.rollback_revision", "config_revision", revision.ID, projectID, map[string]any{
 		"environment": environment,
+		"branch":      branch,
 		"revisionId":  revision.ID,
 		"entryCount":  len(revision.Entries),
 	})
@@ -575,6 +635,7 @@ func (p *Processor) RollbackConfigRevision(ctx appctx.RequestContext, projectID 
 		"restored":    true,
 		"projectId":   projectID,
 		"environment": environment,
+		"branch":      branch,
 		"revisionId":  revision.ID,
 		"entryCount":  len(revision.Entries),
 	}, nil
@@ -647,6 +708,7 @@ func selectRollbackVersion(versions []model.ConfigVersion, versionID string) (mo
 
 func (p *Processor) ExtractConfigs(ctx appctx.RequestContext, projectID string, req model.ImportConfigRequest) (map[string]any, *model.ErrorDetail) {
 	environment := strings.TrimSpace(req.Environment)
+	branch := util.NormalizeBranch(req.Branch)
 	logger.Config.Info("extract configs requested")
 
 	if environment == "" {
@@ -662,6 +724,10 @@ func (p *Processor) ExtractConfigs(ctx appctx.RequestContext, projectID string, 
 		return nil, model.InvalidInput("format must be json, yaml, or properties")
 	}
 	if err := p.requireEnvironment(projectID, environment); err != nil {
+		logger.Config.Warn("extract configs failed")
+		return nil, err
+	}
+	if err := p.requireBranch(projectID, branch); err != nil {
 		logger.Config.Warn("extract configs failed")
 		return nil, err
 	}
@@ -681,10 +747,11 @@ func (p *Processor) ExtractConfigs(ctx appctx.RequestContext, projectID string, 
 		return nil, fileErr
 	}
 
-	entries, created, updated, unchanged := p.previewParsedConfigs(projectID, environment, configID, parsed)
+	entries, created, updated, unchanged := p.previewParsedConfigs(projectID, environment, branch, configID, parsed)
 	payload := map[string]any{
 		"projectId":   projectID,
 		"environment": environment,
+		"branch":      branch,
 		"format":      req.Format,
 		"entries":     entries,
 		"entryCount":  len(entries),
@@ -696,12 +763,12 @@ func (p *Processor) ExtractConfigs(ctx appctx.RequestContext, projectID string, 
 	return payload, nil
 }
 
-func (p *Processor) previewParsedConfigs(projectID, environment, configID string, parsed []util.ParsedConfigEntry) ([]model.ConfigRevisionEntry, int, int, int) {
+func (p *Processor) previewParsedConfigs(projectID, environment, branch, configID string, parsed []util.ParsedConfigEntry) ([]model.ConfigRevisionEntry, int, int, int) {
 	entries := make([]model.ConfigRevisionEntry, 0, len(parsed))
 	created, updated, unchanged := 0, 0, 0
 	for _, parsedEntry := range parsed {
 		isSensitive := util.LooksSensitive(parsedEntry.Key)
-		if existing, ok := p.store.FindConfigEntryByKey(projectID, environment, parsedEntry.Key); ok {
+		if existing, ok := p.store.FindConfigEntryByKey(projectID, environment, branch, parsedEntry.Key); ok {
 			isSensitive = existing.IsSensitive || isSensitive
 			if existing.Value == parsedEntry.Value && existing.ValueType == parsedEntry.ValueType {
 				unchanged++
@@ -724,6 +791,7 @@ func (p *Processor) previewParsedConfigs(projectID, environment, configID string
 
 func (p *Processor) ImportConfigs(ctx appctx.RequestContext, projectID string, req model.ImportConfigRequest) (map[string]any, *model.ErrorDetail) {
 	environment := strings.TrimSpace(req.Environment)
+	branch := util.NormalizeBranch(req.Branch)
 	logger.Config.Info("import configs requested")
 
 	if environment == "" {
@@ -739,6 +807,10 @@ func (p *Processor) ImportConfigs(ctx appctx.RequestContext, projectID string, r
 		return nil, model.InvalidInput("format must be json, yaml, or properties")
 	}
 	if err := p.requireEnvironment(projectID, environment); err != nil {
+		logger.Config.Warn("import configs failed")
+		return nil, err
+	}
+	if err := p.requireBranch(projectID, branch); err != nil {
 		logger.Config.Warn("import configs failed")
 		return nil, err
 	}
@@ -761,7 +833,7 @@ func (p *Processor) ImportConfigs(ctx appctx.RequestContext, projectID string, r
 	versions := make([]model.ConfigVersion, 0, len(parsed))
 	created, updated, unchanged := 0, 0, 0
 	for _, parsedEntry := range parsed {
-		existing, ok := p.store.FindConfigEntryByKey(projectID, environment, parsedEntry.Key)
+		existing, ok := p.store.FindConfigEntryByKey(projectID, environment, branch, parsedEntry.Key)
 		configFileID := requestedConfigID
 		if !ok {
 			now := time.Now().UTC()

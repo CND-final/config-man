@@ -12,6 +12,7 @@ type CreateProjectRequest struct {
 	TemplateID   string   `json:"templateId"`
 	GroupID      string   `json:"groupId"`
 	Environments []string `json:"environments"`
+	Branches     []string `json:"branches"`
 }
 
 type CreateTemplateRequest struct {
@@ -30,6 +31,7 @@ type CreateConfigRequest struct {
 
 type CreateConfigEntryRequest struct {
 	Environment  string `json:"environment"`
+	Branch       string `json:"branch"`
 	ConfigID     string `json:"configId"`
 	Key          string `json:"key"`
 	Value        string `json:"value"`
@@ -54,12 +56,14 @@ type RollbackConfigRequest struct {
 
 type RollbackConfigRevisionRequest struct {
 	Environment  string `json:"environment"`
+	Branch       string `json:"branch"`
 	RevisionID   string `json:"revisionId"`
 	ChangeReason string `json:"changeReason"`
 }
 
 type ImportConfigRequest struct {
 	Environment  string `json:"environment"`
+	Branch       string `json:"branch"`
 	ConfigID     string `json:"configId"`
 	Format       string `json:"format"`
 	Content      string `json:"content"`
@@ -88,6 +92,8 @@ type UpdateProjectMembersRequest struct {
 type CreateSharedConfigRequest struct {
 	Name        string              `json:"name"`
 	Description string              `json:"description"`
+	Scope       LibraryScope        `json:"scope"`
+	ScopeID     string              `json:"scopeId"`
 	Format      string              `json:"format"`
 	Entries     []SharedConfigEntry `json:"entries"`
 }
@@ -111,6 +117,7 @@ type SubmitSharedConfigUpdateRequest struct {
 type CreateReviewRequest struct {
 	ProjectID       string               `json:"projectId"`
 	Environment     string               `json:"environment"`
+	Branch          string               `json:"branch"`
 	ConfigKey       string               `json:"configKey"`
 	Reason          string               `json:"reason"`
 	ProposedChanges []ReviewConfigChange `json:"proposedChanges"`
@@ -122,6 +129,7 @@ type ReviewDecisionRequest struct {
 
 type ReviewFilters struct {
 	Environment string
+	Branch      string
 	ConfigKey   string
 	Status      string
 }

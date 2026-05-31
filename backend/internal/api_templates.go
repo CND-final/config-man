@@ -102,7 +102,7 @@ func (s *Server) handleCreateSharedConfig(c *gin.Context) {
 		return
 	}
 
-	item, appErr := s.processor.CreateGlobalSharedConfig(reqCtx, req)
+	item, appErr := s.processor.CreateSharedConfig(reqCtx, req)
 	if appErr != nil {
 		response.WriteError(c, appErr)
 		return
@@ -119,7 +119,7 @@ func (s *Server) handleUpdateSharedConfig(c *gin.Context) {
 		return
 	}
 
-	item, appErr := s.processor.UpdateGlobalSharedConfig(reqCtx, c.Param("sharedConfigId"), req)
+	item, appErr := s.processor.UpdateSharedConfig(reqCtx, c.Param("sharedConfigId"), req)
 	if appErr != nil {
 		response.WriteError(c, appErr)
 		return
@@ -129,7 +129,7 @@ func (s *Server) handleUpdateSharedConfig(c *gin.Context) {
 
 func (s *Server) handleDeleteSharedConfig(c *gin.Context) {
 	reqCtx := requestContextFromGin(c)
-	if appErr := s.processor.DeleteGlobalSharedConfig(reqCtx, c.Param("sharedConfigId")); appErr != nil {
+	if appErr := s.processor.DeleteSharedConfig(reqCtx, c.Param("sharedConfigId")); appErr != nil {
 		response.WriteError(c, appErr)
 		return
 	}

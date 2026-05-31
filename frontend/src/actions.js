@@ -40,7 +40,7 @@ import {
   renderUserMenu,
   renderVersionHistory,
 } from "./render.js";
-import { activeProject, state } from "./state.js";
+import { activeProject, defaultBranchForProject, projectBranches, state } from "./state.js";
 import { parseEnvironmentInput } from "./utils.js";
 
 
@@ -222,23 +222,54 @@ function shouldStageReviewChange(project, environment) {
 }
 
 function stageLocalConfigChange(configId, field, value) {
-  state.configs = state.configs.map((entry) =>
-    entry.id === configId
-      ? {
-          ...entry,
-          [field]: value,
-          inherited: false,
-          overridden: entry.inherited || entry.overridden,
-        }
-      : entry,
-  );
+  state.configs = state.configs.map((entry) => {
+    if (entry.id !== configId) return entry;
+    const sharedValue = sharedDefaultValueForEntry(entry);
+    const hasSharedSource = entry.sourceType === "shared-config" || sharedValue !== undefined;
+    const nextEntry = {
+      ...entry,
+      [field]: value,
+      inherited: false,
+    };
+    if (hasSharedSource) {
+      nextEntry.sharedValue = sharedValue ?? "";
+      nextEntry.overridden = sharedEntryHasLocalChange(nextEntry);
+    } else {
+      nextEntry.overridden = entry.overridden;
+    }
+    return nextEntry;
+  });
   syncPendingReviewChanges();
 }
 
+function sharedDefaultValueForEntry(entry) {
+  if (Object.prototype.hasOwnProperty.call(entry, "sharedValue")) {
+    if (entry.inherited && entry.sharedValue === "" && entry.value !== "") {
+      return entry.value;
+    }
+    return entry.sharedValue;
+  }
+  if (entry.inherited || entry.sourceType === "shared-config") {
+    return entry.value;
+  }
+  return undefined;
+}
+
+function sharedEntryHasLocalChange(entry) {
+  if (!Object.prototype.hasOwnProperty.call(entry, "sharedValue")) return false;
+  return String(entry.value ?? "") !== String(entry.sharedValue ?? "");
+}
+
+function isSharedConfigEntry(config) {
+  return config.inherited || config.sourceType === "shared-config" || Boolean(config.sourceId);
+}
+
 function stageLocalConfigCreate(project, request, bodyBase) {
-  const id = `draft-${project.id}-${request.environment}-${bodyBase.key}`.replace(/[^a-z0-9_-]+/gi, "-");
+  const branch = request.branch || state.activeBranch;
+  const id = `draft-${project.id}-${branch}-${request.environment}-${bodyBase.key}`.replace(/[^a-z0-9_-]+/gi, "-");
   const existing = state.configs.find(
     (entry) =>
+      (entry.branch || state.activeBranch) === branch &&
       entry.environment === request.environment &&
       entry.key === bodyBase.key &&
       entry.configId === bodyBase.configId,
@@ -253,6 +284,7 @@ function stageLocalConfigCreate(project, request, bodyBase) {
       id,
       projectId: project.id,
       environment: request.environment,
+      branch,
       configId: bodyBase.configId,
       key: bodyBase.key,
       value: request.value,
@@ -283,6 +315,26 @@ export function canCreateGroup() {
 
 export function canEditGroupMembers() {
   return ["system_admin", "group_admin"].includes(state.user?.role);
+}
+
+export function manageableSharedConfigGroups() {
+  if (state.user?.role === "system_admin") return state.groups;
+  return state.groups.filter((group) =>
+    (group.members || []).some((member) => {
+      const id = member.id || member.userId;
+      return id === state.user?.id && member.groupRole === "group_admin";
+    }),
+  );
+}
+
+export function canCreateSharedConfig() {
+  return state.user?.role === "system_admin" || manageableSharedConfigGroups().length > 0;
+}
+
+export function canManageSharedConfig(item) {
+  if (state.user?.role === "system_admin") return true;
+  if (item?.scope !== "group") return false;
+  return manageableSharedConfigGroups().some((group) => group.id === item.scopeId);
 }
 
 function clearGroupMemberPicker() {
@@ -450,6 +502,21 @@ export async function setConfigMode(mode) {
   renderConfigRows();
 }
 
+export async function setActiveBranch(branch) {
+  const project = activeProject();
+  const branches = projectBranches(project);
+  const nextBranch = String(branch || "").trim().toLowerCase();
+  if (!nextBranch || !branches.includes(nextBranch)) return;
+  state.activeBranch = nextBranch;
+  state.inlineEdit = null;
+  state.activeConfigFile = "";
+  await loadConfigsAndHistory();
+  if (state.configMode === "compare") {
+    await loadCompareConfigs();
+  }
+  renderAll();
+}
+
 export async function setCompareEnvironment(side, environment) {
   if (!environment || !["source", "target"].includes(side)) return;
   if (side === "source") {
@@ -505,6 +572,7 @@ export async function createConfigKey(event) {
   )
     .map((input) => ({
       environment: input.dataset.newConfigValue,
+      branch: state.activeBranch,
       value: input.value,
     }))
     .filter(({ environment, value }) => environment && value.trim() !== "");
@@ -820,6 +888,7 @@ export function setProjectModal(open) {
   } else {
     $("#projectForm").reset();
     $("#projectEnvironments").value = "dev, staging, prod";
+    if ($("#projectBranches")) $("#projectBranches").value = "default";
     state.projectDraft = null;
     renderProjectFormOptions();
   }
@@ -888,6 +957,7 @@ function readProjectDraft() {
     repoUrl: $("#projectRepo").value,
     environments: $("#projectEnvironments").value,
     description: $("#projectDescription").value,
+    branches: $("#projectBranches")?.value || "default",
     groupId: $("#projectGroup")?.value || "",
   };
 }
@@ -899,6 +969,7 @@ function restoreProjectDraft() {
   $("#projectRepo").value = draft.repoUrl || "";
   $("#projectEnvironments").value = draft.environments || "dev, staging, prod";
   $("#projectDescription").value = draft.description || "";
+  if ($("#projectBranches")) $("#projectBranches").value = draft.branches || "default";
   const groupSelect = $("#projectGroup");
   if (groupSelect) groupSelect.value = draft.groupId || groupSelect.value || "";
 }
@@ -975,10 +1046,31 @@ export async function updateSharedConfig(event) {
   showToast(`${updated.name} updated`);
 }
 
+function populateSharedConfigScopeControls() {
+  const scopeSelect = $("#sharedConfigScope");
+  const groupSelect = $("#sharedConfigGroup");
+  const groupField = $("#sharedConfigGroupField");
+  if (!scopeSelect || !groupSelect || !groupField) return;
+
+  const manageableGroups = manageableSharedConfigGroups();
+  const isSystem = state.user?.role === "system_admin";
+  scopeSelect.innerHTML = `${isSystem ? '<option value="global">Global</option>' : ""}<option value="group">Group</option>`;
+  if (!isSystem) {
+    scopeSelect.value = "group";
+  } else if (!scopeSelect.value) {
+    scopeSelect.value = "global";
+  }
+  groupSelect.innerHTML = manageableGroups
+    .map((group) => `<option value="${group.id}">${group.name || group.id}</option>`)
+    .join("");
+  groupField.classList.toggle("hidden", scopeSelect.value !== "group");
+}
+
 export function setSharedConfigCreateModal(open) {
   state.sharedConfigCreateModalOpen = open;
   renderSharedConfigCreateModal();
   if (open) {
+    populateSharedConfigScopeControls();
     const textarea = $("#sharedConfigEntries");
     if (textarea && !textarea.value.trim()) {
       textarea.value = JSON.stringify(
@@ -1017,6 +1109,8 @@ export async function createSharedConfig(event) {
     body: JSON.stringify({
       name: $("#sharedConfigName").value,
       description: $("#sharedConfigDescription").value,
+      scope: $("#sharedConfigScope")?.value || "global",
+      scopeId: $("#sharedConfigScope")?.value === "group" ? $("#sharedConfigGroup")?.value || "" : "",
       format: $("#sharedConfigFormat").value,
       entries: readSharedConfigEntries(),
     }),
@@ -1030,7 +1124,7 @@ export async function createSharedConfig(event) {
 export async function deleteSharedConfig(id) {
   const item = state.sharedConfigs.find((config) => config.id === id);
   if (!item) return;
-  if (!window.confirm(`Delete global shared config ${item.name}?`)) return;
+  if (!window.confirm(`Delete shared config ${item.name}?`)) return;
   await api(`/shared-configs/${encodeURIComponent(id)}`, { method: "DELETE" });
   await reloadSharedConfigs();
   renderAll();
@@ -1188,6 +1282,7 @@ export async function applyTemplate() {
     method: "POST",
     body: JSON.stringify({
       environment: state.activeEnvironment,
+      branch: state.activeBranch,
       configId: state.activeConfigFile,
       format: sourceFormat,
       content,
@@ -1204,6 +1299,7 @@ export async function applyTemplate() {
     format: outputFormat,
     projectId: project.id,
     environment: state.activeEnvironment,
+    branch: state.activeBranch,
     configId: state.activeConfigFile,
   };
   state.templateModalOpen = false;
@@ -1221,6 +1317,7 @@ export async function createProject(event) {
       repoUrl: $("#projectRepo").value,
       groupId: $("#projectGroup")?.value || "",
       environments: parseEnvironmentInput($("#projectEnvironments").value),
+      branches: parseEnvironmentInput($("#projectBranches")?.value || "default"),
       description: $("#projectDescription").value,
     }),
   });
@@ -1232,6 +1329,7 @@ export async function createProject(event) {
     state.activeEnvironment = project.environments.includes("prod")
       ? "prod"
       : project.environments[0];
+    state.activeBranch = defaultBranchForProject(project);
   }
   await loadConfigsAndHistory();
   setProjectModal(false);
@@ -1282,13 +1380,14 @@ function stageRollbackRevision(project, revision) {
       );
       continue;
     }
-    const id = `draft-rollback-${project.id}-${state.activeEnvironment}-${entry.key}`.replace(/[^a-z0-9_-]+/gi, "-");
+    const id = `draft-rollback-${project.id}-${state.activeBranch}-${state.activeEnvironment}-${entry.key}`.replace(/[^a-z0-9_-]+/gi, "-");
     state.configs = [
       ...state.configs,
       {
         id,
         projectId: project.id,
         environment: state.activeEnvironment,
+        branch: state.activeBranch,
         configId: entry.configId || state.activeConfigFile,
         key: entry.key,
         value: entry.value,
@@ -1327,6 +1426,7 @@ export async function rollbackConfigRevision(revisionId) {
     method: "POST",
     body: JSON.stringify({
       environment: state.activeEnvironment,
+      branch: state.activeBranch,
       revisionId: revision.id,
       changeReason: `rollback project config to ${version}`,
     }),
@@ -1341,7 +1441,7 @@ export function startInlineEdit(configId, field) {
   const config = state.configs.find((entry) => entry.id === configId);
   if (!config) return;
 
-  if (config.inherited && field === "key") {
+  if (isSharedConfigEntry(config) && field === "key") {
     showToast("Shared config keys can be overridden by value only");
     return;
   }
@@ -1418,6 +1518,7 @@ export async function commitInlineEdit(input) {
         method: "POST",
         body: JSON.stringify({
           environment: config.environment,
+          branch: config.branch || state.activeBranch,
           configId: config.configId,
           key: config.key,
           value: nextValue,
@@ -1458,6 +1559,7 @@ function acceptCurrentConfigsAsBaseline() {
         key: config.key,
         value: config.value,
         environment: config.environment,
+        branch: config.branch || state.activeBranch,
       },
     ]),
   );
@@ -1471,20 +1573,25 @@ function syncPendingReviewChanges() {
       configId: config.id,
       key: config.key,
       environment: config.environment,
+      branch: config.branch || state.activeBranch,
     }));
 }
 
 function configHasNetChange(config) {
   const baseline = state.configBaseline.get(config.id);
   if (!baseline) return true;
-  return baseline.key !== config.key || baseline.value !== config.value;
+  return (
+    baseline.key !== config.key ||
+    baseline.value !== config.value ||
+    (baseline.branch || state.activeBranch) !== (config.branch || state.activeBranch)
+  );
 }
 
 export async function hasReviewRequest(config) {
   const requests = await api(
     `/projects/${config.projectId}/review-requests?env=prod&key=${encodeURIComponent(
       config.key,
-    )}&status=pending`,
+    )}&branch=${encodeURIComponent(config.branch || state.activeBranch)}&status=pending`,
   );
   return requests.length > 0;
 }
@@ -1507,6 +1614,7 @@ export async function extractConfigFile() {
     method: "POST",
     body: JSON.stringify({
       environment: state.activeEnvironment,
+      branch: state.activeBranch,
       configId: state.activeConfigFile,
       format,
       content,
@@ -1520,6 +1628,7 @@ export async function extractConfigFile() {
     format,
     projectId: project.id,
     environment: state.activeEnvironment,
+    branch: state.activeBranch,
     configId: state.activeConfigFile,
   };
   state.importPreviewOpen = true;
@@ -1542,6 +1651,7 @@ export async function applyImportPreview() {
       method: "POST",
       body: JSON.stringify({
         environment: preview.environment,
+        branch: preview.branch || state.activeBranch,
         configId: preview.configId || state.activeConfigFile,
         format: preview.format,
         content: preview.content,
@@ -1584,7 +1694,7 @@ export async function exportCurrentConfig() {
   let payload;
   try {
     payload = await api(
-      `/projects/${project.id}/configs?env=${encodeURIComponent(state.activeEnvironment)}&revealSensitive=true`,
+      `/projects/${project.id}/configs?env=${encodeURIComponent(state.activeEnvironment)}&branch=${encodeURIComponent(state.activeBranch)}&revealSensitive=true`,
     );
   } catch (error) {
     showToast("Export denied: your role cannot reveal sensitive values");
@@ -1603,7 +1713,7 @@ export async function exportCurrentConfig() {
         ? "json"
         : "yaml";
   downloadFile(
-    `${project.name}-${state.activeEnvironment}.${extension}`,
+    `${project.name}-${state.activeBranch}-${state.activeEnvironment}.${extension}`,
     content,
     format === "json" ? "application/json" : "text/plain",
   );
@@ -1659,14 +1769,17 @@ function proposedReviewChanges() {
       const entryId = id.startsWith("draft-") || id.startsWith("inherited-")
         ? ""
         : config.id;
+      const baseline = state.configBaseline.get(change.configId);
       return {
         configEntryId: entryId,
         configId: config.configId,
         key: config.key,
+        oldValue: baseline?.value ?? "",
         value: config.value,
         valueType: config.valueType || "string",
         isSensitive: Boolean(config.isSensitive),
         environment: config.environment || state.activeEnvironment,
+        branch: config.branch || state.activeBranch,
       };
     })
     .filter(Boolean);
@@ -1688,6 +1801,7 @@ export async function submitReviewChanges() {
     body: JSON.stringify({
       projectId: project.id,
       environment: state.activeEnvironment,
+      branch: state.activeBranch,
       configKey: pending.key,
       reason,
       proposedChanges,
