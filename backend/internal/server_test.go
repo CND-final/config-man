@@ -156,6 +156,48 @@ func decodeBody[T any](t *testing.T, res *httptest.ResponseRecorder) T {
 	return value
 }
 
+type configListPayload struct {
+	Entries []model.ConfigEntry `json:"entries"`
+	Configs []model.Config      `json:"configs"`
+	Files   []model.Config      `json:"files"`
+}
+
+func listConfigPayload(t *testing.T, handler http.Handler, projectID, environment, token string) configListPayload {
+	t.Helper()
+
+	res := request(t, handler, http.MethodGet, "/api/v1/projects/"+projectID+"/configs?env="+environment, token, nil)
+	if res.Code != http.StatusOK {
+		t.Fatalf("list configs status = %d body=%s", res.Code, res.Body.String())
+	}
+	return decodeBody[configListPayload](t, res)
+}
+
+func findConfigEntryID(t *testing.T, handler http.Handler, projectID, environment, token, key string) string {
+	t.Helper()
+
+	payload := listConfigPayload(t, handler, projectID, environment, token)
+	for _, entry := range payload.Entries {
+		if entry.Key == key {
+			return entry.ID
+		}
+	}
+	t.Fatalf("config entry missing for key %q in %s/%s", key, projectID, environment)
+	return ""
+}
+
+func findConfigFileIDByName(t *testing.T, handler http.Handler, projectID, environment, token, name string) string {
+	t.Helper()
+
+	payload := listConfigPayload(t, handler, projectID, environment, token)
+	for _, config := range payload.Files {
+		if strings.EqualFold(config.Name, name) {
+			return config.ID
+		}
+	}
+	t.Fatalf("config file %q missing for project %s", name, projectID)
+	return ""
+}
+
 func TestLoginAndMe(t *testing.T) {
 	handler := newTestHandler(t)
 	res := request(t, handler, http.MethodPost, "/api/v1/auth/login", "", map[string]any{"email": "admin@config-man.local", "password": "password"})
@@ -462,8 +504,9 @@ func TestSensitiveConfigIsMaskedByDefault(t *testing.T) {
 
 func TestConfigVersionHistoryAndRollback(t *testing.T) {
 	handler := newTestHandler(t)
+	configID := findConfigEntryID(t, handler, "customer-portal", "staging", "alice", "log.level")
 	nextValue := "warn"
-	res := request(t, handler, http.MethodPut, "/api/v1/projects/customer-portal/configs/cfg-staging-log-level", "alice", map[string]any{
+	res := request(t, handler, http.MethodPut, "/api/v1/projects/customer-portal/configs/"+configID, "alice", map[string]any{
 		"value":        nextValue,
 		"changeReason": "test update",
 	})
@@ -471,7 +514,7 @@ func TestConfigVersionHistoryAndRollback(t *testing.T) {
 		t.Fatalf("update config status = %d body=%s", res.Code, res.Body.String())
 	}
 
-	res = request(t, handler, http.MethodGet, "/api/v1/projects/customer-portal/configs/cfg-staging-log-level/versions", "alice", nil)
+	res = request(t, handler, http.MethodGet, "/api/v1/projects/customer-portal/configs/"+configID+"/versions", "alice", nil)
 	if res.Code != http.StatusOK {
 		t.Fatalf("list versions status = %d body=%s", res.Code, res.Body.String())
 	}
@@ -485,7 +528,7 @@ func TestConfigVersionHistoryAndRollback(t *testing.T) {
 		t.Fatalf("unexpected latest version: %#v", payload.Versions[0])
 	}
 
-	res = request(t, handler, http.MethodPost, "/api/v1/projects/customer-portal/configs/cfg-staging-log-level/rollback", "alice", map[string]any{
+	res = request(t, handler, http.MethodPost, "/api/v1/projects/customer-portal/configs/"+configID+"/rollback", "alice", map[string]any{
 		"versionId":    payload.Versions[0].ID,
 		"changeReason": "test rollback",
 	})
@@ -500,8 +543,9 @@ func TestConfigVersionHistoryAndRollback(t *testing.T) {
 
 func TestConfigHistoryRevisionsAndRollback(t *testing.T) {
 	handler := newTestHandler(t)
+	configID := findConfigEntryID(t, handler, "customer-portal", "staging", "alice", "log.level")
 	nextValue := "warn"
-	res := request(t, handler, http.MethodPut, "/api/v1/projects/customer-portal/configs/cfg-staging-log-level", "alice", map[string]any{
+	res := request(t, handler, http.MethodPut, "/api/v1/projects/customer-portal/configs/"+configID, "alice", map[string]any{
 		"value":        nextValue,
 		"changeReason": "revision update",
 	})
@@ -564,7 +608,8 @@ func revisionHasValue(revision model.ConfigRevision, key, value string) bool {
 
 func TestUpdateConfigKey(t *testing.T) {
 	handler := newTestHandler(t)
-	res := request(t, handler, http.MethodPut, "/api/v1/projects/customer-portal/configs/cfg-staging-log-level", "alice", map[string]any{
+	configID := findConfigEntryID(t, handler, "customer-portal", "staging", "alice", "log.level")
+	res := request(t, handler, http.MethodPut, "/api/v1/projects/customer-portal/configs/"+configID, "alice", map[string]any{
 		"key":          "logging.level",
 		"changeReason": "rename key",
 	})
@@ -599,8 +644,9 @@ func configEntriesHaveKey(entries []model.ConfigEntry, key string) bool {
 
 func TestDeveloperCannotModifyProdConfig(t *testing.T) {
 	handler := newTestHandler(t)
+	configID := findConfigEntryID(t, handler, "customer-portal", "prod", "alice", "api.baseUrl")
 	value := "https://api2.example.com"
-	res := request(t, handler, http.MethodPut, "/api/v1/projects/customer-portal/configs/cfg-prod-api-baseurl", "nora", map[string]any{"value": value})
+	res := request(t, handler, http.MethodPut, "/api/v1/projects/customer-portal/configs/"+configID, "nora", map[string]any{"value": value})
 	if res.Code != http.StatusForbidden {
 		t.Fatalf("update prod as developer status = %d body=%s", res.Code, res.Body.String())
 	}
@@ -608,7 +654,13 @@ func TestDeveloperCannotModifyProdConfig(t *testing.T) {
 
 func TestImportJSONConfig(t *testing.T) {
 	handler := newTestHandler(t)
-	res := request(t, handler, http.MethodPost, "/api/v1/projects/customer-portal/configs/import", "alice", map[string]any{"environment": "dev", "format": "json", "content": `{"feature":{"checkout":true},"limit":3}`})
+	configID := findConfigFileIDByName(t, handler, "customer-portal", "dev", "alice", "application.yaml")
+	res := request(t, handler, http.MethodPost, "/api/v1/projects/customer-portal/configs/import", "alice", map[string]any{
+		"environment": "dev",
+		"format":      "json",
+		"configId":    configID,
+		"content":     `{"feature":{"checkout":true},"limit":3}`,
+	})
 	if res.Code != http.StatusCreated {
 		t.Fatalf("import status = %d body=%s", res.Code, res.Body.String())
 	}
@@ -620,9 +672,11 @@ func TestImportJSONConfig(t *testing.T) {
 
 func TestExtractConfigDoesNotPersist(t *testing.T) {
 	handler := newTestHandler(t)
+	configID := findConfigFileIDByName(t, handler, "customer-portal", "dev", "alice", "application.yaml")
 	res := request(t, handler, http.MethodPost, "/api/v1/projects/customer-portal/configs/extract", "alice", map[string]any{
 		"environment": "dev",
 		"format":      "json",
+		"configId":    configID,
 		"content":     `{"feature":{"preview":true},"limit":3}`,
 	})
 	if res.Code != http.StatusOK {
@@ -731,7 +785,7 @@ func TestGlobalSharedConfigPermissions(t *testing.T) {
 		t.Fatalf("system_admin update seeded shared config status = %d body=%s", res.Code, res.Body.String())
 	}
 	updated := decodeBody[model.SharedConfig](t, res)
-	if updated.ProdEnvironmentCount != 1 {
+	if updated.ProdEnvironmentCount != 2 {
 		t.Fatalf("prod impact = %d", updated.ProdEnvironmentCount)
 	}
 

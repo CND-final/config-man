@@ -160,6 +160,25 @@ func decodeBody[T any](t *testing.T, res *httptest.ResponseRecorder) T {
 	return value
 }
 
+func findConfigEntryID(t *testing.T, handler http.Handler, projectID, environment, token, key string) string {
+	t.Helper()
+
+	res := request(t, handler, http.MethodGet, "/api/v1/projects/"+projectID+"/configs?env="+environment, token, nil)
+	if res.Code != http.StatusOK {
+		t.Fatalf("list configs status = %d body=%s", res.Code, res.Body.String())
+	}
+	payload := decodeBody[struct {
+		Entries []model.ConfigEntry `json:"entries"`
+	}](t, res)
+	for _, entry := range payload.Entries {
+		if entry.Key == key {
+			return entry.ID
+		}
+	}
+	t.Fatalf("config entry missing for key %q in %s/%s", key, projectID, environment)
+	return ""
+}
+
 func TestIntegrationProjectPersistsAfterReload(t *testing.T) {
 	db := openTestDB(t)
 	defer db.Close()
@@ -222,8 +241,9 @@ func TestIntegrationConfigVersionPersistsAfterReload(t *testing.T) {
 	prepareDatabase(t, db)
 
 	handler := newIntegrationHandler(t, db)
+	configID := findConfigEntryID(t, handler, "customer-portal", "staging", "alice", "log.level")
 	nextValue := "warn"
-	res := request(t, handler, http.MethodPut, "/api/v1/projects/customer-portal/configs/cfg-staging-log-level", "alice", map[string]any{
+	res := request(t, handler, http.MethodPut, "/api/v1/projects/customer-portal/configs/"+configID, "alice", map[string]any{
 		"value":        nextValue,
 		"changeReason": "integration update",
 	})
@@ -232,7 +252,7 @@ func TestIntegrationConfigVersionPersistsAfterReload(t *testing.T) {
 	}
 
 	reloaded := newIntegrationHandler(t, db)
-	res = request(t, reloaded, http.MethodGet, "/api/v1/projects/customer-portal/configs/cfg-staging-log-level/versions", "alice", nil)
+	res = request(t, reloaded, http.MethodGet, "/api/v1/projects/customer-portal/configs/"+configID+"/versions", "alice", nil)
 	if res.Code != http.StatusOK {
 		t.Fatalf("list versions status = %d body=%s", res.Code, res.Body.String())
 	}

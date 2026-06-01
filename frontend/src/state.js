@@ -95,9 +95,15 @@ export function projectBranches(project) {
   const branches = project?.branches || project?.Branches || [];
   const names = branches
     .map((branch) =>
-      typeof branch === "string" ? branch : branch.name || branch.Name || branch.id || branch.ID,
+      typeof branch === "string"
+        ? branch
+        : branch.name || branch.Name || branch.id || branch.ID,
     )
-    .map((branch) => String(branch || "").trim().toLowerCase())
+    .map((branch) =>
+      String(branch || "")
+        .trim()
+        .toLowerCase(),
+    )
     .filter(Boolean);
   return names.length ? Array.from(new Set(names)) : ["default"];
 }

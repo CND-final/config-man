@@ -40,9 +40,13 @@ import {
   renderUserMenu,
   renderVersionHistory,
 } from "./render.js";
-import { activeProject, defaultBranchForProject, projectBranches, state } from "./state.js";
+import {
+  activeProject,
+  defaultBranchForProject,
+  projectBranches,
+  state,
+} from "./state.js";
 import { parseEnvironmentInput } from "./utils.js";
-
 
 function clearProjectMemberPicker() {
   state.projectMemberPickerOpen = false;
@@ -81,7 +85,9 @@ export async function setProjectDetailTab(tab) {
   renderConfigRows();
 }
 
-export function toggleProjectMemberPicker(open = !state.projectMemberPickerOpen) {
+export function toggleProjectMemberPicker(
+  open = !state.projectMemberPickerOpen,
+) {
   state.projectMemberPickerOpen = open;
   state.projectMemberSearch = "";
   state.projectMemberSelection = new Set();
@@ -134,10 +140,13 @@ function projectMemberPayload(project, overrides = new Map()) {
 async function saveProjectMembers(members) {
   const project = activeProject();
   if (!project) return [];
-  const payload = await api(`/projects/${encodeURIComponent(project.id)}/members`, {
-    method: "PUT",
-    body: JSON.stringify({ members }),
-  });
+  const payload = await api(
+    `/projects/${encodeURIComponent(project.id)}/members`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ members }),
+    },
+  );
   const updatedMembers = payload.members || [];
   state.projects = state.projects.map((item) =>
     item.id === project.id
@@ -163,13 +172,17 @@ export async function addProjectMembers() {
   await saveProjectMembers([...existing, ...additions]);
   clearProjectMemberPicker();
   renderConfigRows();
-  showToast(`${additions.length} member${additions.length === 1 ? "" : "s"} added`);
+  showToast(
+    `${additions.length} member${additions.length === 1 ? "" : "s"} added`,
+  );
 }
 
 export async function removeProjectMember(userId) {
   const project = activeProject();
   if (!canEditProjectMembers(project) || !project || !userId) return;
-  const members = projectMemberPayload(project).filter((member) => member.userId !== userId);
+  const members = projectMemberPayload(project).filter(
+    (member) => member.userId !== userId,
+  );
   await saveProjectMembers(members);
   renderConfigRows();
   showToast("Member removed");
@@ -184,13 +197,15 @@ export function toggleProjectRoleMenu(userId) {
 export async function updateProjectMemberRole(userId, projectRole) {
   const project = activeProject();
   if (!canEditProjectMembers(project) || !project || !userId) return;
-  const members = projectMemberPayload(project, new Map([[userId, projectRole]]));
+  const members = projectMemberPayload(
+    project,
+    new Map([[userId, projectRole]]),
+  );
   await saveProjectMembers(members);
   state.projectRoleMenuUserId = "";
   renderConfigRows();
   showToast("Project role updated");
 }
-
 
 function projectRoleForCurrentUser(project = activeProject()) {
   if (!project) return "";
@@ -210,7 +225,9 @@ function canDirectWriteEnvironment(project, environment) {
 
 function canCreateProjectReview(project = activeProject()) {
   const role = projectRoleForCurrentUser(project);
-  return ["system_admin", "project_admin", "developer", "reviewer"].includes(role);
+  return ["system_admin", "project_admin", "developer", "reviewer"].includes(
+    role,
+  );
 }
 
 function shouldStageReviewChange(project, environment) {
@@ -225,7 +242,8 @@ function stageLocalConfigChange(configId, field, value) {
   state.configs = state.configs.map((entry) => {
     if (entry.id !== configId) return entry;
     const sharedValue = sharedDefaultValueForEntry(entry);
-    const hasSharedSource = entry.sourceType === "shared-config" || sharedValue !== undefined;
+    const hasSharedSource =
+      entry.sourceType === "shared-config" || sharedValue !== undefined;
     const nextEntry = {
       ...entry,
       [field]: value,
@@ -261,12 +279,20 @@ function sharedEntryHasLocalChange(entry) {
 }
 
 function isSharedConfigEntry(config) {
-  return config.inherited || config.sourceType === "shared-config" || Boolean(config.sourceId);
+  return (
+    config.inherited ||
+    config.sourceType === "shared-config" ||
+    Boolean(config.sourceId)
+  );
 }
 
 function stageLocalConfigCreate(project, request, bodyBase) {
   const branch = request.branch || state.activeBranch;
-  const id = `draft-${project.id}-${branch}-${request.environment}-${bodyBase.key}`.replace(/[^a-z0-9_-]+/gi, "-");
+  const id =
+    `draft-${project.id}-${branch}-${request.environment}-${bodyBase.key}`.replace(
+      /[^a-z0-9_-]+/gi,
+      "-",
+    );
   const existing = state.configs.find(
     (entry) =>
       (entry.branch || state.activeBranch) === branch &&
@@ -328,13 +354,18 @@ export function manageableSharedConfigGroups() {
 }
 
 export function canCreateSharedConfig() {
-  return state.user?.role === "system_admin" || manageableSharedConfigGroups().length > 0;
+  return (
+    state.user?.role === "system_admin" ||
+    manageableSharedConfigGroups().length > 0
+  );
 }
 
 export function canManageSharedConfig(item) {
   if (state.user?.role === "system_admin") return true;
   if (item?.scope !== "group") return false;
-  return manageableSharedConfigGroups().some((group) => group.id === item.scopeId);
+  return manageableSharedConfigGroups().some(
+    (group) => group.id === item.scopeId,
+  );
 }
 
 function clearGroupMemberPicker() {
@@ -439,7 +470,8 @@ export async function createConfigFile(event) {
   const project = activeProject();
   const name = $("#newConfigFileName")?.value || "";
   const sourceType = state.configFileSourceType || "blank";
-  const sourceId = state.configFileSourceId || $("#configFileSourceId")?.value || "";
+  const sourceId =
+    state.configFileSourceId || $("#configFileSourceId")?.value || "";
   const source = configFileSource(sourceType, sourceId);
   if (!project) {
     showToast("Choose a project first");
@@ -505,7 +537,9 @@ export async function setConfigMode(mode) {
 export async function setActiveBranch(branch) {
   const project = activeProject();
   const branches = projectBranches(project);
-  const nextBranch = String(branch || "").trim().toLowerCase();
+  const nextBranch = String(branch || "")
+    .trim()
+    .toLowerCase();
   if (!nextBranch || !branches.includes(nextBranch)) return;
   state.activeBranch = nextBranch;
   state.inlineEdit = null;
@@ -969,7 +1003,8 @@ function restoreProjectDraft() {
   $("#projectRepo").value = draft.repoUrl || "";
   $("#projectEnvironments").value = draft.environments || "dev, staging, prod";
   $("#projectDescription").value = draft.description || "";
-  if ($("#projectBranches")) $("#projectBranches").value = draft.branches || "default";
+  if ($("#projectBranches"))
+    $("#projectBranches").value = draft.branches || "default";
   const groupSelect = $("#projectGroup");
   if (groupSelect) groupSelect.value = draft.groupId || groupSelect.value || "";
 }
@@ -1061,7 +1096,10 @@ function populateSharedConfigScopeControls() {
     scopeSelect.value = "global";
   }
   groupSelect.innerHTML = manageableGroups
-    .map((group) => `<option value="${group.id}">${group.name || group.id}</option>`)
+    .map(
+      (group) =>
+        `<option value="${group.id}">${group.name || group.id}</option>`,
+    )
     .join("");
   groupField.classList.toggle("hidden", scopeSelect.value !== "group");
 }
@@ -1110,7 +1148,10 @@ export async function createSharedConfig(event) {
       name: $("#sharedConfigName").value,
       description: $("#sharedConfigDescription").value,
       scope: $("#sharedConfigScope")?.value || "global",
-      scopeId: $("#sharedConfigScope")?.value === "group" ? $("#sharedConfigGroup")?.value || "" : "",
+      scopeId:
+        $("#sharedConfigScope")?.value === "group"
+          ? $("#sharedConfigGroup")?.value || ""
+          : "",
       format: $("#sharedConfigFormat").value,
       entries: readSharedConfigEntries(),
     }),
@@ -1163,7 +1204,6 @@ export function setTemplateCreateModal(open) {
   }
 }
 
-
 export function setExportModal(open) {
   state.exportModalOpen = open;
   renderExportModal();
@@ -1207,7 +1247,6 @@ export function setRequestDetailModal(open, requestId = state.activeRequestId) {
   state.activeRequestId = open ? requestId : "";
   renderRequestDetailModal();
 }
-
 
 export function setTemplateModal(open, templateId = "") {
   state.templateModalOpen = open;
@@ -1317,7 +1356,9 @@ export async function createProject(event) {
       repoUrl: $("#projectRepo").value,
       groupId: $("#projectGroup")?.value || "",
       environments: parseEnvironmentInput($("#projectEnvironments").value),
-      branches: parseEnvironmentInput($("#projectBranches")?.value || "default"),
+      branches: parseEnvironmentInput(
+        $("#projectBranches")?.value || "default",
+      ),
       description: $("#projectDescription").value,
     }),
   });
@@ -1338,7 +1379,6 @@ export async function createProject(event) {
   showToast(`${created.name} created`);
 }
 
-
 export async function openVersionHistory() {
   const project = activeProject();
   if (!project) {
@@ -1355,7 +1395,6 @@ export async function openVersionHistory() {
     renderVersionHistory();
   }
 }
-
 
 function stageRollbackRevision(project, revision) {
   const revisionEntries = revision?.entries || [];
@@ -1380,7 +1419,11 @@ function stageRollbackRevision(project, revision) {
       );
       continue;
     }
-    const id = `draft-rollback-${project.id}-${state.activeBranch}-${state.activeEnvironment}-${entry.key}`.replace(/[^a-z0-9_-]+/gi, "-");
+    const id =
+      `draft-rollback-${project.id}-${state.activeBranch}-${state.activeEnvironment}-${entry.key}`.replace(
+        /[^a-z0-9_-]+/gi,
+        "-",
+      );
     state.configs = [
       ...state.configs,
       {
@@ -1416,7 +1459,9 @@ export async function rollbackConfigRevision(revisionId) {
     return;
   }
 
-  const version = String(revision.id || "").replace(/^rev-/, "").slice(0, 7);
+  const version = String(revision.id || "")
+    .replace(/^rev-/, "")
+    .slice(0, 7);
   const confirmed = window.confirm(
     `Rollback ${project.name} ${state.activeEnvironment} config to version ${version}?`,
   );
@@ -1531,7 +1576,10 @@ export async function commitInlineEdit(input) {
       const body =
         edit.field === "key"
           ? { key: nextValue, changeReason: "inline key edit from frontend" }
-          : { value: nextValue, changeReason: "inline value edit from frontend" };
+          : {
+              value: nextValue,
+              changeReason: "inline value edit from frontend",
+            };
       updated = await api(
         `/projects/${config.projectId}/configs/${config.id}`,
         {
@@ -1583,7 +1631,8 @@ function configHasNetChange(config) {
   return (
     baseline.key !== config.key ||
     baseline.value !== config.value ||
-    (baseline.branch || state.activeBranch) !== (config.branch || state.activeBranch)
+    (baseline.branch || state.activeBranch) !==
+      (config.branch || state.activeBranch)
   );
 }
 
@@ -1759,16 +1808,16 @@ export async function createReviewRequest() {
   setReviewModal(true);
 }
 
-
 function proposedReviewChanges() {
   return state.pendingReviewChanges
     .map((change) => {
-      const config = state.configs.find((entry) => entry.id === change.configId);
+      const config = state.configs.find(
+        (entry) => entry.id === change.configId,
+      );
       if (!config) return null;
       const id = String(config.id || "");
-      const entryId = id.startsWith("draft-") || id.startsWith("inherited-")
-        ? ""
-        : config.id;
+      const entryId =
+        id.startsWith("draft-") || id.startsWith("inherited-") ? "" : config.id;
       const baseline = state.configBaseline.get(change.configId);
       return {
         configEntryId: entryId,
