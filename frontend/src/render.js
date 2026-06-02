@@ -1479,6 +1479,7 @@ function renderConfigValueDisplay(config, value, compact = false) {
   const badges = renderConfigStateBadges(config, "value");
   if (
     config.overridden &&
+    isSharedConfigEntry(config) &&
     Object.prototype.hasOwnProperty.call(config, "sharedValue")
   ) {
     const sharedValue = config.sharedSensitive ? "******" : config.sharedValue;
@@ -1496,7 +1497,7 @@ function renderConfigValueDisplay(config, value, compact = false) {
 
 function renderConfigStateBadges(config, field) {
   if (field !== "key" && field !== "value") return "";
-  if (config.overridden && field === "value") {
+  if (config.overridden && field === "value" && isSharedConfigEntry(config)) {
     return '<span class="config-state-badge overridden">Overridden</span>';
   }
   if (isSharedConfigEntry(config) && field === "key") {
@@ -1506,11 +1507,7 @@ function renderConfigStateBadges(config, field) {
 }
 
 function isSharedConfigEntry(config) {
-  return (
-    config.inherited ||
-    config.sourceType === "shared-config" ||
-    Boolean(config.sourceId)
-  );
+  return config.inherited || config.sourceType === "shared-config";
 }
 
 function renderRevealToggle(config, valueIsMasked, valueIsRevealed, revealKey) {

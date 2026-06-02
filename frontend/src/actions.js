@@ -250,7 +250,7 @@ function stageLocalConfigChange(configId, field, value) {
     if (entry.id !== configId) return entry;
     const sharedValue = sharedDefaultValueForEntry(entry);
     const hasSharedSource =
-      entry.sourceType === "shared-config" || sharedValue !== undefined;
+      isSharedConfigEntry(entry) && sharedValue !== undefined;
     const nextEntry = {
       ...entry,
       [field]: value,
@@ -286,11 +286,7 @@ function sharedEntryHasLocalChange(entry) {
 }
 
 function isSharedConfigEntry(config) {
-  return (
-    config.inherited ||
-    config.sourceType === "shared-config" ||
-    Boolean(config.sourceId)
-  );
+  return config.inherited || config.sourceType === "shared-config";
 }
 
 function stageLocalConfigCreate(project, request, bodyBase) {
