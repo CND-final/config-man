@@ -114,8 +114,10 @@ func reviewFiltersFromContext(c *gin.Context) model.ReviewFilters {
 	if environment == "" {
 		environment = c.Query("environment")
 	}
+	branch := c.Query("branch")
 	return model.ReviewFilters{
 		Environment: environment,
+		Branch:      branch,
 		ConfigKey:   configKey,
 		Status:      c.Query("status"),
 	}

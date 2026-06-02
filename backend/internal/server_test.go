@@ -864,6 +864,24 @@ func TestReviewRequestLifecycle(t *testing.T) {
 		t.Fatalf("expected project_admin notification after review submit")
 	}
 
+	res = request(t, handler, http.MethodGet, "/api/v1/review-requests", "rachel", nil)
+	if res.Code != http.StatusOK {
+		t.Fatalf("list reviewer requests status = %d body=%s", res.Code, res.Body.String())
+	}
+	listed := decodeBody[[]model.ReviewRequest](t, res)
+	foundCreated := false
+	for _, item := range listed {
+		if item.ID == created.ID {
+			foundCreated = true
+			if item.Branch != "default" || len(item.ProposedChanges) != 1 {
+				t.Fatalf("listed request lost branch or changes: %#v", item)
+			}
+		}
+	}
+	if !foundCreated {
+		t.Fatalf("created request missing from reviewer list: %#v", listed)
+	}
+
 	res = request(t, handler, http.MethodPut, "/api/v1/review-requests/"+created.ID+"/approve", "rachel", map[string]any{"comment": "looks good"})
 	if res.Code != http.StatusOK {
 		t.Fatalf("approve status = %d body=%s", res.Code, res.Body.String())

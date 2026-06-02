@@ -11,6 +11,7 @@ import {
   reloadTemplates,
   reloadSharedConfigs,
   reloadNotifications,
+  reloadRequests,
   reloadUsers,
 } from "./data.js";
 import {
@@ -230,6 +231,12 @@ function canCreateProjectReview(project = activeProject()) {
   );
 }
 
+function canRollbackConfigRevision(project = activeProject()) {
+  const role = projectRoleForCurrentUser(project);
+  if (["system_admin", "project_admin"].includes(role)) return true;
+  return role === "developer";
+}
+
 function shouldStageReviewChange(project, environment) {
   return (
     String(environment).toLowerCase() === "prod" &&
@@ -321,11 +328,15 @@ function stageLocalConfigCreate(project, request, bodyBase) {
   syncPendingReviewChanges();
 }
 
-export function switchView(viewId) {
+export async function switchView(viewId) {
   state.activeView = viewId;
   $all(".view").forEach((view) => {
     view.classList.toggle("active", view.dataset.view === viewId);
   });
+  if (viewId === "requests") {
+    await reloadRequests();
+    renderRequests();
+  }
   renderNav();
 }
 
@@ -1374,7 +1385,7 @@ export async function createProject(event) {
   }
   await loadConfigsAndHistory();
   setProjectModal(false);
-  switchView("projects");
+  await switchView("projects");
   renderAll();
   showToast(`${created.name} created`);
 }
@@ -1447,6 +1458,10 @@ export async function rollbackConfigRevision(revisionId) {
   const revision = state.configHistory.find((item) => item.id === revisionId);
   if (!project || !revision) {
     showToast("Choose a config revision to restore");
+    return;
+  }
+  if (!canRollbackConfigRevision(project)) {
+    showToast("Your role cannot rollback config history");
     return;
   }
 
@@ -1857,7 +1872,7 @@ export async function submitReviewChanges() {
     }),
   });
 
-  state.requests = await api("/review-requests");
+  await reloadRequests();
   state.pendingReviewChanges = [];
   state.reviewModalOpen = false;
   await loadConfigsAndHistory();
@@ -1870,7 +1885,7 @@ export async function handleReviewDecision(id, action) {
     method: "PUT",
     body: JSON.stringify({ comment: `${action} from frontend` }),
   });
-  state.requests = await api("/review-requests");
+  await reloadRequests();
   state.requestDetailOpen = false;
   state.activeRequestId = "";
   await loadConfigsAndHistory();

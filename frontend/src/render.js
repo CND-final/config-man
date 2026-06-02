@@ -1754,9 +1754,25 @@ export function renderVersionHistory() {
     : '<p class="project-meta">No config history yet.</p>';
 }
 
+function currentProjectRole(project = activeProject()) {
+  if (!project) return "";
+  if (state.user?.role === "system_admin") return "system_admin";
+  const member = (project.members || []).find((item) => {
+    const id = item.id || item.userId;
+    return id === state.user?.id;
+  });
+  return member?.projectRole || "";
+}
+
+function canRollbackConfigRevision(project) {
+  const role = currentProjectRole(project);
+  if (["system_admin", "project_admin"].includes(role)) return true;
+  return role === "developer";
+}
+
 function renderRevisionRecord(revision, previousRevision, index) {
   const version = formatRevisionVersion(revision.id);
-  const canRollback = index > 0;
+  const canRollback = index > 0 && canRollbackConfigRevision(activeProject());
   return `
     <details class="version-timeline-item" data-history-revision="${escapeHtml(revision.id)}" data-history-loaded="false">
       <summary class="version-timeline-summary">

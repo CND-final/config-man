@@ -72,6 +72,10 @@ export async function reloadNotifications() {
   );
 }
 
+export async function reloadRequests() {
+  state.requests = listFromPayload(await api("/review-requests"), "requests");
+}
+
 export async function reloadProjectMembers(projectId = activeProject()?.id) {
   if (!projectId) return [];
   const payload = await api(

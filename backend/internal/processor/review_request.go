@@ -78,6 +78,7 @@ func (p *Processor) CreateReviewRequest(ctx appctx.RequestContext, req model.Cre
 		ProjectID:       req.ProjectID,
 		ProjectName:     project.Name,
 		Environment:     req.Environment,
+		Branch:          util.NormalizeBranch(req.Branch),
 		ConfigKey:       strings.TrimSpace(req.ConfigKey),
 		Requester:       ctx.ActorName(),
 		Status:          "pending",
@@ -165,6 +166,10 @@ func (p *Processor) normalizeReviewChanges(project model.Project, req model.Crea
 		if valueType == "" {
 			return nil, model.InvalidInput("proposedChanges valueType must be string, number, boolean, json, or yaml")
 		}
+		branch := util.NormalizeBranch(change.Branch)
+		if strings.TrimSpace(change.Branch) == "" {
+			branch = util.NormalizeBranch(req.Branch)
+		}
 		configID := strings.TrimSpace(change.ConfigID)
 		if configID == "" {
 			return nil, model.InvalidInput("proposedChanges configId is required")
@@ -181,6 +186,7 @@ func (p *Processor) normalizeReviewChanges(project model.Project, req model.Crea
 			ValueType:     valueType,
 			IsSensitive:   change.IsSensitive,
 			Environment:   environment,
+			Branch:        branch,
 		})
 	}
 	return changes, nil

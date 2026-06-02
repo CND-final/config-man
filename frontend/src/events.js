@@ -553,7 +553,7 @@ async function handleDocumentClick(event) {
     }
 
     if (target.id === "backToProjects") {
-      switchView("projects");
+      await switchView("projects");
       renderAll();
       return;
     }
@@ -617,7 +617,7 @@ async function handleDocumentClick(event) {
     const jump = target.dataset.jump;
     if (jump) {
       setNotificationPopover(false);
-      switchView(jump);
+      await switchView(jump);
       if (target.dataset.openProjectForm) {
         setProjectModal(true);
       }
@@ -627,7 +627,7 @@ async function handleDocumentClick(event) {
     const viewTarget = target.dataset.viewTarget;
     if (viewTarget) {
       setNotificationPopover(false);
-      switchView(viewTarget);
+      await switchView(viewTarget);
       return;
     }
 
@@ -656,7 +656,7 @@ async function handleDocumentClick(event) {
       if (state.configMode === "compare") {
         await loadCompareConfigs();
       }
-      switchView("config");
+      await switchView("config");
       renderAll();
       return;
     }

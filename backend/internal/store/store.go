@@ -38,6 +38,7 @@ func NewStoreWithDB(ctx context.Context, db *sql.DB) (*Store, error) {
 		}
 	}
 	store.ensureDefaultSharedConfigs()
+	store.ensureDefaultReviewRequests()
 	return store, nil
 }
 

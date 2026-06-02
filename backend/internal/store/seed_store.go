@@ -264,21 +264,63 @@ func demoSeedData() seedData {
 		})
 	}
 
+	previousDatabaseURL := "postgresql://prod-user:old-secret@prod-db:5432/app"
 	review := &model.ReviewRequest{
 		ID:          "seed-prod-database-review",
 		ProjectID:   customerPortal.ID,
 		ProjectName: customerPortal.Name,
 		Environment: "prod",
+		Branch:      "default",
 		ConfigKey:   "database.url",
 		Requester:   "Nora Chen",
 		Reviewer:    "Rachel Kao",
 		Status:      "approved",
 		Reason:      "Rotate production database credential before release",
 		Comment:     "Approved for demo seed data",
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ProposedChanges: []model.ReviewConfigChange{
+			{
+				ConfigID:    customerSecurity,
+				Key:         "database.url",
+				OldValue:    &previousDatabaseURL,
+				Value:       "postgresql://prod-user:prod-secret@prod-db:5432/app",
+				ValueType:   "string",
+				IsSensitive: true,
+				Environment: "prod",
+				Branch:      "default",
+			},
+		},
+		CreatedAt: now.Add(-35 * time.Minute),
+		UpdatedAt: now.Add(-30 * time.Minute),
 	}
 	seed.reviews[review.ID] = review
+
+	previousLoggingLevel := "WARN"
+	pendingSharedOverride := &model.ReviewRequest{
+		ID:          "seed-pending-shared-runtime-review",
+		ProjectID:   customerPortal.ID,
+		ProjectName: customerPortal.Name,
+		Environment: "prod",
+		Branch:      "default",
+		ConfigKey:   "logging.level.root",
+		Requester:   "Nora Chen",
+		Status:      "pending",
+		Reason:      "Tune local prod logging override for linked shared runtime config",
+		ProposedChanges: []model.ReviewConfigChange{
+			{
+				ConfigID:    customerRuntime,
+				Key:         "logging.level.root",
+				OldValue:    &previousLoggingLevel,
+				Value:       "ERROR",
+				ValueType:   "string",
+				IsSensitive: false,
+				Environment: "prod",
+				Branch:      "default",
+			},
+		},
+		CreatedAt: now.Add(-12 * time.Minute),
+		UpdatedAt: now.Add(-12 * time.Minute),
+	}
+	seed.reviews[pendingSharedOverride.ID] = pendingSharedOverride
 	return seed
 }
 
