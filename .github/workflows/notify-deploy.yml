@@ -11,7 +11,7 @@ on:
     branches: [main]
     paths:
       - 'backend/**'        # only backend changes affect the image / schema
-      # frontend is a Render Static Site that auto-deploys on its own.
+      - 'frontend/**'
 
 jobs:
   notify:
